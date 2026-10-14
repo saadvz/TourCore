@@ -271,7 +271,7 @@ export interface CleanerCoreOptions {
   /** Live texts go only to these numbers. Scratch fixtures leave this unset and keep the 555 lock. */
   allowlist?: readonly string[];
   /** When this returns true, the sink is not called and nothing is recorded as sent. */
-  holdSends?: (kind: TextKind) => boolean;
+  holdSends?: () => boolean;
   /** Hold the cleaner opt-in and the offer until the host has confirmed both times. */
   deferCleanerTexts?: boolean;
   /** Opt-in sentence. Unset keeps the Scratch scheduler sentence. */
@@ -331,6 +331,7 @@ export interface CleanerCore {
   stampFetchedAt(iso: string): void;
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
+  hostNotes(): string[];
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
 }
@@ -454,6 +455,7 @@ interface Stored {
   hostGroup?: "pending" | "in" | "out";
   problemHold?: boolean;
   groupPinTerminal?: boolean;
+  hostNotes?: { id: string; body: string }[];
 }
 
 /** One file can hold several tenants. A single-tenant file stays the flat step D shape. */
@@ -537,6 +539,7 @@ class Engine implements CleanerCore {
   private hostGroup: "pending" | "in" | "out" = "pending";
   private problemHold = false;
   private groupPinTerminal = false;
+  private hostNoteState: { id: string; body: string }[] = [];
   private session: OnboardingSession | undefined;
   private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
   private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
@@ -1350,14 +1353,7 @@ class Engine implements CleanerCore {
           });
           if (privateText) sent.push(privateText);
           if (this.delivery(key) === "sent" && this.owner) {
-            const note = await this.emit({
-              id: `pin-private:${key}`,
-              jobId: job.id,
-              to: this.owner,
-              kind: "pin-notice",
-              body: privateCodeLine(this.groupChat.cleanerName),
-            });
-            if (note) sent.push(note);
+            this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
           }
         }
       }
@@ -1500,6 +1496,7 @@ class Engine implements CleanerCore {
     const checkout = this.latestFact(job.id, "checkout");
     const checkin = this.latestFact(job.id, "checkin");
     if (!checkout) {
+      if (this.groupChat) return null;
       const id = `host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`;
       if (this.delivery(id) === "sent") return null;
       const when = this.clock(job.checkoutDate, this.defaultCheckout);
@@ -1512,6 +1509,7 @@ class Engine implements CleanerCore {
       };
     }
     if (job.nextCheckInDate && !checkin) {
+      if (this.groupChat) return null;
       const id = `host-checkin:${job.id}:${job.nextCheckInDate}:${this.defaultCheckIn}`;
       if (this.delivery(id) === "sent") return null;
       const when = this.clock(job.nextCheckInDate, this.defaultCheckIn);
@@ -1649,19 +1647,19 @@ class Engine implements CleanerCore {
     };
   }
 
-  private async tellHostGroupUnconfirmed(): Promise<void> {
-    if (!this.groupChat || !this.owner) return;
-    await this.emit({
-      id: `group-unconfirmed:${this.options.property.id}`,
-      to: this.owner,
-      kind: "held",
-      body: groupUnconfirmedLine(),
-    });
+  private noteForHost(id: string, body: string): void {
+    if (!this.groupChat || this.hostNoteState.some((note) => note.id === id)) return;
+    this.hostNoteState.push({ id, body });
+    this.save();
+  }
+
+  hostNotes(): string[] {
+    return this.hostNoteState.map((note) => note.body);
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
     draft = this.hostDirect(draft);
-    if (this.options.holdSends?.(draft.kind)) return null;
+    if (this.options.holdSends?.()) return null;
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed || draft.to !== addressed.to) return null;
@@ -1713,17 +1711,11 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
-        if (draft.kind !== "pin" && isPrivateCodeLine(draft.body) && this.owner) {
-          await this.emit({
-            id: draft.id,
-            ...(draft.jobId ? { jobId: draft.jobId } : {}),
-            to: this.owner,
-            kind: "pin-notice",
-            body: draft.body,
-          });
+        if (draft.kind !== "pin" && isPrivateCodeLine(draft.body)) {
+          this.noteForHost(draft.id, draft.body);
           return null;
         }
-        if (draft.kind !== "pin") await this.tellHostGroupUnconfirmed();
+        if (draft.kind !== "pin") this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
         return null;
       }
       this.upsert(draft, "failed");
@@ -2261,6 +2253,7 @@ class Engine implements CleanerCore {
     if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
     if (record.problemHold === true) this.problemHold = true;
     if (record.groupPinTerminal === true) this.groupPinTerminal = true;
+    this.hostNoteState = (record.hostNotes ?? []).filter((note) => typeof note?.id === "string" && typeof note?.body === "string");
     if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
@@ -2300,6 +2293,7 @@ class Engine implements CleanerCore {
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
       ...(this.groupChat ? { hostGroup: this.hostGroup, problemHold: this.problemHold, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.hostNoteState.length > 0 ? { hostNotes: this.hostNoteState } : {}),
     };
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
     if (existing && existing.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");

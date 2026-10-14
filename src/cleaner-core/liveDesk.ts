@@ -8,7 +8,7 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
+import { resumeNote } from "./cleanerTexts";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
@@ -346,7 +346,7 @@ export class LiveDesk {
     this.engine?.markPinUndelivered();
   }
 
-  async inbound(input: { id: string; from: string; text: string }): Promise<{ sent: CleanerText[] }> {
+  async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -360,7 +360,7 @@ export class LiveDesk {
       this.resume();
       const keyword = messagingKeyword(input.text);
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
-      const result = await this.engine.receive({ id: input.id, from, text: input.text });
+      const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
       this.noteSeen(input.id);
       if (from === this.file.cleaner && keyword === "stop") this.held = this.engine?.cleanerHasOptedOut() === true;
       if (from === this.file.cleaner && keyword === "start") this.held = false;
@@ -414,7 +414,8 @@ export class LiveDesk {
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
     if (this.held) next = "The cleaner opted out of cleaning texts, so the job is on hold.";
-    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}) };
+    const notes = this.engine?.hostNotes() ?? [];
+    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
   }
 
   private turns(): Record<string, unknown>[] {
@@ -465,11 +466,7 @@ export class LiveDesk {
       hostName: file.business,
       consented: true,
       allowlist: smsAllowlist(env()),
-      holdSends: (kind) => {
-        if (!liveSmsOn(env())) return true;
-        if (!this.checking) return false;
-        return !(groupChatOn(env()) && (kind === "host-checkout" || kind === "host-checkin"));
-      },
+      holdSends: () => this.checking || !liveSmsOn(env()),
       deferCleanerTexts: this.file.released !== true,
       ...(this.file.cleanerOut ? { cleanerConsent: "out" as const } : {}),
       optInBody: `Hi, this is ${file.business} at ${file.address}. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.`,
@@ -483,14 +480,7 @@ export class LiveDesk {
       ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
-          const hostClock = text.kind === "host-checkout" || text.kind === "host-checkin";
-          const hostDirect = hostClock || text.kind === "pin-failed" || text.kind === "pin-held" || text.kind === "resume";
-          const privateLine = text.kind === "pin-notice" && text.channel !== "group" && isPrivateCodeLine(text.body);
-          if ((groupChatOn(env()) && (hostClock || privateLine)) || (text.channel === "group" && hostDirect)) {
-            await sendLiveSms(env(), { to: text.to, body: text.body });
-            return;
-          }
-          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || hostClock) && text.channel !== "group") return;
+          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
