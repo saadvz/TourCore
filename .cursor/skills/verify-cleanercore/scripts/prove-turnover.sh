@@ -71,12 +71,10 @@ This run used the in-process doctor/smoke CLI. A live cleaning job will not do t
 2. Read the iCal fixture inside src/cleaner-core/cli.ts, including the folded checkout date. Did not fetch a Guesty Lite feed.
 3. Froze time at 2026-10-14T15:00:00.000Z. Did not use the wall clock.
 4. Pushed texts onto an in-memory array and printed JSON. Did not call a messaging provider.
-5. Injected id smoke-yes from +15555550100 with text YES inside the process. Did not receive an inbound SMS.
+5. Injected id smoke-yes from +15555550100 with text YES inside the process, because this command passed no --reply. Did not receive an inbound SMS.
 
-Not driven by this script, so also unverified here:
-- flag-off (env -u CLEANER_CORE_ENABLED npm run cleaner:smoke exits 2 with sent []).
-- door-code as its own drive. This stdout includes the pin text to +15555550101. The unapproved-cleaner path has no CLI switch.
-- STOP, HELP, and injury. The CLI has no inbound-reply command. Passing extra arguments still injects YES.
+Not driven by this script. Drive them with prove-safety.sh:
+- flag-off, stop, help, injury, and unapproved-yes.
 EOF
 
 printf '%s\n' "$EVIDENCE"

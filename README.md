@@ -842,7 +842,7 @@ credentials on Tour Core's secure setup page instead. Hosted Railway sets the fi
 | `TOURCORE_ALLOW_EPHEMERAL_STORAGE` | Hosted demos only | Set to `1` to start even if `TOURCORE_HOME` is not on a persistent volume. Data is lost on the next deploy. **Never set this on a live service.** Local `npm run setup` ignores it. |
 | `PUBLIC_BASE_URL` | Self-hosted and local tunnels | Public https origin that reaches this process. Railway derives it from `RAILWAY_PUBLIC_DOMAIN`. |
 | `PORT` | Railway | Listen port. Railway sets it. `HOSTED_RAILWAY_P0` does not fall back to 4321. |
-| `CLEANER_CORE_ENABLED` | Cleaner Core demo | Off unless `1` or `true`. With it off, touring texts are unchanged. `npm run cleaner:doctor` reports the flag and sends nothing. `npm run cleaner:smoke` schedules one Scratch Lane turnover on 555 test numbers only. |
+| `CLEANER_CORE_ENABLED` | Cleaner Core demo | Off unless `1` or `true`. With it off, touring texts are unchanged. `npm run cleaner:doctor` reports the flag and sends nothing. `npm run cleaner:smoke` schedules one Scratch Lane turnover on 555 test numbers only. With no `--reply`, that smoke confirms YES. `npm run cleaner:smoke -- --reply +15555550100=STOP` repeats for each inbound reply and does not add YES. A reply from outside the Scratch 555 block, or any other extra argument, fails the command and sends nothing. |
 
 ## The boundary: Tour Core, then policy, then Durin
 

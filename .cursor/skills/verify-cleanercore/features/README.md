@@ -8,7 +8,7 @@ The user here is the cleaning-service owner who receives the schedule text, and 
 
 - Repo root of this checkout, Node 20 or newer, `node_modules/.bin/tsx` present (`npm ci` when it is not).
 - No data directory. Doctor and smoke do not read `TOURCORE_HOME`.
-- Phones are only `+15555550100` (owner) and `+15555550101` (approved cleaner). Both are Scratch 555 numbers. Never type a real person's number.
+- Recipients are only `+15555550100` (owner) and `+15555550101` (approved cleaner). `+15555550199` may be a reply sender and must not be a recipient. All three are Scratch 555 numbers. Never type a real person's number.
 - Run doctor in the same flag setting as the drive and require `sends` false.
 - Each command is a fresh process. Do not reuse a shell that still has `CLEANER_CORE_ENABLED` set when the recipe says unset.
 - Never drive `sendblue:*` or any other live messaging script from this map.
@@ -18,6 +18,7 @@ The user here is the cleaning-service owner who receives the schedule text, and 
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Treat every command as literal. Keep the flag assignment and the npm script unchanged.
 - Flag on: `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` and `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`.
+- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. A drive with `--reply` does not also inject YES.
 - Flag off: `env -u CLEANER_CORE_ENABLED` in front of the same scripts.
 - Assert the full stdout document and the exit code. A truthy `ok` is not a result.
 - After smoke, every `+1` number in stdout must be a Scratch test number: area code 555, or exchange 555 with line 0100–0199.
@@ -29,7 +30,7 @@ The user here is the cleaning-service owner who receives the schedule text, and 
 - Record the feature id and the entry point in that directory's `result.txt`.
 - Smoke stdout is the only record of texts. The process does not write a second store.
 - Report an unreachable path with the attempted command and the unmet precondition.
-- Do not report a skipped entry point as verified through a different path. The flag-on smoke books a YES. That is not proof of STOP, HELP, injury, or flag off.
+- Do not report a skipped entry point as verified through a different path. Flag-on smoke with no `--reply` books a YES. That is not proof of STOP, HELP, injury, flag off, or an unapproved YES.
 
 ## Feature entry contract
 
@@ -43,6 +44,6 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 ## Features
 
 - [Same-day turnover offer and confirm](./same-day-turnover.md) covers the Scratch Lane offer and the owner's YES confirm.
-- [Door code only to the approved cleaner](./door-code.md) covers who receives `4821` after that confirm.
-- [STOP, HELP, and injury](./stop-help-injury.md) covers opt-out, help, and an injury reply. This CLI cannot deliver those replies.
-- [Flag off sends nothing](./flag-off.md) covers doctor and smoke with `CLEANER_CORE_ENABLED` unset.
+- [Door code only to the approved cleaner](./door-code.md) covers who receives `4821` after that confirm, and a YES from `+15555550199` that receives no code.
+- [STOP, HELP, and injury](./stop-help-injury.md) covers opt-out, help, and one emergency reply per sender on this job.
+- [Flag off sends nothing](./flag-off.md) covers doctor and smoke with `CLEANER_CORE_ENABLED` unset, including a Scratch YES that must not be sent.

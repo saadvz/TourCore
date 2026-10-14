@@ -33,7 +33,7 @@ Preconditions:
 }
 ```
 
-- **Smoke off.** Run `env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke`. Exit code 2. Stdout matches `scripts/expected/smoke-off.json`:
+- **Smoke off.** Inject a Scratch YES while the flag is unset. Run `env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --reply +15555550100=YES`. Exit code 2. Stdout matches `scripts/expected/smoke-off.json`:
 
 ```json
 {
@@ -52,4 +52,5 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1` in the parent shell is inherited by `npm run`. `env -u` is the unset. A bare `npm run cleaner:smoke` from a shell that exported the flag is the flag-on journey.
 - `true`, `TRUE`, and `1` turn the flag on. `yes`, `0`, and an empty value leave it off. This recipe drives unset, not those other off values.
 - Doctor always prints `sends: false`, including when the flag is on. The flag-off proof is `enabled: false` plus the smoke document with exit 2 and empty `sent`.
-- Do not run flag-on smoke in this recipe. That sends the offer, the confirm, and the door code inside the process.
+- Smoke with no `--reply` also exits 2 when the flag is unset. This recipe includes `--reply +15555550100=YES` so the proof shows that reply still sends nothing.
+- Do not run flag-on smoke in this recipe. That sends the offer, and with no `--reply` it also sends the confirm and the door code inside the process.

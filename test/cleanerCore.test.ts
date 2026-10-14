@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { MessagingLedger } from "../src/messaging/ledger";
 import { handleProviderWebhook } from "../src/messaging/pipeline";
@@ -434,4 +434,118 @@ describe("one Scratch turnover", () => {
       note: "Cleaner Core is off. Touring texts are unchanged.",
     });
   });
+
+  it("injects the given Scratch replies and does not add YES", () => {
+    const stop = cleanerCli(["smoke", "--reply", `${OWNER}=STOP`, "--reply", `${OWNER}=YES`], "1");
+    expect(stop.status).toBe(0);
+    expect(JSON.parse(stop.stdout)).toEqual({
+      ok: true,
+      flag: true,
+      property: ADDRESS,
+      checkout: "2026-10-18T15:00:00.000Z",
+      nextArrival: "2026-10-18T20:00:00.000Z",
+      sent: [
+        { to: OWNER, body: OFFER, kind: "offer" },
+        { to: OWNER, body: STOP_ACK, kind: "stop" },
+      ],
+      pinRecipients: [],
+    });
+    expect(stop.stderr).toBe("");
+
+    const help = cleanerCli(["smoke", "--reply", `${OWNER}=HELP`], "1");
+    expect(help.status).toBe(0);
+    expect(JSON.parse(help.stdout)).toEqual({
+      ok: true,
+      flag: true,
+      property: ADDRESS,
+      checkout: "2026-10-18T15:00:00.000Z",
+      nextArrival: "2026-10-18T20:00:00.000Z",
+      sent: [
+        { to: OWNER, body: OFFER, kind: "offer" },
+        { to: OWNER, body: HELP_ACK, kind: "help" },
+      ],
+      pinRecipients: [],
+    });
+
+    const hurt = "I fell and I'm hurt";
+    const injury = cleanerCli([
+      "smoke",
+      "--reply", `${OWNER}=${hurt}`,
+      "--reply", `${OWNER}=${hurt}`,
+      "--reply", `${CLEANER}=${hurt}`,
+      "--reply", `${CLEANER}=${hurt}`,
+    ], "1");
+    expect(injury.status).toBe(0);
+    expect(JSON.parse(injury.stdout)).toEqual({
+      ok: true,
+      flag: true,
+      property: ADDRESS,
+      checkout: "2026-10-18T15:00:00.000Z",
+      nextArrival: "2026-10-18T20:00:00.000Z",
+      sent: [
+        { to: OWNER, body: OFFER, kind: "offer" },
+        { to: OWNER, body: EMERGENCY, kind: "emergency" },
+        { to: CLEANER, body: EMERGENCY, kind: "emergency" },
+      ],
+      pinRecipients: [],
+    });
+
+    const stranger = cleanerCli(["smoke", "--reply", "+15555550199=YES"], "1");
+    expect(stranger.status).toBe(0);
+    expect(JSON.parse(stranger.stdout)).toEqual({
+      ok: true,
+      flag: true,
+      property: ADDRESS,
+      checkout: "2026-10-18T15:00:00.000Z",
+      nextArrival: "2026-10-18T20:00:00.000Z",
+      sent: [{ to: OWNER, body: OFFER, kind: "offer" }],
+      pinRecipients: [],
+    });
+  });
+
+  it("sends nothing when the flag is off, including when a Scratch reply is injected", () => {
+    const quiet = cleanerCli(["smoke", "--reply", `${OWNER}=YES`], undefined);
+    expect(quiet.status).toBe(2);
+    expect(JSON.parse(quiet.stdout)).toEqual({
+      ok: false,
+      reason: "disabled",
+      sent: [],
+      pinRecipients: [],
+    });
+    expect(quiet.stderr).toBe("");
+  });
+
+  it("refuses an extra argument or a non-Scratch reply and prints no turnover", () => {
+    const extra = cleanerCli(["smoke", "STOP"], "1");
+    expect(extra.status).toBe(1);
+    expect(extra.stdout).toBe("");
+    expect(extra.stderr).toBe("Unexpected argument STOP. Usage: tsx src/cleaner-core/cli.ts smoke [--reply <from>=<text> ...]\n");
+
+    const real = cleanerCli(["smoke", "--reply", "+10000000000=YES"], "1");
+    expect(real.status).toBe(1);
+    expect(real.stdout).toBe("");
+    expect(real.stderr).toBe("Cleaner Core only texts Scratch test numbers. Refusing +10000000000.\n");
+
+    const realOff = cleanerCli(["smoke", "--reply", "+10000000000=YES"], undefined);
+    expect(realOff.status).toBe(1);
+    expect(realOff.stdout).toBe("");
+    expect(realOff.stderr).toBe("Cleaner Core only texts Scratch test numbers. Refusing +10000000000.\n");
+
+    const doctor = cleanerCli(["doctor", "--reply", `${OWNER}=YES`], undefined);
+    expect(doctor.status).toBe(1);
+    expect(doctor.stdout).toBe("");
+    expect(doctor.stderr).toBe("Unexpected argument --reply. Usage: tsx src/cleaner-core/cli.ts doctor\n");
+  });
 });
+
+function cleanerCli(args: string[], flag: "1" | undefined): { status: number | null; stdout: string; stderr: string } {
+  const env = { ...process.env };
+  if (flag) env.CLEANER_CORE_ENABLED = flag;
+  else delete env.CLEANER_CORE_ENABLED;
+  const result = spawnSync("node_modules/.bin/tsx", ["src/cleaner-core/cli.ts", ...args], {
+    encoding: "utf8",
+    env,
+    cwd: process.cwd(),
+  });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}

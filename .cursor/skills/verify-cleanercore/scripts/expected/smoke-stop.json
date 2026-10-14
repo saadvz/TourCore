@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "checkout": "2026-10-18T15:00:00.000Z",
+  "nextArrival": "2026-10-18T20:00:00.000Z",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.",
+      "kind": "stop"
+    }
+  ],
+  "pinRecipients": []
+}

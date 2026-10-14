@@ -4,9 +4,9 @@
 
 import { readFileSync } from "node:fs";
 
-const [kind, actualPath, expectedPath] = process.argv.slice(2);
-if ((kind !== "doctor" && kind !== "smoke") || !actualPath || !expectedPath) {
-  process.stderr.write("Usage: assert-report.mjs doctor|smoke <actual> <expected>\n");
+const [kind, actualPath, expectedPath, pinMode = "required"] = process.argv.slice(2);
+if ((kind !== "doctor" && kind !== "smoke") || !actualPath || !expectedPath || (pinMode !== "required" && pinMode !== "forbidden")) {
+  process.stderr.write("Usage: assert-report.mjs doctor|smoke <actual> <expected> [required|forbidden]\n");
   process.exit(1);
 }
 
@@ -39,7 +39,35 @@ for (const phone of phones) {
   }
 }
 
+const allowedRecipients = new Set(["+15555550100", "+15555550101"]);
+for (const text of report.sent ?? []) {
+  if (!allowedRecipients.has(text.to)) {
+    process.stderr.write(`Refusing recipient ${text.to}\n`);
+    process.exit(1);
+  }
+}
+for (const to of report.pinRecipients ?? []) {
+  if (!allowedRecipients.has(to)) {
+    process.stderr.write(`Refusing pin recipient ${to}\n`);
+    process.exit(1);
+  }
+}
+
 const pinTexts = (report.sent ?? []).filter((text) => text.kind === "pin");
+if (pinMode === "forbidden") {
+  if (pinTexts.length !== 0 || (report.pinRecipients ?? []).length !== 0) {
+    process.stderr.write("This journey must not send the door code\n");
+    process.exit(1);
+  }
+  for (const text of report.sent ?? []) {
+    if (String(text.body).includes("4821")) {
+      process.stderr.write("The door code leaked into a text\n");
+      process.exit(1);
+    }
+  }
+  process.exit(0);
+}
+
 if (pinTexts.length !== 1 || pinTexts[0].to !== "+15555550101") {
   process.stderr.write("The door code must go only to +15555550101\n");
   process.exit(1);

@@ -31,6 +31,6 @@ Preconditions:
 
 - Smoke injects YES itself. A passing smoke does not show that a phone reply arrived.
 - The calendar and the clock are fixtures (`2026-10-14T15:00:00.000Z` and the built-in iCal). This command does not read a live Guesty feed.
-- `npm run cleaner:smoke -- YES` does not change the reply. Extra arguments are ignored.
+- `npm run cleaner:smoke -- YES` exits 1 and prints no JSON. Extra arguments are refused. Pass a reply as `--reply +15555550100=YES`, which replaces the built-in YES rather than adding a second one. With no `--reply`, smoke injects YES itself.
 - Flag unset is a different feature. Smoke then exits 2 and `sent` is empty. Do not record that as this journey.
 - The third `sent` item is the door code. Asserting it belongs to [door-code.md](./door-code.md). Matching the whole smoke document still requires that item to be present and unchanged.
