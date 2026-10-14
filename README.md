@@ -842,6 +842,7 @@ credentials on Tour Core's secure setup page instead. Hosted Railway sets the fi
 | `TOURCORE_ALLOW_EPHEMERAL_STORAGE` | Hosted demos only | Set to `1` to start even if `TOURCORE_HOME` is not on a persistent volume. Data is lost on the next deploy. **Never set this on a live service.** Local `npm run setup` ignores it. |
 | `PUBLIC_BASE_URL` | Self-hosted and local tunnels | Public https origin that reaches this process. Railway derives it from `RAILWAY_PUBLIC_DOMAIN`. |
 | `PORT` | Railway | Listen port. Railway sets it. `HOSTED_RAILWAY_P0` does not fall back to 4321. |
+| `CLEANER_CORE_ENABLED` | Cleaner Core demo | Off unless `1` or `true`. With it off, touring texts are unchanged. `npm run cleaner:doctor` reports the flag and sends nothing. `npm run cleaner:smoke` schedules one Scratch Lane turnover on 555 test numbers only. |
 
 ## The boundary: Tour Core, then policy, then Durin
 
@@ -903,6 +904,7 @@ src/web/           local server + API (server.ts, api.ts); pages in public/: app
                    visitor.js (phone), ui.js (shared helpers). No build step.
 src/cli/           terminal wizard (npm run setup:cli)
 src/demo/          scripted demo (npm run demo)
+src/cleaner-core/  turnover texts for one cleaning job, off unless CLEANER_CORE_ENABLED is 1 or true
 ```
 
 ## Mocked today, and what replaces it

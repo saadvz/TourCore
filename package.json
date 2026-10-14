@@ -29,6 +29,8 @@
     "install:link": "tsx src/install/serviceCli.ts link",
     "demo": "tsx src/demo/run.ts",
     "demo:auto": "tsx src/demo/run.ts --auto",
+    "cleaner:doctor": "tsx src/cleaner-core/cli.ts doctor",
+    "cleaner:smoke": "tsx src/cleaner-core/cli.ts smoke",
     "build": "node scripts/build.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
