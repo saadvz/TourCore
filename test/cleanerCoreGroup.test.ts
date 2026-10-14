@@ -285,6 +285,23 @@ describe("group thread", () => {
     expect(sent.sent.some((text) => text.body === OFFER && !text.channel)).toBe(true);
     expect(sent.sent.some((text) => text.body === CONFIRM && !text.channel)).toBe(true);
   });
+
+  it("drops the checkout question in group mode and sets times only through confirm_times", async () => {
+    const sent = box();
+    const job = open(sent);
+    const checkout = `Is checkout at ${ADDRESS} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const checkin = `Is check-in at ${ADDRESS} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
+    const poll = await job.pollFeed(FEED);
+    expect(poll.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(sent.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(groupTexts(sent.sent).filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    await job.receive({ id: "yes-not-the-clock", from: OWNER, text: "YES" });
+    expect(job.jobs().filter((item) => item.checkoutTime === "11:00 AM")).toEqual([]);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(job.jobs().filter((item) => item.checkoutTime === "11:00 AM").map((item) => item.nextCheckInTime)).toEqual(["4:00 PM"]);
+    expect(sent.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(groupTexts(sent.sent).filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+  });
 });
 
 describe("group thread on the desk", () => {
@@ -346,7 +363,7 @@ describe("group thread on the desk", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("asks Cory the checkout question once and keeps every host clock question off the group", async () => {
+  it("drops the checkout question on the desk and sets times only through confirm_times", async () => {
     const sms = fakeSms();
     const fetchBox = groupFetch();
     setCleanerTwilioClient(sms);
@@ -362,7 +379,6 @@ describe("group thread on the desk", () => {
     const root = mkdtempSync(join(tmpdir(), "cleaner-host-clock-"));
     const env: NodeJS.ProcessEnv = {
       CLEANER_CORE_ENABLED: "1",
-      CLEANER_CORE_LIVE_SMS: "1",
       CLEANER_CORE_GROUP_CHAT: "1",
       CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
@@ -371,6 +387,7 @@ describe("group thread on the desk", () => {
     };
     const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
     const checkin = `Is check-in at ${PRACTICE} on Monday, Oct 19 still 4:00 PM? Reply YES or send the new time.`;
+    const clockBodies = () => sms.sent.filter((text) => text.body === checkout || text.body === checkin);
     const open = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
     const desk = open();
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
@@ -381,61 +398,33 @@ describe("group thread on the desk", () => {
     expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
     expect(desk.setUpTexting().ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    const clockTexts = () => sms.sent.filter((text) => text.body === checkout || text.body === checkin);
-    expect(clockTexts().map((text) => ({ to: text.to, body: text.body }))).toEqual([{ to: LIVE_HOST, body: checkout }]);
-    expect(sms.sent.filter((text) => text.to === LIVE_CLEANER && (text.body === checkout || text.body === checkin))).toEqual([]);
+    expect(clockBodies()).toEqual([]);
     expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(clockTexts().map((text) => text.body)).toEqual([checkout]);
-    feed = CALENDAR_ICS.replace("DTSTART;VALUE=DATE:20261018", "DTSTART;VALUE=DATE:20261019");
-    expect((await desk.runChecks()).ok).toBe(true);
-    expect(clockTexts().map((text) => ({ to: text.to, body: text.body }))).toEqual([
-      { to: LIVE_HOST, body: checkout },
-      { to: LIVE_HOST, body: checkin },
-    ]);
-    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
-    resetLiveDesks();
-    const restarted = open();
-    expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
-    expect((await restarted.runChecks()).ok).toBe(true);
-    expect(clockTexts()).toHaveLength(2);
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  it("waits to ask Cory the checkout question until live texts are on", async () => {
-    const sms = fakeSms();
-    setCleanerTwilioClient(sms);
-    setCleanerGroupFetch(groupFetch().impl);
-    setCleanerCalendarFetch(async (url) => ({
-      status: url === CALENDAR_URL ? 200 : 404,
-      url,
-      async text() {
-        return url === CALENDAR_URL ? CALENDAR_ICS : "";
-      },
-    }));
-    const root = mkdtempSync(join(tmpdir(), "cleaner-host-clock-off-"));
-    const env: NodeJS.ProcessEnv = {
-      CLEANER_CORE_ENABLED: "1",
-      CLEANER_CORE_GROUP_CHAT: "1",
-      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
-      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
-      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
-      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
-    };
-    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
-    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    expect(desk.getState("2").ok).toBe(true);
-    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
-    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
-    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
-    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
-    expect(desk.setUpTexting().ok).toBe(true);
-    expect((await desk.runChecks()).ok).toBe(true);
-    expect(sms.sent.filter((text) => text.body === checkout)).toEqual([]);
+    await desk.inbound({ id: "yes-not-the-clock", from: LIVE_HOST, text: "YES" });
+    const early = desk.getTurns();
+    expect(early.ok).toBe(true);
+    if (early.ok) {
+      const turns = early.result.turns as { checkoutTime: string | null }[];
+      expect(turns.filter((turn) => turn.checkoutTime === "11:00 AM")).toEqual([]);
+    }
     env.CLEANER_CORE_LIVE_SMS = "1";
     expect((await desk.runChecks()).ok).toBe(true);
-    expect(sms.sent.filter((text) => text.body === checkout).map((text) => text.to)).toEqual([LIVE_HOST]);
+    expect(clockBodies()).toEqual([]);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    const saved = desk.getTurns();
+    expect(saved.ok).toBe(true);
+    if (saved.ok) {
+      const turns = saved.result.turns as { checkoutTime: string | null; nextCheckInTime: string | null }[];
+      expect(turns.filter((turn) => turn.checkoutTime === "11:00 AM").map((turn) => turn.nextCheckInTime)).toEqual(["4:00 PM"]);
+    }
+    expect(clockBodies()).toEqual([]);
+    feed = CALENDAR_ICS.replace("DTSTART;VALUE=DATE:20261018", "DTSTART;VALUE=DATE:20261019");
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(clockBodies()).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.result.notes ?? []).toEqual([]);
     rmSync(root, { recursive: true, force: true });
   });
 });
@@ -532,6 +521,8 @@ describe("live group membership", () => {
   afterEach(() => {
     setCleanerTwilioClient(undefined);
     setCleanerGroupFetch(undefined);
+    setCleanerCalendarFetch(undefined);
+    resetLiveDesks();
     for (const root of roots) rmSync(root, { recursive: true, force: true });
     roots.length = 0;
   });
@@ -629,89 +620,171 @@ describe("live group membership", () => {
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
   });
 
-  it("tells Cory once when a group text is dropped, including a retry and a restart", async () => {
+  it("tells Cory once in get_state when a group text is dropped, including a retry and a restart", async () => {
     const root = mkdtempSync(join(tmpdir(), "cleaner-group-alert-"));
     roots.push(root);
     const fetchBox = groupFetch();
+    const sms = fakeSms();
     const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
       CLEANER_CORE_LIVE_SMS: "1",
-      CLEANER_CORE_SMS_ALLOWLIST: [OWNER, CLEANER].join(","),
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     };
     const line = "I couldn't send that to the group.";
-    const open = (sms: ReturnType<typeof fakeSms>) => {
-      setCleanerTwilioClient(sms);
-      setCleanerGroupFetch(fetchBox.impl);
-      return openCleanerCore({
-        enabled: true,
-        property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
-        ownerPhone: OWNER,
-        cleaner: { phone: CLEANER, approved: true },
-        pin: PIN,
-        hostName: "Scratch",
-        consented: true,
-        allowlist: [OWNER, CLEANER],
-        dataDir: root,
-        sink: {
-          async send(text: CleanerText) {
-            if (text.channel === "group" && text.audience && text.audience.length > 0) {
-              await sendLiveGroup(env, { audience: [...text.audience], body: text.body });
-              return;
-            }
-            await sendLiveSms(env, { to: text.to, body: text.body });
-          },
-        },
-        now: () => new Date(NOW),
-        groupChat: { hostName: "Cory", cleanerName: "Maria" },
-      });
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const privateLine = "I've sent the door code to Maria privately.";
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const boot = () => {
+      const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+      return desk;
     };
-    const firstSms = fakeSms();
-    const job = open(firstSms);
-    await job.pollFeed(FEED);
-    await job.receive({ id: "host-yes", from: OWNER, text: "YES" });
-    await job.receive({ id: "cleaner-yes", from: CLEANER, text: "YES" });
-    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
-    await job.receive({ id: "schedule", from: CLEANER, text: "YES" });
+    const desk = boot();
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
+    const quiet = desk.getState();
+    expect(quiet.ok).toBe(true);
+    if (quiet.ok) expect(quiet.result.notes ?? []).toEqual([]);
     fetchBox.blockMembership();
-    await job.receive({ id: "time-dropped", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    await job.receive({ id: "time-dropped-2", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
-    const alerts = firstSms.sent.filter((text) => text.body === line);
-    expect(alerts.map((text) => text.to)).toEqual([OWNER]);
-    expect(alerts[0]?.body).toBe("I couldn't send that to the group.");
-    expect(alerts[0]?.body).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
+    await desk.inbound({ id: "time-dropped", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    await desk.inbound({ id: "time-dropped-2", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.result.notes).toEqual([line]);
+    expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
+    expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
     expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    const reread = desk.getState();
+    expect(reread.ok).toBe(true);
+    if (reread.ok) expect(reread.result.notes).toEqual([line]);
 
-    const secondSms = fakeSms();
-    const restarted = open(secondSms);
-    await restarted.receive({ id: "time-dropped-3", from: CLEANER, text: "Can we do 4:00 PM?", channel: "group" });
-    expect(secondSms.sent.filter((text) => text.body === line)).toEqual([]);
+    resetLiveDesks();
+    const restarted = boot();
+    expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    const afterRestart = restarted.getState();
+    expect(afterRestart.ok).toBe(true);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([line]);
+    await restarted.inbound({ id: "time-dropped-3", from: LIVE_CLEANER, text: "Can we do 4:00 PM?", channel: "group" });
+    const still = restarted.getState();
+    expect(still.ok).toBe(true);
+    if (still.ok) expect(still.result.notes).toEqual([line]);
     expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
   });
 
-  it("shows Cory the private line after a failed member check and posts nothing to the group", async () => {
-    const live = await ready(false);
-    const sid = live.readSid();
-    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
-    live.blockMembership();
-    const left = await live.job.receive({ id: "left-unsynced-host", from: OWNER, text: "guests have left" });
-    const again = await live.job.receive({ id: "left-unsynced-host-2", from: OWNER, text: "guests have left" });
-    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
-    expect(live.sms.sent.filter((text) => text.body === PRIVATE_PIN).map((text) => text.to)).toEqual([CLEANER]);
-    expect(live.sms.sent.filter((text) => text.body === PRIVATE_LINE).map((text) => text.to)).toEqual([OWNER]);
-    expect(left.sent.filter((text) => text.channel === "group")).toEqual([]);
-    expect(again.sent.filter((text) => text.body === PRIVATE_LINE || text.channel === "group")).toEqual([]);
-    expect(live.posts.some((text) => text.body === PRIVATE_LINE)).toBe(false);
+  it("shows the private line in get_state after a failed member check and posts nothing to the group", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-private-note-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const line = "I've sent the door code to Maria privately.";
+    const alert = "I couldn't send that to the group.";
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const groupPin = `Maria, guests have left ${PRACTICE}. Door code: ${DOOR_CODE}.`;
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const boot = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
+    const desk = boot();
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
+    fetchBox.blockMembership();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left.ok).toBe(true);
+    expect(again.ok).toBe(true);
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(sms.sent.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin)).toEqual([]);
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) {
+      expect(read.result.notes).toEqual([line]);
+      expect(JSON.stringify(read.result.notes).includes(DOOR_CODE)).toBe(false);
+      expect(JSON.stringify(read.result.notes).includes(groupPin)).toBe(false);
+    }
+    resetLiveDesks();
+    const restarted = boot();
+    expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    const afterRestart = restarted.getState();
+    expect(afterRestart.ok).toBe(true);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([line]);
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
 
-    const optedOut = await ready(false);
-    const optedSid = optedOut.readSid();
-    optedOut.blockMembership();
-    await optedOut.job.receive({ id: "stop-before-sync", from: CLEANER, text: "STOP" });
-    const held = await optedOut.job.receive({ id: "left-opted-out-sync", from: OWNER, text: "guests have left" });
-    expect(optedOut.posts).toEqual([{ conversationSid: optedSid, to: [OWNER, CLEANER], body: TIME_LINE }]);
-    expect(optedOut.sms.sent.filter((text) => text.body === PRIVATE_PIN || text.body === PRIVATE_LINE)).toEqual([]);
-    expect(held.sent.filter((text) => text.kind === "pin" || text.channel === "group")).toEqual([]);
-    expect(optedOut.sms.sent.filter((text) => text.body === STOP_HOLD).map((text) => text.to)).toEqual([OWNER]);
+    const heldRoot = mkdtempSync(join(tmpdir(), "cleaner-group-private-held-"));
+    roots.push(heldRoot);
+    const heldFetch = groupFetch();
+    const heldSms = fakeSms();
+    setCleanerTwilioClient(heldSms);
+    setCleanerGroupFetch(heldFetch.impl);
+    const held = liveDeskFor(heldRoot, () => env, () => new Date(FROZEN));
+    expect(held.getState("2").ok).toBe(true);
+    expect(held.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(held.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(held.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(held.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(held.setUpTexting().ok).toBe(true);
+    expect((await held.runChecks()).ok).toBe(true);
+    await held.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await held.inbound({ id: "yes-host-held", from: LIVE_HOST, text: "YES" });
+    await held.inbound({ id: "yes-cleaner-held", from: LIVE_CLEANER, text: "YES" });
+    await held.inbound({ id: "yes-schedule-held", from: LIVE_CLEANER, text: "YES" });
+    heldFetch.blockMembership();
+    await held.inbound({ id: "stop-before-sync", from: LIVE_CLEANER, text: "STOP" });
+    const stayed = await held.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(stayed.ok).toBe(true);
+    expect(heldFetch.posts.filter((text) => text.body === line || text.body === groupPin || text.body === alert || text.body === TIME_LINE)).toEqual([]);
+    expect(heldSms.sent.filter((text) => text.body === privatePin || text.body === line || text.body === groupPin)).toEqual([]);
+    const heldRead = held.getState();
+    expect(heldRead.ok).toBe(true);
+    if (heldRead.ok) expect(heldRead.result.notes ?? []).toEqual([]);
+    expect(heldSms.sent.filter((text) => text.body === `The cleaner opted out of cleaning texts for ${PRACTICE}, so the job is on hold.`).map((text) => text.to)).toEqual([LIVE_HOST]);
   });
 });
