@@ -11,7 +11,7 @@ With `CLEANER_CORE_ENABLED` unset, the landlord's cleaning job sends no texts. T
 ## How to get to it (user POV)
 
 - The landlord leaves `CLEANER_CORE_ENABLED` unset (off unless the value is `1` or `true`).
-- Nobody at Scratch Lane receives a turnover offer, a confirmation, or a door code from Cleaner Core.
+- Nobody at Scratch Lane receives a host question, a turnover offer, or a confirmation from Cleaner Core.
 - The harness entries are doctor and smoke with the variable removed from that process only.
 
 ## Driving it with the cleaner doctor/smoke CLI
@@ -53,4 +53,4 @@ Preconditions:
 - `true`, `TRUE`, and `1` turn the flag on. `yes`, `0`, and an empty value leave it off. This recipe drives unset, not those other off values.
 - Doctor always prints `sends: false`, including when the flag is on. The flag-off proof is `enabled: false` plus the smoke document with exit 2 and empty `sent`.
 - Smoke with no `--reply` also exits 2 when the flag is unset. This recipe includes `--reply +15555550100=YES` so the proof shows that reply still sends nothing.
-- Do not run flag-on smoke in this recipe. That sends the offer, and with no `--reply` it also sends the confirm and the door code inside the process.
+- Do not run flag-on smoke in this recipe. With no operation that sends the host questions, the offer, and the confirm inside the process. It does not text a door code.

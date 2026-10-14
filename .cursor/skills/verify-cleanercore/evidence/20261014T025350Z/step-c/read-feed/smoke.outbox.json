@@ -1,0 +1,10 @@
+[
+  {
+    "id": "host-checkout:stay-anita@guesty.com:2026-10-18:660",
+    "to": "+15555550100",
+    "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "kind": "host-checkout",
+    "status": "sent",
+    "jobId": "stay-anita@guesty.com"
+  }
+]
