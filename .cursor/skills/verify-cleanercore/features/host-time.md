@@ -23,7 +23,7 @@ Preconditions:
 - Replies are from `+15555550100` only.
 
 - **Confirm the host clock, then re-read.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=1:00 PM --reply +15555550100=YES --then-feed src/cleaner-core/fixtures/guesty-lite-clock-bait.ics`. Exit code 0.
-- **Transcript.** The three lines are the 11:00 AM checkout question, the 4:00 PM check-in question, and `Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`
+- **Transcript.** The outbound lines are the 11:00 AM checkout question, the 4:00 PM check-in question, and `Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.` The transcript also contains `+15555550100: 1:00 PM` and `+15555550100: YES`.
 - **No feed clock.** No text contains `10:00` or `3:00 PM`. `pinRecipients` is `[]`.
 - **Proof.** Save the command, stdout, stderr, exit code, and transcript with feature id `host-time`.
 

@@ -19,14 +19,17 @@ const OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next
 const OFFER_1PM = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
 const CONFIRM = `Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at ${ADDRESS}.`;
 const CONFIRM_1PM = `Cleaning is scheduled for Sunday, Oct 18 at 1:00 PM at ${ADDRESS}.`;
+const MONDAY_Q = `Is checkout at ${ADDRESS} on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.`;
+const MONDAY_IN = `Is check-in at ${ADDRESS} on Monday, Oct 19 still 4:00 PM? Reply YES or send the new time.`;
 const CORRECTED_1PM = `Update: checkout at ${ADDRESS} moved to Monday, Oct 19 at 1:00 PM. Reply YES to keep the cleaning, or STOP to opt out.`;
 const CORRECTED_11 = `Update: checkout at ${ADDRESS} moved to Monday, Oct 19 at 11:00 AM. Reply YES to keep the cleaning, or STOP to opt out.`;
-const CANCEL = `Update: checkout at ${ADDRESS} on Sunday, Oct 18 is canceled. Reply STOP to opt out.`;
+const CANCEL = `Update: the cleaning at ${ADDRESS} on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.`;
 const REMINDER = `Reminder: checkout at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.`;
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
 const NEXT_Q = `Is checkout at ${ADDRESS} on Tuesday, Oct 20 still 11:00 AM? Reply YES or send the new time.`;
+const said = (text) => `${OWNER}: ${text}`;
 
 const reports = paths.map((path) => JSON.parse(readFileSync(path, "utf8")));
 const blob = paths.map((path) => readFileSync(path, "utf8")).join("\n");
@@ -51,14 +54,19 @@ if (journey === "read-feed") {
   same(first.blocks.map((block) => block.uid), ["block-owner@guesty.com", "block-date@guesty.com"]);
   if (first.jobs.some((job) => String(job.id).startsWith("block-"))) fail("a block became a job");
 } else if (journey === "host-time") {
-  same(first.transcript, [CHECKOUT_Q, CHECKIN_Q, OFFER_1PM]);
+  same(first.transcript, [CHECKOUT_Q, said("1:00 PM"), CHECKIN_Q, said("YES"), OFFER_1PM]);
   if (first.jobs[0]?.checkoutTime !== "1:00 PM" || first.jobs[0]?.checkoutAt !== "2026-10-18T17:00:00.000Z") fail("host checkout did not stick");
   if (blob.includes("10:00")) fail("the feed clock was used");
 } else if (journey === "corrected-time") {
-  same(first.transcript, [CHECKOUT_Q, CHECKIN_Q, OFFER_1PM, CONFIRM_1PM, CORRECTED_1PM]);
+  same(first.transcript, [
+    CHECKOUT_Q, said("1:00 PM"), CHECKIN_Q, said("YES"), OFFER_1PM, said("YES"), CONFIRM_1PM,
+    MONDAY_Q, said("YES"), MONDAY_IN, said("YES"), CORRECTED_11,
+  ]);
+  if (first.transcript.indexOf(MONDAY_Q) > first.transcript.indexOf(CORRECTED_11)) fail("the update went out before the new host question");
+  if (first.transcript.includes(CORRECTED_1PM)) fail("the old Sunday time was kept on Monday");
   const anita = first.jobs.filter((job) => job.id === "stay-anita@guesty.com");
-  if (anita.length !== 1 || anita[0].live !== true || anita[0].checkoutDate !== "2026-10-19" || anita[0].checkoutTime !== "1:00 PM") {
-    fail("corrected job is not the one live host time");
+  if (anita.length !== 1 || anita[0].live !== true || anita[0].checkoutDate !== "2026-10-19" || anita[0].checkoutTime !== "11:00 AM" || anita[0].hostCheckoutVersion !== 1) {
+    fail("corrected job is not the new host time");
   }
   if (first.transcript.filter((line) => line.startsWith("Turnover at")).length !== 1) fail("the correction looked like a second offer");
 } else if (journey === "reminder-once") {
@@ -73,7 +81,7 @@ if (journey === "read-feed") {
   same(first.transcript ?? [], []);
   same(first.blocks.map((block) => block.uid), ["block-owner@guesty.com", "block-date@guesty.com"]);
 } else if (journey === "one-live-job") {
-  same(first.transcript, [CHECKOUT_Q, CHECKIN_Q, OFFER, CANCEL]);
+  same(first.transcript, [CHECKOUT_Q, said("YES"), CHECKIN_Q, said("YES"), OFFER, CANCEL]);
   const liveAnita = first.jobs.filter((job) => job.id === "stay-anita@guesty.com" && job.live);
   if (liveAnita.length !== 0) fail("the removed stay is still live");
   const anita = first.jobs.filter((job) => job.id === "stay-anita@guesty.com");
@@ -82,10 +90,10 @@ if (journey === "read-feed") {
   if (new Set(ids).size !== ids.length) fail("two job rows share an id");
 } else if (journey === "stop-silences") {
   if (transcript.at(-1) !== STOP_ACK) fail("STOP was not the last text");
-  if (transcript.includes(CORRECTED_11) || transcript.includes(CORRECTED_1PM) || transcript.includes(REMINDER)) fail("a text went out after STOP");
+  if (transcript.includes(CORRECTED_11) || transcript.includes(CORRECTED_1PM) || transcript.includes(REMINDER) || transcript.includes(MONDAY_Q)) fail("a text went out after STOP");
   if ((first.sent ?? []).some((text) => text.body === CORRECTED_11 || text.body === REMINDER)) fail("sent a corrected text or reminder after STOP");
 } else if (journey === "no-pin") {
-  same(first.transcript, [CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+  same(first.transcript, [CHECKOUT_Q, said("YES"), CHECKIN_Q, said("YES"), OFFER, said("YES"), CONFIRM]);
   if (first.jobs.some((job) => job.status === "ready")) fail("a job was marked ready");
 } else if (journey === "safety-states") {
   const replies = {

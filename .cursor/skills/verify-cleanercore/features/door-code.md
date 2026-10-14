@@ -27,7 +27,7 @@ Preconditions:
 - **Confirm the turnover.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`. Exit code 0. Stdout matches `scripts/expected/smoke-turnover.json`.
 - **No code.** `sent` has no `kind` `pin`. `pinRecipients` is `[]`. No body contains `door code`. Every `to` is `+15555550100`.
 - **No ready job.** No `jobs` item has `status` `ready`.
-- **Unapproved YES.** Reply YES from `+15555550199`. Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --reply +15555550199=YES`. Exit code 0. Stdout matches `scripts/expected/smoke-unapproved.json`. `sent` is only the checkout question to `+15555550100`. `pinRecipients` is `[]`. The stdout does not contain `+15555550199`.
+- **Unapproved YES.** Reply YES from `+15555550199`. Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --reply +15555550199=YES`. Exit code 0. Stdout matches `scripts/expected/smoke-unapproved.json`. `sent` is only the checkout question to `+15555550100`. `pinRecipients` is `[]`. `+15555550199` appears only as the inbound transcript line `+15555550199: YES`, not as a recipient.
 - **Proof.** Save the confirm command with feature id `door-code`, and the unapproved command with feature id `unapproved-yes`. Re-read each saved stdout and require `pinRecipients` empty. The persisted-store proof is [no-pin.md](./no-pin.md).
 
 ## Gotchas

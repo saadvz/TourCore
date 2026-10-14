@@ -17,8 +17,10 @@ const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18.
 const OFFER_1PM = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.";
 const CONFIRM_1PM = "Cleaning is scheduled for Sunday, Oct 18 at 1:00 PM at 12 Scratch Lane, Teaneck, NJ 07666.";
-const CORRECTED = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved to Monday, Oct 19 at 1:00 PM. Reply YES to keep the cleaning, or STOP to opt out.";
-const CANCEL = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled. Reply STOP to opt out.";
+const MONDAY_Q = "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.";
+const MONDAY_CHECKIN_Q = "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Monday, Oct 19 still 4:00 PM? Reply YES or send the new time.";
+const CORRECTED = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved to Monday, Oct 19 at 11:00 AM. Reply YES to keep the cleaning, or STOP to opt out.";
+const CANCEL = "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.";
 const REMINDER = "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.";
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
@@ -34,6 +36,10 @@ const feed = (name: string) => readFileSync(join("src/cleaner-core/fixtures", na
 afterEach(() => {
   delete process.env.CLEANER_CORE_ENABLED;
 });
+
+function said(from: string, text: string): string {
+  return `${from}: ${text}`;
+}
 
 function sink() {
   const sent: CleanerText[] = [];
@@ -180,13 +186,17 @@ describe("one Scratch turnover", () => {
     expect(booked).toEqual({ handled: true, reason: "scheduled", sent: [{ to: OWNER, body: CONFIRM, kind: "confirm" }] });
     expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
     expect(box.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "offer", "confirm"]);
-    expect(job.transcript()).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(job.transcript()).toEqual([
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+    ]);
     const again = await job.receive({ id: "yes-offer", from: OWNER, text: "YES" });
     expect(again).toEqual({ handled: true, reason: "duplicate", sent: [] });
-    expect(job.transcript()).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(job.transcript()).toEqual([
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+    ]);
   });
 
-  it("sends a corrected time after the offer, cancels the old slot, and keeps one live job", async () => {
+  it("asks the host again when the checkout date changes, and sends the update only after that answer", async () => {
     const box = sink();
     const job = core(box);
     await job.pollFeed(feed("guesty-lite-scratch.ics"));
@@ -194,13 +204,32 @@ describe("one Scratch turnover", () => {
     await job.receive({ id: "t2", from: OWNER, text: "YES" });
     await job.receive({ id: "t3", from: OWNER, text: "YES" });
     await job.pollFeed(feed("guesty-lite-date-moved.ics"));
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER_1PM, CONFIRM_1PM, CORRECTED]);
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER_1PM, CONFIRM_1PM, MONDAY_Q]);
+    expect(box.sent.map((text) => text.body).some((body) => body.startsWith("Update:"))).toBe(false);
+    expect(job.jobs().find((item) => item.id === "stay-anita@guesty.com")).toMatchObject({
+      live: true,
+      status: "discovered",
+      asking: "checkout",
+      checkoutDate: "2026-10-19",
+      checkoutTime: null,
+      nextCheckInTime: null,
+      hostCheckoutVersion: 0,
+      hostCheckInVersion: 0,
+    });
+    await job.receive({ id: "t4", from: OWNER, text: "YES" });
+    expect(box.sent.at(-1)?.body).toBe(MONDAY_CHECKIN_Q);
+    expect(box.sent.map((text) => text.body).some((body) => body.startsWith("Update:"))).toBe(false);
+    await job.receive({ id: "t5", from: OWNER, text: "YES" });
+    const bodies = box.sent.map((text) => text.body);
+    expect(bodies.at(-1)).toBe(CORRECTED);
+    expect(bodies.indexOf(MONDAY_Q)).toBeLessThan(bodies.indexOf(CORRECTED));
+    expect(bodies.filter((body) => body.startsWith("Turnover at"))).toEqual([OFFER_1PM]);
     const anita = job.jobs().filter((item) => item.id === "stay-anita@guesty.com");
     expect(anita).toEqual([expect.objectContaining({
       live: true,
       status: "offered",
       checkoutDate: "2026-10-19",
-      checkoutTime: "1:00 PM",
+      checkoutTime: "11:00 AM",
       version: 2,
       hostCheckoutVersion: 1,
     })]);
@@ -461,7 +490,9 @@ describe("one Scratch turnover", () => {
         note: "Cleaner Core is on. doctor does not send texts.",
       });
       const smoke = await runSmoke({ CLEANER_CORE_ENABLED: "1" });
-      expect(smoke.transcript).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+      expect(smoke.transcript).toEqual([
+        CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+      ]);
       expect(smoke.pinRecipients).toEqual([]);
       expect(smoke.checkout).toBe("2026-10-18T15:00:00.000Z");
       expect(smoke.nextArrival).toBe("2026-10-18T20:00:00.000Z");
@@ -483,7 +514,9 @@ describe("one Scratch turnover", () => {
     const report = JSON.parse(on.stdout) as { ok: boolean; pinRecipients: string[]; transcript: string[]; sent: CleanerText[] };
     expect(report.ok).toBe(true);
     expect(report.pinRecipients).toEqual([]);
-    expect(report.transcript).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(report.transcript).toEqual([
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+    ]);
     expect(report.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "offer", "confirm"]);
 
     const doctor = cleanerCli(["doctor"], undefined);
@@ -498,10 +531,12 @@ describe("one Scratch turnover", () => {
   it("injects the given Scratch replies and does not add YES", () => {
     const stop = cleanerCli(["smoke", "--reply", `${OWNER}=STOP`, "--reply", `${OWNER}=YES`], "1");
     expect(stop.status).toBe(0);
-    expect(JSON.parse(stop.stdout).transcript).toEqual([CHECKOUT_Q, STOP_ACK]);
+    expect(JSON.parse(stop.stdout).transcript).toEqual([
+      CHECKOUT_Q, said(OWNER, "STOP"), STOP_ACK, said(OWNER, "YES"),
+    ]);
 
     const help = cleanerCli(["smoke", "--reply", `${OWNER}=HELP`], "1");
-    expect(JSON.parse(help.stdout).transcript).toEqual([CHECKOUT_Q, HELP_ACK]);
+    expect(JSON.parse(help.stdout).transcript).toEqual([CHECKOUT_Q, said(OWNER, "HELP"), HELP_ACK]);
 
     const hurt = "I fell and I'm hurt";
     const injury = cleanerCli([
@@ -511,11 +546,19 @@ describe("one Scratch turnover", () => {
       "--reply", `${CLEANER}=${hurt}`,
       "--reply", `${CLEANER}=${hurt}`,
     ], "1");
-    expect(JSON.parse(injury.stdout).transcript).toEqual([CHECKOUT_Q, EMERGENCY, EMERGENCY]);
+    expect(JSON.parse(injury.stdout).transcript).toEqual([
+      CHECKOUT_Q,
+      said(OWNER, hurt),
+      EMERGENCY,
+      said(OWNER, hurt),
+      said(CLEANER, hurt),
+      EMERGENCY,
+      said(CLEANER, hurt),
+    ]);
     expect(JSON.parse(injury.stdout).sent.map((text: CleanerText) => text.to)).toEqual([OWNER, OWNER, CLEANER]);
 
     const stranger = cleanerCli(["smoke", "--reply", "+15555550199=YES"], "1");
-    expect(JSON.parse(stranger.stdout).transcript).toEqual([CHECKOUT_Q]);
+    expect(JSON.parse(stranger.stdout).transcript).toEqual([CHECKOUT_Q, said("+15555550199", "YES")]);
     expect(JSON.parse(stranger.stdout).pinRecipients).toEqual([]);
   });
 

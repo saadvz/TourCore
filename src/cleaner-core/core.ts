@@ -274,6 +274,7 @@ class Engine implements CleanerCore {
     const from = parsePhone(input.from);
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
+    this.transcriptState.push(`${from}: ${input.text.trim()}`);
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
@@ -430,6 +431,8 @@ class Engine implements CleanerCore {
         existing.sourceSequence = Math.max(existing.sourceSequence, turnover.sequence);
         continue;
       }
+      const checkoutDateChanged = existing.checkoutDate !== turnover.checkoutDate;
+      const checkInDateChanged = existing.nextCheckInDate !== turnover.nextCheckInDate;
       existing.arrivingUid = turnover.arrivingUid;
       existing.checkoutDate = turnover.checkoutDate;
       existing.nextCheckInDate = turnover.nextCheckInDate;
@@ -438,6 +441,8 @@ class Engine implements CleanerCore {
       existing.sourceSequence = turnover.sequence;
       existing.version += 1;
       existing.canceled = false;
+      if (checkoutDateChanged) this.clearHostTime(existing.id, "checkout");
+      if (checkInDateChanged) this.clearHostTime(existing.id, "checkin");
       this.cancelPendingReminders(existing.id);
     }
     for (const job of this.jobsState) {
@@ -480,28 +485,12 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "cancel-update",
-        body: `Update: checkout at ${this.options.property.address} on ${when.day} is canceled. Reply STOP to opt out.`,
+        body: `Update: the cleaning at ${this.options.property.address} on ${when.day} is canceled, so no need to come. Reply STOP to opt out.`,
       };
     }
     if (job.declined) return null;
     const checkout = this.latestFact(job.id, "checkout");
     const checkin = this.latestFact(job.id, "checkin");
-    if (job.announced && this.stale(job)) {
-      const minutes = checkout?.minutes ?? job.announced.checkoutMinutes;
-      const when = this.clock(job.checkoutDate, minutes);
-      const id = `corrected:${job.id}:${job.checkoutDate}:${minutes}:${job.nextCheckInDate ?? ""}`;
-      if (this.delivery(id) === "sent") return null;
-      return {
-        id,
-        jobId: job.id,
-        to: this.owner,
-        kind: "corrected",
-        body: `Update: checkout at ${this.options.property.address} moved to ${when.day} at ${when.time}. Reply YES to keep the cleaning, or STOP to opt out.`,
-        afterSend: () => {
-          job.announced = this.currentAnnouncement(job);
-        },
-      };
-    }
     if (!checkout) {
       const id = `host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`;
       if (this.delivery(id) === "sent") return null;
@@ -541,6 +530,22 @@ class Engine implements CleanerCore {
         },
       };
     }
+    if (this.checkoutDrift(job)) {
+      const when = this.clock(job.checkoutDate, checkout.minutes);
+      const id = `corrected:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
+      if (this.delivery(id) === "sent") return null;
+      return {
+        id,
+        jobId: job.id,
+        to: this.owner,
+        kind: "corrected",
+        body: `Update: checkout at ${this.options.property.address} moved to ${when.day} at ${when.time}. Reply YES to keep the cleaning, or STOP to opt out.`,
+        afterSend: () => {
+          job.announced = this.currentAnnouncement(job);
+        },
+      };
+    }
+    if (job.announced && this.stale(job)) job.announced = this.currentAnnouncement(job);
     return null;
   }
 
@@ -666,6 +671,16 @@ class Engine implements CleanerCore {
       hostCheckInVersion: checkin?.version ?? 0,
       asking: status === "discovered" && this.delivery(`host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`) === "sent" ? "checkout" : status === "awaiting_checkin" ? "checkin" : null,
     };
+  }
+
+  private checkoutDrift(job: Job): boolean {
+    const checkout = this.latestFact(job.id, "checkout");
+    if (!job.announced || !checkout) return false;
+    return job.announced.checkoutDate !== job.checkoutDate || job.announced.checkoutMinutes !== checkout.minutes;
+  }
+
+  private clearHostTime(jobId: string, field: "checkout" | "checkin"): void {
+    this.hostFacts = this.hostFacts.filter((fact) => fact.jobId !== jobId || fact.field !== field);
   }
 
   private stale(job: Job): boolean {

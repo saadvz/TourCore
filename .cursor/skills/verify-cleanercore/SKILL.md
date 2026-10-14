@@ -87,7 +87,7 @@ Write one directory per run:
 
 `.cursor/skills/verify-cleanercore/evidence/<UTC timestamp>/`
 
-Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. Step C journeys also save `transcript`, `jobs`, and `outbox` extracted from that stdout. Assert every `+1` number in smoke stdout is a Scratch test number and every recipient is `+15555550100` or `+15555550101`. Every new drive requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-c.sh` also greps the new evidence tree and fails if that code appears.
+Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. Step C journeys also save `transcript`, `jobs`, and `outbox` extracted from that stdout. The transcript lists each outbound body and each inbound Scratch reply, as `+15555550100: YES`. Assert every `+1` number in smoke stdout is a Scratch test number and every recipient is `+15555550100` or `+15555550101`. Every new drive requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-c.sh` also greps the new evidence tree and fails if that code appears.
 
 The default smoke process exits and leaves the in-memory sink behind. The saved stdout is the record of what that sink accepted. Journeys that pass `--data` also persist `cleaner-core.json` for the life of that directory. Capture stdout before removing the temporary directory. Cleanup must not delete the evidence directory.
 

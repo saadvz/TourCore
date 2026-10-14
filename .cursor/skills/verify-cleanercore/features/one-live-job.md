@@ -22,7 +22,7 @@ Preconditions:
 - Replies are from `+15555550100` only.
 
 - **Offer, then remove the stay.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --reply +15555550100=YES --then-feed src/cleaner-core/fixtures/guesty-lite-stay-removed.ics`. Exit code 0.
-- **Transcript.** The four lines are the 11:00 AM checkout question, the 4:00 PM check-in question, the 11:00 AM offer, and `Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled. Reply STOP to opt out.` The transcript does not contain `Tuesday, Oct 20`.
+- **Transcript.** The outbound lines are the 11:00 AM checkout question, the 4:00 PM check-in question, the 11:00 AM offer, and `Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.` The owner's YES replies appear on their own lines. The transcript does not contain `Tuesday, Oct 20`.
 - **Job list.** `jobs` has one row whose `id` is `stay-anita@guesty.com`. That row has `status` `canceled`, `live` false, and `textsBlocked` true. The other two stays are `discovered` and were not texted. No job `status` is `ready`. `pinRecipients` is `[]`.
 - **Proof.** Save the command, stdout, stderr, exit code, transcript, and job list with feature id `one-live-job`. The job list is required. The outbox alone is not this proof.
 

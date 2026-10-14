@@ -103,7 +103,9 @@ run_smoke "$EVIDENCE/corrected-time" smoke env CLEANER_CORE_ENABLED=1 npm run --
   --reply "$OWNER=1:00 PM" \
   --reply "$OWNER=YES" \
   --reply "$OWNER=YES" \
-  --then-feed "$FEED/guesty-lite-date-moved.ics"
+  --then-feed "$FEED/guesty-lite-date-moved.ics" \
+  --reply "$OWNER=YES" \
+  --reply "$OWNER=YES"
 assert_journey corrected-time "$EVIDENCE/corrected-time/smoke.stdout.txt"
 
 # 4. One reminder across a second poll and a restart.
@@ -171,9 +173,9 @@ safety_one waiting-emergency --feed "$FEED/guesty-lite-scratch.ics" --reply "$OW
 safety_one offered-stop --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=STOP"
 safety_one offered-help --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=HELP"
 safety_one offered-emergency --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=I fell and I'm hurt"
-safety_one corrected-stop --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=STOP"
-safety_one corrected-help --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=HELP"
-safety_one corrected-emergency --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
+safety_one corrected-stop --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=STOP"
+safety_one corrected-help --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=HELP"
+safety_one corrected-emergency --feed "$FEED/guesty-lite-scratch.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --then-feed "$FEED/guesty-lite-date-moved.ics" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
 assert_journey safety-states \
   "$EVIDENCE/safety-states/waiting-stop.stdout.txt" \
   "$EVIDENCE/safety-states/waiting-help.stdout.txt" \
