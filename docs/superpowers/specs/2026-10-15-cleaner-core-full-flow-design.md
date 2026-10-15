@@ -29,6 +29,7 @@ The user never leaves the Grok Bot chat.
 - Observers, co-hosts, and group threads never get the door code.
 - Tests and Scratch runs use only 555 numbers and made-up door codes.
 - `docs/cleaner-core-safety-gates.md` stays green.
+- **The server holds the door-code seal key (Saad, 2026-10-15).** A Grok Bot connected by OAuth sends no key header, so the server makes one key once (32 random bytes, `CLEANER_CORE_PIN_KEY`, in its secret store) and uses it whenever a request has no `x-cleaner-core-pin-key` header; the header still wins when sent. The seal now guards a copied volume, not a copy of the volume and the secret store together, and the key never appears in a reply, a log, or `cleaner-live.json`.
 
 ## Part 1. Connecting with one Allow
 

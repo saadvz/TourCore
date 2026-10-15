@@ -2,7 +2,7 @@ import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type SaveSecrets } from "./mcp";
-import { pinKeyFromHeader } from "./pinSeal";
+import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
@@ -66,8 +66,10 @@ export async function handleCleanerMcpHttp(input: {
   } catch {
     return { status: 400, body: JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }) };
   }
+  // The header wins. Without it (a Grok Bot connected by OAuth), the server's own key, made once.
+  const pinKey = pinKeyFromHeader(input.pinKeyHeader) ?? serverPinKey(input.env(), input.saveSecrets);
   const desk = liveDeskFor(input.root, input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader), scratchToolsOn(env), input.saveSecrets);
+  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets);
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }
