@@ -21,6 +21,9 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_MS = 10_000;
 const MAX_REDIRECTS = 3;
 const TWILIO_MEDIA = "https://api.twilio.com/";
+/** A group photo's record in the Conversations media service. Its temporary link holds the photo. */
+const CONVERSATION_MEDIA = "https://mcs.us1.twilio.com/v1/Services/";
+const MAX_MEDIA_RECORD_BYTES = 64 * 1024;
 const MIN_KEY = 16;
 const SIGNATURE_LETTERS = 64;
 
@@ -104,6 +107,33 @@ export function photoKey(env: NodeJS.ProcessEnv, save?: (values: { CLEANER_CORE_
   return Buffer.from(fresh, "utf8");
 }
 
+/** The media service record of a group photo. Undefined unless both sids look like Twilio's. */
+export function conversationMediaUrl(chatServiceSid: string, mediaSid: string): string | undefined {
+  if (!/^IS[0-9a-f]{32}$/.test(chatServiceSid) || !/^ME[0-9a-f]{32}$/.test(mediaSid)) return undefined;
+  return `${CONVERSATION_MEDIA}${chatServiceSid}/Media/${mediaSid}`;
+}
+
+/**
+ * Reads a group photo's media record with the Twilio login, and returns its temporary link. The
+ * link is already signed, so the login never goes to it. Undefined when anything is off.
+ */
+async function temporaryMediaLink(url: string, fetchImpl: PhotoFetch, basic: string, signal: AbortSignal): Promise<string | undefined> {
+  const response = await fetchImpl(url, { redirect: "manual", signal, headers: { Authorization: basic } });
+  if (response.status !== 200) return undefined;
+  const declared = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_MEDIA_RECORD_BYTES) return undefined;
+  const text = await response.text();
+  if (text.length > MAX_MEDIA_RECORD_BYTES) return undefined;
+  let record: { links?: { content_direct_temporary?: unknown } };
+  try {
+    record = JSON.parse(text) as typeof record;
+  } catch {
+    return undefined;
+  }
+  const link = record.links?.content_direct_temporary;
+  return typeof link === "string" && link.startsWith("https://") ? link : undefined;
+}
+
 function twilioHost(host: string): boolean {
   return host === "twilio.com" || host.endsWith(".twilio.com");
 }
@@ -135,12 +165,15 @@ async function readCapped(response: Response, controller: AbortController): Prom
 /**
  * Downloads one MMS photo. Only an image type, only from https://api.twilio.com/, with Basic auth
  * from the Cleaner Core Twilio settings. A redirect is followed only to https, and the login goes
- * only to twilio.com hosts. Five megabytes and ten seconds at most. Undefined when anything is off.
+ * only to twilio.com hosts. A group photo is read through the Conversations media service: its
+ * record with the login, then its temporary link without it. Five megabytes and ten seconds at
+ * most. Undefined when anything is off.
  */
 export async function downloadPhoto(media: InboundMedia, fetchImpl: PhotoFetch, env: NodeJS.ProcessEnv): Promise<{ bytes: Buffer; ext: string } | undefined> {
   const ext = TYPES[media.contentType.trim().toLowerCase()];
   if (!ext) return undefined;
-  if (!media.url.startsWith(TWILIO_MEDIA)) return undefined;
+  const grouped = media.url.startsWith(CONVERSATION_MEDIA);
+  if (!grouped && !media.url.startsWith(TWILIO_MEDIA)) return undefined;
   const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
   const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
   if (!accountSid || !authToken) return undefined;
@@ -149,10 +182,15 @@ export async function downloadPhoto(media: InboundMedia, fetchImpl: PhotoFetch, 
   const timer = setTimeout(() => controller.abort(), MAX_PHOTO_MS);
   try {
     let current = media.url;
+    if (grouped) {
+      const link = await temporaryMediaLink(media.url, fetchImpl, basic, controller.signal);
+      if (!link) return undefined;
+      current = link;
+    }
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       if (!calendarUrlAllowed(current)) return undefined;
       const host = new URL(current).hostname.toLowerCase();
-      const headers: Record<string, string> = twilioHost(host) ? { Authorization: basic } : {};
+      const headers: Record<string, string> = !grouped && twilioHost(host) ? { Authorization: basic } : {};
       const response = await fetchImpl(current, { redirect: "manual", signal: controller.signal, headers });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");

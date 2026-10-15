@@ -16,6 +16,8 @@ if (!lane) throw new Error("Scratch Lane is missing");
 const PIN = lane.pin;
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
 const OFFER_COPY = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
+/** The offer goes once into the group, asking the cleaner by name. */
+const GROUP_OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Maria, reply YES to schedule it, or STOP to opt out.";
 const READY = "The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 done.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const TIME_LINE = groupTimeLine("Cory");
@@ -65,7 +67,7 @@ function markSavedHostPending(root: string): void {
 }
 
 describe("host group seat", () => {
-  it("sends the offer copy and the ready text to the host when he never texts YES", async () => {
+  it("sends the group offer and the ready text to the host when he never texts YES", async () => {
     const sent = box();
     const job = openCleanerCore(options(sent));
     await job.pollFeed(FEED);
@@ -79,8 +81,8 @@ describe("host group seat", () => {
     expect(sent.sent.filter((text) => text.kind === "opt-in")).toEqual([
       { to: CLEANER, body: CLEANER_OPT, kind: "opt-in" },
     ]);
-    expect(sent.sent.filter((text) => text.body === OFFER_COPY)).toEqual([
-      { to: CLEANER, body: OFFER_COPY, kind: "offer", channel: "group", audience: [OWNER, CLEANER] },
+    expect(sent.sent.filter((text) => text.kind === "offer")).toEqual([
+      { to: CLEANER, body: GROUP_OFFER, kind: "offer", channel: "group", audience: [OWNER, CLEANER] },
     ]);
     expect(sent.sent.filter((text) => text.body === READY)).toEqual([
       { to: OWNER, body: READY, kind: "done" },
@@ -224,7 +226,7 @@ describe("host group seat", () => {
     await bare.pollFeed(FEED);
     const bareTime = await bare.receive({ id: "bare-time", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     expect(bareTime.sent).toEqual([]);
-    expect(contacts.sent.filter((text) => text.to === OWNER || text.body === OFFER_COPY)).toEqual([]);
+    expect(contacts.sent.filter((text) => text.to === OWNER || text.body === OFFER_COPY || text.body === GROUP_OFFER)).toEqual([]);
 
     const sent = box();
     const job = openCleanerCore(options(sent));
@@ -232,8 +234,8 @@ describe("host group seat", () => {
     await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
     await job.receive({ id: "setup-cleaner-yes", from: CLEANER, text: "YES" });
     expect(job.transcript().filter((line) => line.startsWith(`${OWNER}:`))).toEqual([]);
-    expect(sent.sent.filter((text) => text.body === OFFER_COPY)).toEqual([
-      { to: CLEANER, body: OFFER_COPY, kind: "offer", channel: "group", audience: [OWNER, CLEANER] },
+    expect(sent.sent.filter((text) => text.kind === "offer")).toEqual([
+      { to: CLEANER, body: GROUP_OFFER, kind: "offer", channel: "group", audience: [OWNER, CLEANER] },
     ]);
   });
 
@@ -252,8 +254,8 @@ describe("host group seat", () => {
       { to: CLEANER, body: CLEANER_OPT, kind: "opt-in" },
       { to: EXTRA, body: EXTRA_OPT, kind: "opt-in" },
     ]);
-    expect(sent.sent.filter((text) => text.body === OFFER_COPY)).toEqual([
-      { to: CLEANER, body: OFFER_COPY, kind: "offer", channel: "group", audience: [OWNER, CLEANER, EXTRA] },
+    expect(sent.sent.filter((text) => text.kind === "offer")).toEqual([
+      { to: CLEANER, body: GROUP_OFFER, kind: "offer", channel: "group", audience: [OWNER, CLEANER, EXTRA] },
     ]);
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([
       { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },

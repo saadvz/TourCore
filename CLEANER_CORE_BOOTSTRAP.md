@@ -28,7 +28,7 @@ If it asks what you want help with, call it again with `said: "2"`, which picks 
 1. Start: `get_state`.
 2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times.
 3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar. If they do, ask which Google calendar holds the bookings, and suggest a separate one like "Lake House bookings". Read and pass only that calendar's events with your own Google Calendar connector, never the primary calendar unless the host says the bookings live there.
-4. People: `save_people`. The host, the cleaner, up to 4 extra contacts, and the group chat choice.
+4. People: `save_people`. The host and the name the group calls them (`hostName`, or the business name when unset), the cleaner, up to 4 extra contacts, and the group chat choice.
 5. Schedule: `save_schedule`. When the first cleaning text goes, the reminder, and quiet hours.
 6. Access: `save_door_code`, on your secure card, with the lock location.
 7. Preferences: `save_preferences`. The checklist, photos, supply notes, and other instructions.
@@ -58,7 +58,7 @@ Ask the host to enter each stay as a timed event, from check-in to checkout.
 - **Checkout nudge.** It arrives at the next Check routine run after checkout time. The alert asks "Have the guests left?" Ask the host. When they say yes, call `mark_guests_left` with their words.
 - **`completed`.** Call `get_job_photos` and look at the photos. Compare them with the checklist. Summarize the cleaning in your own words.
 
-The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.
+The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning. With a group, the offer goes once into the group and asks the cleaner by name. Replies in the group show in `messages` with `channel: "group"`. The door code still goes only in a private text.
 When a cleaning is on hold, call `resume_job` only when the host asks.
 
 ## Messages

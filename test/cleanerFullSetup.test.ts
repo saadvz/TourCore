@@ -9,6 +9,7 @@ import type { CleanerCore } from "../src/cleaner-core/core";
 import { DOOR_CODE_IN_CHAT, drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { fakeConversations } from "./fakeConversations";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { photoKey, servePhoto, setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { containsCodeToken } from "../src/cleaner-core/redact";
@@ -44,7 +45,8 @@ const ZONE = "America/New_York";
 const PIN_KEY = Buffer.from(TEST_PIN_KEY, "base64");
 const SECOND = "+15555550133";
 const LOCK = "back door lockbox";
-const TIME = groupTimeLine("Cory");
+/** LiveDesk names the business when no host name is saved. */
+const TIME = groupTimeLine(BUSINESS);
 
 const PROPERTY_NEXT = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
 const SOURCES_NEXT = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like \"Lake House bookings\", works best. I'll read only that calendar, not your main one unless the bookings are there.";
@@ -339,56 +341,17 @@ describe("Cleaner Core full setup: usual times", () => {
   });
 });
 
-interface GroupPost {
-  to: string[];
-  body: string;
-}
-
-/** A fake Twilio Conversations API. It counts every call and never leaves the machine. */
+/** A fake Twilio Conversations API for group texting. It counts every call and never leaves the machine. */
 function groupFetch() {
-  const conversations = new Map<string, { sid: string; address: string }[]>();
-  const posts: GroupPost[] = [];
-  let calls = 0;
-  let sequence = 0;
-  const impl: typeof fetch = async (input, init) => {
-    calls += 1;
-    const url = String(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
-    const root = "https://conversations.twilio.com/v1/Conversations";
-    if (url === root && method === "POST") {
-      const sid = `CH${++sequence}`;
-      conversations.set(sid, []);
-      return reply(201, { sid });
-    }
-    if (!url.startsWith(`${root}/`)) return reply(404, {});
-    const [rawSid, ...rest] = url.slice(root.length + 1).split("/");
-    const people = conversations.get(decodeURIComponent(rawSid ?? ""));
-    if (!people) return reply(404, {});
-    const tail = rest.join("/").split("?")[0] ?? "";
-    if (tail === "Messages" && method === "POST") {
-      const params = new URLSearchParams(String(init?.body ?? ""));
-      posts.push({ to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
-      return reply(201, { sid: `IM${posts.length}` });
-    }
-    if (tail === "Participants" && method === "GET") {
-      return reply(200, { participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })), meta: { next_page_url: null } });
-    }
-    if (tail === "Participants" && method === "POST") {
-      const address = new URLSearchParams(String(init?.body ?? "")).get("MessagingBinding.Address") ?? "";
-      if (people.some((person) => person.address === address)) return reply(409, {});
-      const person = { sid: `MB${++sequence}`, address };
-      people.push(person);
-      return reply(201, { sid: person.sid });
-    }
-    if (method === "DELETE") {
-      const index = people.findIndex((person) => person.sid === decodeURIComponent(tail.slice("Participants/".length)));
-      if (index >= 0) people.splice(index, 1);
-      return reply(204, {});
-    }
-    return reply(404, {});
+  const fake = fakeConversations();
+  return {
+    impl: fake.impl,
+    calls: fake.calls,
+    /** Each group post: who got it and what it said. */
+    get posts() {
+      return fake.posts.map((post) => ({ to: post.to, body: post.body }));
+    },
   };
-  return { impl, posts, calls: () => calls };
 }
 
 function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () => new Date(FROZEN), extraEnv: NodeJS.ProcessEnv = {}) {
@@ -413,6 +376,7 @@ function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () =
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    PUBLIC_BASE_URL: PHOTO_BASE,
     ...extraEnv,
   };
   const desk = liveDeskFor(root, () => env, now);
@@ -649,6 +613,11 @@ function offers(sent: SentSms[]): SentSms[] {
   return sent.filter((item) => item.to === CLEANER && item.body.startsWith("Turnover at"));
 }
 
+/** Offers to the cleaner, one-to-one or in the group. */
+function offersAnywhere(sent: SentSms[], posts: { to: string[]; body: string }[]): string[] {
+  return [...offers(sent).map((item) => item.body), ...posts.filter((post) => post.to.includes(CLEANER) && post.body.startsWith("Turnover at")).map((post) => post.body)];
+}
+
 function reminders(sent: SentSms[]): SentSms[] {
   return sent.filter((item) => item.to === CLEANER && item.body.startsWith("Reminder:"));
 }
@@ -664,15 +633,15 @@ const NUDGE = "Checkout time at Lake House. Have the guests left?";
 describe("Cleaner Core schedule: the first cleaning text", () => {
   for (const groupChat of ["0", "1"] as const) {
     it(`days-after-check-in 2 holds the offer until check-in + 2 days at 9:00 AM, then sends it once (group ${groupChat})`, async () => {
-      const { desk, sms, time } = await withSchedule({ firstText: "days-after-check-in", firstTextDays: 2 }, groupChat);
+      const { desk, sms, groups, time } = await withSchedule({ firstText: "days-after-check-in", firstTextDays: 2 }, groupChat);
       await optIn(desk, groupChat);
-      expect(offers(sms.sent)).toEqual([]);
+      expect(offersAnywhere(sms.sent, groups.posts)).toEqual([]);
       await alertsAt(desk, time, "2026-10-16T12:59:00.000Z");
-      expect(offers(sms.sent)).toEqual([]);
+      expect(offersAnywhere(sms.sent, groups.posts)).toEqual([]);
       await alertsAt(desk, time, "2026-10-16T13:00:00.000Z");
-      expect(offers(sms.sent)).toHaveLength(1);
+      expect(offersAnywhere(sms.sent, groups.posts)).toHaveLength(1);
       await alertsAt(desk, time, "2026-10-16T13:05:00.000Z");
-      expect(offers(sms.sent)).toHaveLength(1);
+      expect(offersAnywhere(sms.sent, groups.posts)).toHaveLength(1);
       expect(codeRecipients(sms.sent)).toEqual([]);
     });
   }
@@ -1865,7 +1834,7 @@ describe("Cleaner Core full diagram", () => {
       return { ...reply, alerts: ((reply.alerts as string[] | undefined) ?? []).map(plain) };
     };
     const toCleaner = () => sms.sent.filter((item) => item.to === cleaner).map((item) => plain(item.body));
-    const offersSent = () => toCleaner().filter((body) => body.startsWith("Turnover at"));
+    const offersSent = () => [...toCleaner(), ...groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body))].filter((body) => body.startsWith("Turnover at"));
     const remindersSent = () => toCleaner().filter((body) => body.startsWith("Reminder:"));
 
     /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text. */

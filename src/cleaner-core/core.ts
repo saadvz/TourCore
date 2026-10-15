@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -365,7 +365,7 @@ export interface CleanerCoreOptions {
    * instructions are saved, so the Scratch CLI and smoke engines keep their offer copy.
    */
   offerNote?: string;
-  /** Cory reads the thread with the cleaner. Absent keeps one-to-one texts. */
+  /** The host reads the thread with the cleaner, by the name the group calls them. Absent keeps one-to-one texts. */
   groupChat?: {
     hostName: string;
     cleanerName: string;
@@ -2094,6 +2094,13 @@ class Engine implements CleanerCore {
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed) return null;
+      // A group offer that fell back sends no host copy, so a group that just failed isn't tried again.
+      let fellBack = false;
+      if (draft.kind === "offer" && this.groupOfferOpen()) {
+        const grouped = await this.emitGroupOffer({ ...draft, body: addressed.body });
+        if (grouped !== undefined) return grouped;
+        fellBack = true;
+      }
       const text = await this.emitOne({
         id: draft.id,
         ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -2103,7 +2110,7 @@ class Engine implements CleanerCore {
         ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
       });
       if (this.delivery(draft.id) !== "sent") return null;
-      if (draft.kind === "offer") await this.copyOffer({ ...draft, body: addressed.body }, addressed.to);
+      if (draft.kind === "offer" && !fellBack) await this.copyOffer({ ...draft, body: addressed.body }, addressed.to);
       return text;
     }
     if (draft.kind === "cancel-update") {
@@ -2139,6 +2146,40 @@ class Engine implements CleanerCore {
     if (this.hostGroup === "out" || this.hostGroup === "in") return;
     if (this.hostGroupSaved) return;
     if (this.everConsented) this.hostGroup = "in";
+  }
+
+  /** The offer goes to the group when the host and the cleaner are both in it. */
+  private groupOfferOpen(): boolean {
+    if (!this.groupChat || !this.owner || !this.cleanerPhone) return false;
+    const audience = this.groupAudience();
+    return audience.includes(this.owner) && audience.includes(this.cleanerPhone);
+  }
+
+  /**
+   * Posts the offer once into the group, asking the cleaner by name, with no one-to-one offer and no
+   * host copy. Undefined when the group couldn't be confirmed, so the one-to-one offer goes instead.
+   */
+  private async emitGroupOffer(draft: Draft): Promise<CleanerText | null | undefined> {
+    if (!this.groupChat) return undefined;
+    const id = `${draft.id}:group`;
+    if (this.delivery(id) === "sent") return null;
+    const text = await this.emitOne({
+      id,
+      ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      to: this.cleanerPhone ?? draft.to,
+      body: groupOfferBody(this.groupChat.cleanerName, draft.body),
+      kind: "offer",
+      channel: "group",
+      audience: this.groupAudience(),
+      ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+    });
+    const status = this.delivery(id);
+    if (status === "sent") {
+      if (this.messagingMode() !== "cleaner-only") await this.copyOffer(draft, draft.to);
+      return text;
+    }
+    // A failed or uncertain post goes to review. Only a group that was never confirmed falls back.
+    return status === undefined && !this.options.holdSends?.() ? undefined : null;
   }
 
   private async copyOffer(draft: Draft, actor: string): Promise<void> {

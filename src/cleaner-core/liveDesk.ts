@@ -181,6 +181,8 @@ interface Message {
   /** Local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
   at: string;
   handled: MessageHandled;
+  /** Set when the text came in the group. */
+  channel?: "group";
 }
 
 /** An inbound text or MMS. */
@@ -211,6 +213,8 @@ interface PropertyInput {
 
 interface PeopleInput {
   host?: string;
+  /** What the group calls the host. Unset reads as the business name. */
+  hostName?: string;
   cleaner?: string;
   observer?: string;
   cleanerName?: string;
@@ -255,6 +259,8 @@ interface LiveFile {
   checkInTime?: string;
   propertyId?: string;
   host?: string;
+  /** What the group calls the host. Unset reads as the business name. */
+  hostName?: string;
   cleaner?: string;
   cleanerName?: string;
   /** The legacy single observer from save_people. It reads as one contact named Observer. */
@@ -813,6 +819,8 @@ export class LiveDesk {
     }
     const cleanerName = input.cleanerName?.trim() ?? "";
     if (cleanerName.length > MAX_NAME) return this.fail(`Keep the cleaner's name under ${MAX_NAME} characters.`);
+    const hostName = input.hostName?.trim() ?? "";
+    if (hostName.length > MAX_NAME) return this.fail(`Keep the host's name under ${MAX_NAME} characters.`);
     const groupChat = input.groupChat?.trim() ?? "";
     if (groupChat && !(GROUP_CHOICES as readonly string[]).includes(groupChat)) {
       return this.fail("Choose who gets the texts: cleaner-only, cleaner-and-host, or everyone.");
@@ -832,12 +840,13 @@ export class LiveDesk {
       contacts.push({ name, role: role as ContactRole, phone });
     }
     if (contacts.length + (observer ? 1 : 0) > MAX_CONTACTS) return this.fail(`I can keep up to ${MAX_CONTACTS} extra contacts.`);
-    if (this.carriesCode(cleanerName)) return this.fail(DOOR_CODE_IN_CHAT);
+    if (this.carriesCode(cleanerName) || this.carriesCode(hostName)) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.host = host;
     this.file.cleaner = cleaner;
     if (observer) this.file.observer = observer;
     else delete this.file.observer;
     this.keep("cleanerName", cleanerName || undefined);
+    this.keep("hostName", hostName || undefined);
     this.keep("contacts", contacts.length > 0 ? contacts : undefined);
     this.keep("groupChat", (groupChat || undefined) as GroupChoice | undefined);
     this.persist();
@@ -1710,6 +1719,20 @@ export class LiveDesk {
     return this.serial(() => this.inboundSerial(input));
   }
 
+  /**
+   * A text in the group, from Twilio's conversation webhook. It is taken only from the saved group
+   * conversation, and only from the host, the cleaner, or a contact in that group.
+   */
+  inboundGroup(input: { conversationSid: string; id: string; from: string; text: string; media?: InboundMedia[] }): Promise<{ sent: CleanerText[] }> {
+    return this.serial(async () => {
+      if (!this.groupOn() || !this.file.conversationSid || input.conversationSid !== this.file.conversationSid) return { sent: [] };
+      const from = parsePhone(input.from);
+      const members = [this.file.host, this.file.cleaner, ...this.groupExtras().map((contact) => contact.phone)];
+      if (!from || !members.includes(from)) return { sent: [] };
+      return this.inboundSerial({ id: input.id, from, text: input.text, channel: "group", ...(input.media && input.media.length > 0 ? { media: input.media } : {}) });
+    });
+  }
+
   /** The body of `inbound`, for a caller already inside the serial queue. */
   private async inboundSerial(input: Inbound): Promise<{ sent: CleanerText[] }> {
     const before = this.visibleNoteIds();
@@ -1739,7 +1762,7 @@ export class LiveDesk {
 
   /** Handles one inbound text. `handled` is what Cleaner Core did, or undefined when the text was not taken. */
   private async routeInbound(input: Inbound, from: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
-    if (from === this.file.host) return this.hostText(input.id, from, input.text);
+    if (from === this.file.host) return this.hostText(input.id, from, input.text, input.channel);
     this.resume();
     const keyword = messagingKeyword(input.text);
     // One engine for the whole text, so it is taken, counted, and seen by the engine that started it.
@@ -1787,7 +1810,7 @@ export class LiveDesk {
     const words = this.messageText(input.text);
     // An MMS shows as [photo], after its words when it has any. Its media URL is never kept.
     const text = (input.media?.length ?? 0) > 0 ? (words ? `${words} ${PHOTO_MARK}` : PHOTO_MARK).slice(0, MAX_MESSAGE_TEXT) : words;
-    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: this.messageAt(), handled };
+    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: this.messageAt(), handled, ...(input.channel ? { channel: input.channel } : {}) };
     this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
     this.persist();
   }
@@ -2117,7 +2140,7 @@ export class LiveDesk {
       ...(this.groupOn()
         ? {
             groupChat: {
-              hostName: "Cory",
+              hostName: file.hostName ?? file.business,
               cleanerName: file.cleanerName ?? "Maria",
               ...(extra.length > 0 ? { extra } : {}),
             },
@@ -2339,7 +2362,7 @@ export class LiveDesk {
     await this.engine?.reportPin(id, status);
   }
 
-  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
+  private async hostText(id: string, from: string, text: string, channel?: "group"): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
     this.noteSeen(id);
     const keyword = messagingKeyword(text);
     if (keyword === "stop" || keyword === "start" || isInjuryReport(text)) {
@@ -2348,7 +2371,7 @@ export class LiveDesk {
         if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword), handled: keyword };
         return { sent: [], handled: "none" };
       }
-      const result = await this.engine.receive({ id, from, text });
+      const result = await this.engine.receive({ id, from, text, ...(channel ? { channel } : {}) });
       this.syncHold();
       return { sent: result.sent, ...this.handledBy(result) };
     }
@@ -2357,7 +2380,7 @@ export class LiveDesk {
       if (!this.groupOn()) return { sent: [], handled: "none" };
       this.resume();
       if (!this.engine) return { sent: [], handled: "none" };
-      const result = await this.engine.receive({ id, from, text });
+      const result = await this.engine.receive({ id, from, text, ...(channel ? { channel } : {}) });
       this.syncHold();
       return { sent: result.sent, ...this.handledBy(result) };
     }

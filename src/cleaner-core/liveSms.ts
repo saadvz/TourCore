@@ -1,4 +1,5 @@
 import { parsePhone } from "../core/phone";
+import { publicBaseUrl } from "../messaging/publicUrl";
 import { twilioHttpClient, type TwilioClient } from "../messaging/twilio/client";
 import { GroupNotConfirmed } from "./groupThread";
 
@@ -65,17 +66,47 @@ export async function sendLiveSms(env: NodeJS.ProcessEnv, text: { to: string; bo
 
 let groupFetch: typeof fetch | undefined;
 
+/** Tests replace the Conversations API. Unset uses the platform fetch. */
 export function setCleanerGroupFetch(impl: typeof fetch | undefined): void {
   groupFetch = impl;
 }
 
 const CONVERSATIONS_ROOT = "https://conversations.twilio.com/v1";
+/** The group's own voice. Group texts are posted as this chat participant, and its own echoes are ignored. */
+export const CLEANER_GROUP_IDENTITY = "cleaner-core";
+export const CLEANER_GROUP_HOOK_PATH = "/webhooks/twilio/cleaner-core/conversation";
+/** Group texting allows 10 participants, and one of them is the chat participant. */
+const MAX_GROUP_PHONES = 9;
 
-interface BoundMember {
-  sid: string;
-  address: string;
+/** Where Twilio posts group replies. Undefined without a public https address. */
+export function cleanerGroupHookUrl(env: NodeJS.ProcessEnv): string | undefined {
+  // The same base the server checks Twilio's signature against.
+  const base = publicBaseUrl(env);
+  return base ? `${base}${CLEANER_GROUP_HOOK_PATH}` : undefined;
 }
 
+interface Member {
+  sid: string;
+  identity?: string;
+  address?: string;
+  proxyAddress?: string;
+  projectedAddress?: string;
+}
+
+interface GroupApi {
+  fetchImpl: typeof fetch;
+  auth: string;
+}
+
+/**
+ * Posts one text to a Twilio group texting conversation
+ * (https://www.twilio.com/docs/conversations/group-texting): each phone joins with only its
+ * address, one chat participant is projected on the cleaning number, and the text is posted as
+ * that participant. The saved group is reused while its people are the same. Otherwise a new one
+ * is made and the old one emptied, so an old proxy-style conversation stops capturing one-to-one
+ * texts. One person gets a plain text instead. Throws GroupNotConfirmed when the group can't be
+ * made or confirmed, so the caller can fall back to one-to-one texts.
+ */
 export async function sendLiveGroup(
   env: NodeJS.ProcessEnv,
   input: { audience: string[]; body: string; conversationSid?: string },
@@ -84,79 +115,132 @@ export async function sendLiveGroup(
   const allow = smsAllowlist(env);
   if (allow.length === 0) return undefined;
   const audience = [...new Set(input.audience.map((phone) => parsePhone(phone)).filter((phone): phone is string => Boolean(phone)))];
-  if (audience.length === 0 || audience.some((phone) => !allow.includes(phone))) return undefined;
-  const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
-  const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
+  if (audience.length === 0) return undefined;
+  // A phone left off the allowlist means the group can't be the one the engine asked for.
+  if (audience.some((phone) => !allow.includes(phone))) throw new GroupNotConfirmed(input.conversationSid);
+  const [only] = audience;
+  if (audience.length === 1 && only) {
+    // The old group is emptied first, so it can't keep capturing this person's own texts.
+    const old = input.conversationSid;
+    const api = old ? groupApi(env) : undefined;
+    if (old && api) await emptyConversation(api, old).catch(() => undefined);
+    const sid = await sendLiveSms(env, { to: only, body: input.body });
+    return sid ? { sid } : undefined;
+  }
+  const hookUrl = cleanerGroupHookUrl(env);
+  if (!hookUrl || audience.length > MAX_GROUP_PHONES) throw new GroupNotConfirmed(input.conversationSid);
+  const api = groupApi(env);
   const from = parsePhone(env.CLEANER_CORE_TWILIO_PHONE_NUMBER ?? "");
-  if (!accountSid || !authToken || !from) throw new Error("not sent");
-  const fetchImpl = groupFetch ?? fetch;
-  const auth = `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`;
-  const conversationSid = await openConversation(fetchImpl, auth, input.conversationSid);
-  await reconcileMembers(fetchImpl, auth, conversationSid, audience, from);
-  const message = await postFields(fetchImpl, auth, `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}/Messages`, {
-    Body: input.body,
-    Author: from,
-  });
+  if (!api || !from) throw new Error("not sent");
+  let conversationSid = input.conversationSid;
+  if (!conversationSid || !(await sameGroup(api, conversationSid, audience, from))) {
+    if (conversationSid) await emptyConversation(api, conversationSid);
+    conversationSid = await makeGroup(api, audience, from, hookUrl);
+  }
+  // The group is confirmed now. A failed post may still have reached everyone, so it is a plain
+  // failure for review, never a group that falls back to one-to-one texts.
+  const message = await call(api, "POST", conversationPath(conversationSid, "Messages"), { Body: input.body, Author: CLEANER_GROUP_IDENTITY });
   if (!message.sid) throw new Error("not sent");
   return { sid: message.sid, conversationSid };
 }
 
-async function openConversation(fetchImpl: typeof fetch, auth: string, existing: string | undefined): Promise<string> {
-  if (existing) return existing;
+function groupApi(env: NodeJS.ProcessEnv): GroupApi | undefined {
+  const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
+  const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
+  if (!accountSid || !authToken) return undefined;
+  return { fetchImpl: groupFetch ?? fetch, auth: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}` };
+}
+
+/** True when the conversation is our group texting conversation with exactly these phones. Missing reads as false. */
+async function sameGroup(api: GroupApi, conversationSid: string, audience: string[], from: string): Promise<boolean> {
+  // A closed or inactive conversation takes no posts, so it is never reused.
+  const res = await request(api, "GET", `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}`);
+  if (res?.status === 404) return false;
+  if (!res?.ok) throw new GroupNotConfirmed(conversationSid);
+  const conversation = (await res.json().catch(() => undefined)) as { state?: string } | undefined;
+  if (conversation?.state !== "active") return false;
+  const members = await listMembers(api, conversationSid);
+  if (!members) return false;
+  const chat = members.filter((member) => !member.address);
+  const phones = members.filter((member) => member.address);
+  if (chat.length !== 1 || chat[0]?.identity !== CLEANER_GROUP_IDENTITY || parsePhone(chat[0].projectedAddress ?? "") !== from) return false;
+  if (phones.some((member) => member.proxyAddress)) return false;
+  const addresses = phones.map((member) => member.address);
+  return addresses.length === audience.length && new Set(addresses).size === audience.length && audience.every((phone) => addresses.includes(phone));
+}
+
+/**
+ * A new conversation with its reply webhook, the chat participant, then each phone. Anything that
+ * fails empties it, so no half-made group keeps a phone.
+ */
+async function makeGroup(api: GroupApi, audience: string[], from: string, hookUrl: string): Promise<string> {
+  let created: { sid?: string };
   try {
-    const created = await postFields(fetchImpl, auth, `${CONVERSATIONS_ROOT}/Conversations`, { FriendlyName: "Cleaning group" });
-    if (!created.sid) throw new GroupNotConfirmed();
-    return created.sid;
-  } catch (err) {
-    if (err instanceof GroupNotConfirmed) throw err;
+    created = await call(api, "POST", `${CONVERSATIONS_ROOT}/Conversations`, { FriendlyName: "Cleaning group" });
+  } catch {
     throw new GroupNotConfirmed();
   }
+  const sid = created.sid;
+  if (!sid) throw new GroupNotConfirmed();
+  try {
+    await call(api, "POST", conversationPath(sid, "Webhooks"), {
+      Target: "webhook",
+      "Configuration.Url": hookUrl,
+      "Configuration.Method": "POST",
+      "Configuration.Filters": "onMessageAdded",
+    });
+    await call(api, "POST", conversationPath(sid, "Participants"), { Identity: CLEANER_GROUP_IDENTITY, "MessagingBinding.ProjectedAddress": from });
+    for (const phone of audience) await call(api, "POST", conversationPath(sid, "Participants"), { "MessagingBinding.Address": phone });
+    if (!(await sameGroup(api, sid, audience, from))) throw new GroupNotConfirmed(sid);
+  } catch {
+    // Kept only when it couldn't be emptied, so the next send empties it.
+    const emptied = await emptyConversation(api, sid).then(
+      () => true,
+      () => false,
+    );
+    throw new GroupNotConfirmed(emptied ? undefined : sid);
+  }
+  return sid;
 }
 
-async function reconcileMembers(fetchImpl: typeof fetch, auth: string, conversationSid: string, wanted: string[], from: string): Promise<void> {
-  const wantedSet = new Set(wanted);
-  const current = await listMembers(fetchImpl, auth, conversationSid);
-  const seen = new Set<string>();
-  for (const person of current) {
-    if (wantedSet.has(person.address) && !seen.has(person.address)) {
-      seen.add(person.address);
-      continue;
-    }
-    await removeMember(fetchImpl, auth, conversationSid, person.sid);
+/** Removes every participant. A conversation that is already gone counts as empty. */
+async function emptyConversation(api: GroupApi, conversationSid: string): Promise<void> {
+  const members = await listMembers(api, conversationSid);
+  for (const member of members ?? []) {
+    const res = await request(api, "DELETE", conversationPath(conversationSid, `Participants/${encodeURIComponent(member.sid)}`));
+    if (!res || (!res.ok && res.status !== 404)) throw new GroupNotConfirmed(conversationSid);
   }
-  for (const phone of wanted) {
-    if (seen.has(phone)) continue;
-    await addMember(fetchImpl, auth, conversationSid, phone, from);
-  }
-  const confirmed = await listMembers(fetchImpl, auth, conversationSid);
-  const addresses = confirmed.map((person) => person.address);
-  const matched = confirmed.length === wanted.length && new Set(addresses).size === wanted.length && addresses.every((phone) => wantedSet.has(phone));
-  if (!matched) throw new GroupNotConfirmed(conversationSid);
 }
 
-async function listMembers(fetchImpl: typeof fetch, auth: string, conversationSid: string): Promise<BoundMember[]> {
-  const found: BoundMember[] = [];
-  let url: string | undefined = `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}/Participants?PageSize=50`;
+/** Every participant, page by page. Undefined when the conversation is gone. */
+async function listMembers(api: GroupApi, conversationSid: string): Promise<Member[] | undefined> {
+  const found: Member[] = [];
+  let url: string | undefined = `${conversationPath(conversationSid, "Participants")}?PageSize=50`;
   const seen = new Set<string>();
   while (url) {
     if (seen.has(url) || !url.startsWith("https://conversations.twilio.com/")) throw new GroupNotConfirmed(conversationSid);
     seen.add(url);
-    let res: Response;
-    try {
-      res = await fetchImpl(url, { method: "GET", headers: { Authorization: auth } });
-    } catch {
-      throw new GroupNotConfirmed(conversationSid);
-    }
-    if (!res.ok) throw new GroupNotConfirmed(conversationSid);
-    const body = (await res.json().catch(() => undefined)) as {
-      participants?: { sid?: string; messaging_binding?: { address?: string } }[];
-      meta?: { next_page_url?: string | null };
-    } | undefined;
+    const res = await request(api, "GET", url);
+    if (res?.status === 404 && found.length === 0) return undefined;
+    if (!res?.ok) throw new GroupNotConfirmed(conversationSid);
+    const body = (await res.json().catch(() => undefined)) as
+      | {
+          participants?: { sid?: string; identity?: string | null; messaging_binding?: { address?: string; proxy_address?: string; projected_address?: string } | null }[];
+          meta?: { next_page_url?: string | null };
+        }
+      | undefined;
     if (!body || !Array.isArray(body.participants)) throw new GroupNotConfirmed(conversationSid);
     for (const item of body.participants) {
-      const address = parsePhone(item.messaging_binding?.address ?? "");
-      if (!item.sid || !address) throw new GroupNotConfirmed(conversationSid);
-      found.push({ sid: item.sid, address });
+      if (!item.sid) throw new GroupNotConfirmed(conversationSid);
+      const binding = item.messaging_binding ?? {};
+      const address = binding.address ? parsePhone(binding.address) : undefined;
+      found.push({
+        sid: item.sid,
+        ...(item.identity ? { identity: item.identity } : {}),
+        ...(address ? { address } : {}),
+        ...(binding.proxy_address ? { proxyAddress: binding.proxy_address } : {}),
+        ...(binding.projected_address ? { projectedAddress: binding.projected_address } : {}),
+      });
     }
     const next = body.meta?.next_page_url;
     url = typeof next === "string" && next.length > 0 ? next : undefined;
@@ -164,40 +248,26 @@ async function listMembers(fetchImpl: typeof fetch, auth: string, conversationSi
   return found;
 }
 
-async function addMember(fetchImpl: typeof fetch, auth: string, conversationSid: string, phone: string, from: string): Promise<void> {
-  const url = `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}/Participants`;
-  let res: Response;
+function conversationPath(conversationSid: string, tail: string): string {
+  return `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}/${tail}`;
+}
+
+/** One API call. Undefined when Twilio couldn't be reached. */
+async function request(api: GroupApi, method: string, url: string, fields?: Record<string, string>): Promise<Response | undefined> {
   try {
-    res = await fetchImpl(url, {
-      method: "POST",
-      headers: { Authorization: auth, "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ "MessagingBinding.Address": phone, "MessagingBinding.ProxyAddress": from }).toString(),
+    return await api.fetchImpl(url, {
+      method,
+      headers: { Authorization: api.auth, ...(fields ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) },
+      ...(fields ? { body: new URLSearchParams(fields).toString() } : {}),
     });
   } catch {
-    throw new GroupNotConfirmed(conversationSid);
+    return undefined;
   }
-  if (res.ok || res.status === 409) return;
-  throw new GroupNotConfirmed(conversationSid);
 }
 
-async function removeMember(fetchImpl: typeof fetch, auth: string, conversationSid: string, participantSid: string): Promise<void> {
-  const url = `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}/Participants/${encodeURIComponent(participantSid)}`;
-  let res: Response;
-  try {
-    res = await fetchImpl(url, { method: "DELETE", headers: { Authorization: auth } });
-  } catch {
-    throw new GroupNotConfirmed(conversationSid);
-  }
-  if (res.ok || res.status === 404) return;
-  throw new GroupNotConfirmed(conversationSid);
-}
-
-async function postFields(fetchImpl: typeof fetch, auth: string, url: string, fields: Record<string, string>): Promise<{ sid?: string }> {
-  const res = await fetchImpl(url, {
-    method: "POST",
-    headers: { Authorization: auth, "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(fields).toString(),
-  });
-  if (!res.ok) throw new Error("not sent");
-  return (await res.json()) as { sid?: string };
+/** A POST whose reply carries a sid. Any failure throws. */
+async function call(api: GroupApi, method: string, url: string, fields: Record<string, string>): Promise<{ sid?: string }> {
+  const res = await request(api, method, url, fields);
+  if (!res?.ok) throw new Error("not sent");
+  return ((await res.json().catch(() => ({}))) ?? {}) as { sid?: string };
 }

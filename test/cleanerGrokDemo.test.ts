@@ -12,6 +12,7 @@ import type { CleanerCore } from "../src/cleaner-core/core";
 import { drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { fakeConversations } from "./fakeConversations";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
@@ -365,47 +366,9 @@ interface GroupPost {
 }
 
 /** A fake Twilio Conversations API. It records each group message and never leaves the machine. */
+/** The Conversations fake for group texting. Each post lists the phones that got it. */
 function groupStub(): { impl: typeof fetch; posts: GroupPost[] } {
-  const conversations = new Map<string, { sid: string; address: string }[]>();
-  const posts: GroupPost[] = [];
-  let sequence = 0;
-  const impl: typeof fetch = async (input, init) => {
-    const url = String(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
-    const root = "https://conversations.twilio.com/v1/Conversations";
-    if (url === root && method === "POST") {
-      const sid = `CH${++sequence}`;
-      conversations.set(sid, []);
-      return reply(201, { sid });
-    }
-    if (!url.startsWith(`${root}/`)) return reply(404, {});
-    const [rawSid, ...rest] = url.slice(root.length + 1).split("/");
-    const people = conversations.get(decodeURIComponent(rawSid ?? ""));
-    if (!people) return reply(404, {});
-    const tail = rest.join("/").split("?")[0] ?? "";
-    if (tail === "Messages" && method === "POST") {
-      const params = new URLSearchParams(String(init?.body ?? ""));
-      posts.push({ to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
-      return reply(201, { sid: `IM${posts.length}` });
-    }
-    if (tail === "Participants" && method === "GET") {
-      return reply(200, { participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })), meta: { next_page_url: null } });
-    }
-    if (tail === "Participants" && method === "POST") {
-      const address = new URLSearchParams(String(init?.body ?? "")).get("MessagingBinding.Address") ?? "";
-      const person = { sid: `MB${++sequence}`, address };
-      people.push(person);
-      return reply(201, { sid: person.sid });
-    }
-    if (method === "DELETE") {
-      const index = people.findIndex((person) => person.sid === decodeURIComponent(tail.slice("Participants/".length)));
-      if (index >= 0) people.splice(index, 1);
-      return reply(204, {});
-    }
-    return reply(404, {});
-  };
-  return { impl, posts };
+  return fakeConversations();
 }
 
 /** A Guesty calendar that answers slowly and counts how many reads are open at once. */
@@ -1021,10 +984,12 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
 
   for (const groupChat of [false, true]) {
     it(`a second booking after the first job is done is reported and timed (group chat ${groupChat ? "on" : "off"})`, async () => {
-      if (groupChat) setCleanerGroupFetch(groupStub().impl);
+      const group = groupChat ? groupStub() : undefined;
+      if (group) setCleanerGroupFetch(group.impl);
       const wired = await app({ groupChat });
       await finishedJob(wired);
       const before = wired.cleanerSent.length;
+      const postsBefore = group?.posts.length ?? 0;
       const checked = await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY, NEXT_STAY, LATER_STAY]) });
       expect(checked.isError).toBe(false);
       expect(alertsOf(checked).some((line) => line.includes("Saturday, Oct 24"))).toBe(true);
@@ -1034,7 +999,9 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
       const got = toTheCleaner(wired, before);
       expect(got.some((item) => item.body.includes("Oct 14"))).toBe(false);
       expect(got.map(textKind)).not.toContain("corrected");
-      const offers = got.filter((item) => /Reply YES to schedule it/.test(item.body));
+      // With group chat on, the offer goes once into the group instead of one-to-one.
+      const posted = (group?.posts.slice(postsBefore) ?? []).map((post) => ({ body: post.body }));
+      const offers = [...got, ...posted].filter((item) => /reply YES to schedule it/i.test(item.body));
       expect(offers).toHaveLength(1);
       expect(offers[0]?.body).toContain("Saturday, Oct 24");
       expect(offers[0]?.body).toContain("11:00 AM");
@@ -1630,10 +1597,9 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     // 4. The cleaner replies YES twice. The first YES accepts the group invite and brings the offer.
     // The second YES takes the offer.
     await fromCleaner("YES");
-    // The cleaner gets the private offer, and the group gets a copy that says the cleaner will confirm.
+    // The offer goes once, into the group, and asks the cleaner by name. There is no one-to-one copy.
     const offers = await labelled("Cleaning offer to the cleaner");
-    expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true, true]);
-    expect(offers.filter((item) => item.body.endsWith("Reply YES to schedule it, or STOP to opt out."))).toHaveLength(1);
+    expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true]);
     await fromCleaner("YES");
     expect(await labelled("Confirmation to the cleaner")).toHaveLength(1);
     const heard = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
@@ -1688,7 +1654,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     expect(secondTimes.structured?.next).toBe("Times saved. I sent the cleaner the cleaning offer. They reply YES to take it.");
     expect(await labelled("Opt-in text to the cleaner")).toHaveLength(1);
     const secondOffers = (await labelled("Cleaning offer to the cleaner")).filter((item) => item.body.includes("Oct 24"));
-    expect(secondOffers.map((item) => item.body.startsWith(`Turnover at ${address} on Saturday, Oct 24. Checkout 11:00 AM`))).toEqual([true, true]);
+    expect(secondOffers.map((item) => item.body.startsWith(`Turnover at ${address} on Saturday, Oct 24. Checkout 11:00 AM`))).toEqual([true]);
     await fromCleaner("YES");
     const confirmations = (await labelled("Confirmation to the cleaner")).map((item) => item.body);
     expect(confirmations).toEqual([expect.stringContaining("Wednesday, Oct 14 at 10:00 AM"), expect.stringContaining("Saturday, Oct 24 at 11:00 AM")]);
