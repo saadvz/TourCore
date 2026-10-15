@@ -137,6 +137,42 @@ describe("group texting: how the group is made", () => {
     expect(fake.posts).toEqual([]);
   });
 
+  it("treats a failed post into a confirmed group as a plain failure, never as a group to fall back from", async () => {
+    useFake({ failMessages: true });
+    const failed = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello" }).catch((err: unknown) => err);
+    expect(failed).toBeInstanceOf(Error);
+    expect(failed).not.toBeInstanceOf(GroupNotConfirmed);
+  });
+
+  it("starts a new group when Twilio closed the saved one", async () => {
+    const fake = useFake();
+    const first = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "One" });
+    fake.close(first?.conversationSid ?? "");
+    const second = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Two", conversationSid: first?.conversationSid });
+    expect(second?.conversationSid).not.toBe(first?.conversationSid);
+    expect(fake.people(first?.conversationSid ?? "")).toEqual([]);
+    expect(fake.posts.map((post) => post.body)).toEqual(["One", "Two"]);
+  });
+
+  it("empties the old group when only one person is left, then texts that person one-to-one", async () => {
+    const fake = useFake();
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
+    const old = fake.seedProxy([HOST, CLEANER], CLEANER_LINE);
+    const sent = await sendLiveGroup(ENV, { audience: [CLEANER], body: "Just you" });
+    expect(sent?.sid).toBe("SM1");
+    expect(fake.people(old)).toHaveLength(2);
+    await sendLiveGroup(ENV, { audience: [CLEANER], body: "Just you again", conversationSid: old });
+    expect(fake.people(old)).toEqual([]);
+    expect(sms.sent.map((item) => item.body)).toEqual(["Just you", "Just you again"]);
+  });
+
+  it("refuses the group when someone in it is off the allowlist, so the offer can fall back", async () => {
+    const fake = useFake();
+    await expect(sendLiveGroup(ENV, { audience: [HOST, "+15555550199"], body: "Hello" })).rejects.toBeInstanceOf(GroupNotConfirmed);
+    expect(fake.calls()).toBe(0);
+  });
+
   it("leaves no half-made group when the reply webhook can't be added", async () => {
     const fake = useFake({ failWebhooks: true });
     await expect(sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello" })).rejects.toBeInstanceOf(GroupNotConfirmed);
@@ -201,12 +237,16 @@ describe("group texting: the offer goes to the cleaner once", () => {
 
   it("falls back to the one-to-one offer when the group can't be confirmed", async () => {
     const sent: CleanerText[] = [];
+    const tried: CleanerText[] = [];
     const job = await offered(async (text) => {
+      tried.push(text);
       if (text.channel === "group") throw new GroupNotConfirmed();
       sent.push(text);
     });
     expect(sent.filter((text) => text.kind === "offer")).toEqual([{ to: MIKE, body: OFFER, kind: "offer" }]);
     expect(job.hostNotes()).toContain("I couldn't send the cleaning offer to the group.");
+    // The group just failed, so no host copy tries it again.
+    expect(tried.filter((text) => text.channel === "group")).toHaveLength(1);
     await job.receive({ id: "mike-yes-direct", from: MIKE, text: "YES" });
     expect(job.jobs()[0]?.status).toBe("confirmed");
   });
@@ -391,6 +431,7 @@ describe("group texting: the conversation webhook", () => {
       { url: `https://mcs.us1.twilio.com/v1/Services/${service}/Media/${media}`, auth: true },
       { url: temporary, auth: false },
     ]);
+    expect(((await must(wired, "get_job_photos")).photos as unknown[] | undefined) ?? []).toHaveLength(1);
   });
 });
 

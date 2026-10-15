@@ -1,4 +1,5 @@
 import { parsePhone } from "../core/phone";
+import { publicBaseUrl } from "../messaging/publicUrl";
 import { twilioHttpClient, type TwilioClient } from "../messaging/twilio/client";
 import { GroupNotConfirmed } from "./groupThread";
 
@@ -79,9 +80,9 @@ const MAX_GROUP_PHONES = 9;
 
 /** Where Twilio posts group replies. Undefined without a public https address. */
 export function cleanerGroupHookUrl(env: NodeJS.ProcessEnv): string | undefined {
-  const base = env.PUBLIC_BASE_URL?.trim().replace(/\/+$/, "");
-  if (!base?.startsWith("https://")) return undefined;
-  return `${base}${CLEANER_GROUP_HOOK_PATH}`;
+  // The same base the server checks Twilio's signature against.
+  const base = publicBaseUrl(env);
+  return base ? `${base}${CLEANER_GROUP_HOOK_PATH}` : undefined;
 }
 
 interface Member {
@@ -114,36 +115,50 @@ export async function sendLiveGroup(
   const allow = smsAllowlist(env);
   if (allow.length === 0) return undefined;
   const audience = [...new Set(input.audience.map((phone) => parsePhone(phone)).filter((phone): phone is string => Boolean(phone)))];
-  if (audience.length === 0 || audience.some((phone) => !allow.includes(phone))) return undefined;
+  if (audience.length === 0) return undefined;
+  // A phone left off the allowlist means the group can't be the one the engine asked for.
+  if (audience.some((phone) => !allow.includes(phone))) throw new GroupNotConfirmed(input.conversationSid);
   const [only] = audience;
   if (audience.length === 1 && only) {
+    // The old group is emptied first, so it can't keep capturing this person's own texts.
+    const old = input.conversationSid;
+    const api = old ? groupApi(env) : undefined;
+    if (old && api) await emptyConversation(api, old).catch(() => undefined);
     const sid = await sendLiveSms(env, { to: only, body: input.body });
     return sid ? { sid } : undefined;
   }
   const hookUrl = cleanerGroupHookUrl(env);
-  if (!hookUrl || audience.length > MAX_GROUP_PHONES) throw new GroupNotConfirmed();
-  const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
-  const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
+  if (!hookUrl || audience.length > MAX_GROUP_PHONES) throw new GroupNotConfirmed(input.conversationSid);
+  const api = groupApi(env);
   const from = parsePhone(env.CLEANER_CORE_TWILIO_PHONE_NUMBER ?? "");
-  if (!accountSid || !authToken || !from) throw new Error("not sent");
-  const api: GroupApi = { fetchImpl: groupFetch ?? fetch, auth: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}` };
+  if (!api || !from) throw new Error("not sent");
   let conversationSid = input.conversationSid;
   if (!conversationSid || !(await sameGroup(api, conversationSid, audience, from))) {
     if (conversationSid) await emptyConversation(api, conversationSid);
     conversationSid = await makeGroup(api, audience, from, hookUrl);
   }
-  let message: { sid?: string };
-  try {
-    message = await call(api, "POST", conversationPath(conversationSid, "Messages"), { Body: input.body, Author: CLEANER_GROUP_IDENTITY });
-  } catch {
-    throw new GroupNotConfirmed(conversationSid);
-  }
-  if (!message.sid) throw new GroupNotConfirmed(conversationSid);
+  // The group is confirmed now. A failed post may still have reached everyone, so it is a plain
+  // failure for review, never a group that falls back to one-to-one texts.
+  const message = await call(api, "POST", conversationPath(conversationSid, "Messages"), { Body: input.body, Author: CLEANER_GROUP_IDENTITY });
+  if (!message.sid) throw new Error("not sent");
   return { sid: message.sid, conversationSid };
+}
+
+function groupApi(env: NodeJS.ProcessEnv): GroupApi | undefined {
+  const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
+  const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
+  if (!accountSid || !authToken) return undefined;
+  return { fetchImpl: groupFetch ?? fetch, auth: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}` };
 }
 
 /** True when the conversation is our group texting conversation with exactly these phones. Missing reads as false. */
 async function sameGroup(api: GroupApi, conversationSid: string, audience: string[], from: string): Promise<boolean> {
+  // A closed or inactive conversation takes no posts, so it is never reused.
+  const res = await request(api, "GET", `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}`);
+  if (res?.status === 404) return false;
+  if (!res?.ok) throw new GroupNotConfirmed(conversationSid);
+  const conversation = (await res.json().catch(() => undefined)) as { state?: string } | undefined;
+  if (conversation?.state !== "active") return false;
   const members = await listMembers(api, conversationSid);
   if (!members) return false;
   const chat = members.filter((member) => !member.address);

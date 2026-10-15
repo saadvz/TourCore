@@ -2094,9 +2094,12 @@ class Engine implements CleanerCore {
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed) return null;
+      // A group offer that fell back sends no host copy, so a group that just failed isn't tried again.
+      let fellBack = false;
       if (draft.kind === "offer" && this.groupOfferOpen()) {
         const grouped = await this.emitGroupOffer({ ...draft, body: addressed.body });
         if (grouped !== undefined) return grouped;
+        fellBack = true;
       }
       const text = await this.emitOne({
         id: draft.id,
@@ -2107,7 +2110,7 @@ class Engine implements CleanerCore {
         ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
       });
       if (this.delivery(draft.id) !== "sent") return null;
-      if (draft.kind === "offer") await this.copyOffer({ ...draft, body: addressed.body }, addressed.to);
+      if (draft.kind === "offer" && !fellBack) await this.copyOffer({ ...draft, body: addressed.body }, addressed.to);
       return text;
     }
     if (draft.kind === "cancel-update") {

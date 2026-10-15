@@ -36,6 +36,8 @@ export interface FakeConversations {
   people(conversationSid: string): FakeParticipant[] | undefined;
   calls(): number;
   blockMembership(): void;
+  /** Twilio closes the conversation, so it takes no more posts. */
+  close(conversationSid: string): void;
   /** An old conversation made the proxy way: each phone bound to the Twilio number, no chat participant. */
   seedProxy(phones: string[], proxy: string): string;
 }
@@ -57,6 +59,7 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
   let calls = 0;
   let sequence = 0;
   let blocked = false;
+  const closed = new Set<string>();
   const hex = (n: number) => n.toString(16).padStart(32, "0");
   const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
 
@@ -76,8 +79,9 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
     const people = conversations.get(conversationSid);
     if (!people) return reply(404, {});
     const tail = rest.join("/").split("?")[0] ?? "";
+    if (tail === "" && method === "GET") return reply(200, { sid: conversationSid, state: closed.has(conversationSid) ? "closed" : "active" });
     if (tail === "Messages" && method === "POST") {
-      if (options.failMessages) return reply(500, {});
+      if (options.failMessages || closed.has(conversationSid)) return reply(500, {});
       const params = fields(init);
       messages.push({ conversationSid, params });
       const to = people.flatMap((person) => (person.address ? [person.address] : [])).sort();
@@ -153,6 +157,9 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
     calls: () => calls,
     blockMembership() {
       blocked = true;
+    },
+    close(conversationSid) {
+      closed.add(conversationSid);
     },
     seedProxy(phones, proxy) {
       const sid = `CH${hex(++sequence)}`;

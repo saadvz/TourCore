@@ -537,7 +537,8 @@ describe("group thread on the desk", () => {
       calls.push(String(url));
       return fetchBox.impl(url, init);
     });
-    setCleanerTwilioClient(fakeSms());
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
     setCleanerCalendarFetch(async (url) => ({
       status: url === CALENDAR_URL ? 200 : 404,
       url,
@@ -573,12 +574,17 @@ describe("group thread on the desk", () => {
     await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
+    // The group was made, but the offer's post failed. It may still have reached the group, so it
+    // goes to review and is not sent again one-to-one, and the group is not tried again.
+    const posts = calls.filter((url) => url.endsWith("/Messages"));
+    expect(posts).toHaveLength(1);
+    expect(sms.sent.filter((text) => text.body.startsWith("Turnover at"))).toEqual([]);
+    const state = await desk.getState();
+    expect(state.ok && (state.result.turns as { status: string }[])[0]?.status).toBe("host_confirmed");
     const failed = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    expect(failed).toEqual({ ok: true, result: { next: PIN_SENT } });
-    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    expect(again).toEqual({ ok: true, result: { next: ALREADY } });
-    expect(JSON.stringify(again).includes(DOOR_CODE)).toBe(false);
+    expect(failed.ok).toBe(false);
     expect(JSON.stringify(failed).includes(DOOR_CODE)).toBe(false);
+    expect(sms.sent.some((text) => text.body.includes(DOOR_CODE))).toBe(false);
     rmSync(root, { recursive: true, force: true });
   });
 
