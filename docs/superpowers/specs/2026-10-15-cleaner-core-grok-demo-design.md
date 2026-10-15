@@ -70,14 +70,14 @@ The routine instructions live in `grok-template/routines/`. The tool description
 
 1. **`check_now`.** This is the main new tool. Input: an optional `googleEvents` object in the Google Calendar API `events.list` shape (`timeZone`, `items`), passed through as Grok received it. The tool does these steps in order:
    - Re-reads the saved Guesty Lite link with `readPublicCalendar`, when one is saved.
-   - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, renamed for live use). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed.
+   - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, behind a thin `googleCalendarSource` wrapper). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed.
    - Merges the sources through the existing `readSource` path. A stay in both calendars is one job.
    - Runs `runReminders()`.
    - Returns the host alerts added since the last `check_now`, and marks them shown.
 
    It sends nothing when `CLEANER_CORE_ENABLED` is off. Calls do not overlap: a second call waits for the first.
 2. **`run_checks`** accepts Guesty only, Google only, or both. Today it requires the Guesty link.
-3. **Alert push.** When Cleaner Core records a new host alert, it queues one `cleaning.update` event. The queue and the sender are Tour Core's existing `OperatorEventOutbox` and `GrokRoutineWebhookSink`. Cleaner Core keeps its own outbox file and its own address and key, `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`, in the existing secret store. The event holds only `schemaVersion`, `eventId`, `eventType`, `propertyId`, and `occurredAt`. It holds no text, no phone number, and no door code. The existing 15-second retry delivers it. With no address saved, events wait in the queue and nothing fails.
+3. **Alert push.** When Cleaner Core records a new host alert, it queues one `cleaning.update` event. The queue and the sender are Tour Core's existing `OperatorEventOutbox` and `GrokRoutineWebhookSink`. Cleaner Core keeps its own outbox file and its own address and key, `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`, in the existing secret store. The event holds only `schemaVersion`, `eventId`, `eventType`, and `occurredAt`. It leaves out `propertyId`, because cleaner property ids fail the shared event schema. It holds no text, no phone number, and no door code. The existing 15-second retry delivers it. With no address saved, events wait in the queue and nothing fails.
 4. **`save_alert_routine`.** This is the second new tool. Input: the routine's webhook address and key, from the Grok Bot's secure card. It checks that the address is https and stores both values in the secret store as `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`. It replaces an earlier pair and keeps no history. Its reply never includes either value, and it logs neither. It then queues one test event, so the Grok Bot can confirm the routine woke.
 5. **`read_outbox`** on Scratch properties shows each text's wording. The door code prints as `[redacted]`.
 
@@ -137,3 +137,4 @@ Proof: run the verify-cleanercore skill's `prove-step-g.sh`, which reruns steps 
 - Confirm that the Grok Bot can create a scheduled routine and a webhook routine from chat, and can read the webhook's address and key itself. If it can read them itself, the secure card step is skipped.
 - Confirm that `save_door_code` already gets its value from the Grok Bot's secure card. If it does not, move it to the card.
 - How Grok's Google Calendar connector shapes an event. The plan keeps a thin adapter if it differs from `events.list`.
+- Settled while planning: `triggerDue` sends a trigger that is already past due, so the 8 AM reminder fires on the next check. On a new booking, the engine already writes a `host-checkout` note asking for the checkout time.
