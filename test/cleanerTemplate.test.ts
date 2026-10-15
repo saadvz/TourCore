@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { LiveDesk } from "../src/cleaner-core/liveDesk";
+import { liveDeskFor, resetLiveDesks, type LiveDesk } from "../src/cleaner-core/liveDesk";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { DOOR_CODE } from "./wiringProof";
 
@@ -15,8 +16,8 @@ const BOOTSTRAP = join(ROOT, "CLEANER_CORE_BOOTSTRAP.md");
 const HOSTED = "https://tourcore-production-72ec.up.railway.app";
 const REPO = "https://github.com/saadvz/TourCore";
 const ROUTINES = ["Cleaner Core Check", "Cleaner Core Alerts"];
-/** The setup order get_state asks for: the diagram's 8 steps, then the routines and the first times. */
-const SETUP_TOOLS = ["get_state", "save_property", "save_sources", "save_people", "save_schedule", "save_door_code", "save_preferences", "activate", "save_alert_routine", "confirm_times"];
+/** The setup order get_state asks for: the diagram's 8 steps, the checks once numbers are approved, then the routines and the first times. */
+const SETUP_TOOLS = ["get_state", "save_property", "save_sources", "save_people", "save_schedule", "save_door_code", "save_preferences", "activate", "run_checks", "save_alert_routine", "confirm_times"];
 /** Tools that need the host's yes in chat. A routine runs unattended, so it never holds them. */
 const NEEDS_HOST_YES = ["send_message", "mark_guests_left", "save_door_code", "save_sources", "activate", "resume_job"];
 
@@ -158,11 +159,43 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     expect(text).toMatch(/Have the guests left\?/);
     expect(text).toMatch(/7 days ago to 60 days ahead/);
     expect(text).toMatch(/timed event/);
-    expect(text).toMatch(/YES twice/);
+  });
+
+  it("picks cleaning with the said value it names", () => {
+    const said = /`said: "([^"]+)"`/.exec(read(BOOTSTRAP))?.[1];
+    expect(said).toBeTruthy();
+    const root = mkdtempSync(join(tmpdir(), "cleaner-template-"));
+    try {
+      const desk = liveDeskFor(root, () => ({}), () => new Date());
+      const reply = desk.getState(said);
+      expect(reply.ok).toBe(true);
+      expect((reply.result as { done: string[] }).done).toContain("You chose cleaning.");
+    } finally {
+      resetLiveDesks();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops at unapproved numbers, then runs the checks", () => {
+    const text = read(BOOTSTRAP);
+    expect(text).toMatch(/If `activate` says the numbers aren't approved for texts/);
+    expect(text).toMatch(/Cleaner Core operator has to approve/);
+    expect(text).toMatch(/stop there/);
+    expect(text).toMatch(/call `run_checks`, with `googleEvents`/);
+    expect(read(join(ROOT, "src", "cleaner-core", "liveDesk.ts"))).toContain("only after those numbers are approved for texts.");
+  });
+
+  it("names who send_message can reach, and that YES comes twice in every mode", () => {
+    const text = read(BOOTSTRAP);
+    expect(text).toContain("`send_message`'s `to` is `cleaner`, the cleaner's saved name, `group`, or a saved contact's name. Never a phone number.");
+    expect(text).toContain("The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.");
   });
 
   it("keeps the safety rules", () => {
     const text = read(BOOTSTRAP);
+    for (const doc of [text, read(join(TEMPLATE, "bot-profile.md"))]) {
+      expect(doc).toMatch(/Live texts go only to numbers the Cleaner Core operator approved\.\s+Saving a\s+number doesn't approve it\./);
+    }
     expect(text).toMatch(/Never ask for a secret in chat/);
     expect(text).toMatch(/door code goes only on your secure card/);
     expect(text).toMatch(/after the host says the guests have left/);
