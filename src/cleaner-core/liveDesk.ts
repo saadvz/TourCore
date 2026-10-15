@@ -100,7 +100,7 @@ interface LiveFile {
   seenInbound?: string[];
   conversationSid?: string;
   deliveries?: { id: string; status: DeliveryReport }[];
-  localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport }[];
+  localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport; body?: string }[];
 }
 
 interface CalendarRead {
@@ -115,6 +115,8 @@ interface OutboxRow {
   local: boolean;
   label: string;
   line: string;
+  status: string;
+  body: string;
 }
 
 let calendarFetch: CalendarFetch | undefined;
@@ -584,7 +586,11 @@ export class LiveDesk {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
-    return this.reply({ lines: this.outboxRows().map((row) => row.line) });
+    const rows = this.outboxRows();
+    return this.reply({
+      lines: rows.map((row) => row.line),
+      texts: rows.map((row) => ({ label: row.label, status: row.status, body: this.hideCode(row.body) })),
+    });
   }
 
   async sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
@@ -699,7 +705,7 @@ export class LiveDesk {
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
     if (this.scratchCapture()) {
-      this.noteLocal(from, keyword);
+      this.noteLocal(from, keyword, body);
       return [{ to: from, body, kind: keyword }];
     }
     if (!liveSmsOn(this.env())) return [];
@@ -891,11 +897,11 @@ export class LiveDesk {
       const stored = item.status === "uncertain" ? "waiting" : item.status;
       const status = shown ?? saved ?? stored;
       const role = whoTheyAre(item.to, people);
-      return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status) };
+      return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status), status, body: item.body };
     });
     const localRows = (this.file.localSends ?? []).map((item) => {
       const role = whoTheyAre(item.to, people);
-      return { id: item.id, kind: item.kind, local: true, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, item.status) };
+      return { id: item.id, kind: item.kind, local: true, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, item.status), status: item.status, body: item.body ?? "" };
     });
     return [...engineRows, ...localRows];
   }
@@ -912,9 +918,9 @@ export class LiveDesk {
     this.persist();
   }
 
-  private noteLocal(to: string, kind: TextKind): void {
+  private noteLocal(to: string, kind: TextKind, body = ""): void {
     const sends = this.file.localSends ?? [];
-    sends.push({ id: `local-${randomUUID()}`, to, kind, status: "sent" });
+    sends.push({ id: `local-${randomUUID()}`, to, kind, status: "sent", body });
     this.file.localSends = sends;
     this.persist();
   }
