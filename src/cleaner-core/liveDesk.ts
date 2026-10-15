@@ -8,7 +8,7 @@ import { FileRuntimeStore } from "../storage/runtimeStore";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
-import { formatWhen, zonedInstant } from "./calendar";
+import { formatWhen, interpretFeed, zonedInstant } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
@@ -18,7 +18,7 @@ import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 import { isScratchTestNumber } from "./scratch";
-import { googleCalendarSource, type GoogleEventList } from "./sources";
+import { googleCalendarSource, normalizeSnapshots, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
@@ -59,6 +59,7 @@ export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use t
 const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
 const ROUTINE_NEEDED = "Send the routine's https address and its key.";
+const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
 
 interface PinSend {
   sid: string;
@@ -449,6 +450,10 @@ export class LiveDesk {
       this.engine = before;
       return this.fail(read.reason ?? "I couldn't read that calendar.");
     }
+    if (read.googleUnread) {
+      this.engine = before;
+      return this.fail(GOOGLE_UNREAD);
+    }
     this.file.checked = true;
     // run_checks' own reply already asks for the times, so its new-booking alert counts as shown too.
     const seen = [...this.visibleNotes(this.engine), ...this.newBookingAlert(this.engine)].map((note) => note.id);
@@ -467,25 +472,54 @@ export class LiveDesk {
   /**
    * Reads every saved booking source into the engine. Guesty Lite first, then Google. A failed
    * Guesty read does not stop Google, unless the caller says so. An unread Google source is reported.
+   *
+   * Each read is a full snapshot of its source, and the engine calls off a job that no loaded source
+   * lists. Its loaded sources live in memory only, so after a restart a read of one source alone would
+   * call off the other source's jobs. So with both sources saved, a source is applied alone only when
+   * the engine already holds the other one, and the first read of both is applied as one.
    */
   private async readCalendars(googleEvents?: GoogleEventList, options: { skipGoogleOnGuestyFailure?: boolean } = {}): Promise<CalendarRead> {
     const engine = this.engine;
     const file = this.file;
     if (!engine) throw new Error("Setup is incomplete.");
+    const loaded = new Set(engine.lastSync().sources);
+    let googleUnread = false;
+    let google: SourceSnapshot | undefined;
+    // Google events count only when the host saved Google as a source.
+    if (googleEvents && file.google && file.propertyId) {
+      google = await googleCalendarSource(googleEvents, file.propertyId).read();
+      // Events that are there but none of which reads as a stay or a block are a shape this reader
+      // doesn't know. Applying them would remove every Google stay, so the read counts as unread.
+      if (googleEvents.items.length > 0 && google.turnovers.length === 0 && google.blocks.length === 0) {
+        google = undefined;
+        googleUnread = true;
+      }
+    }
     let guestyFailed = false;
     let reason: string | undefined;
-    if (file.calendarLink) {
+    let guesty: string | undefined;
+    const googleMissing = Boolean(file.google) && !google && !loaded.has("google-calendar");
+    if (file.calendarLink && !googleMissing) {
       const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
-      if (read.ok) await engine.pollFeed(read.body);
+      if (read.ok) guesty = read.body;
       else {
         guestyFailed = true;
         reason = read.reason;
       }
     }
-    let googleUnread = false;
-    if (googleEvents && file.propertyId && !(guestyFailed && options.skipGoogleOnGuestyFailure)) {
-      const google = await engine.readSource(googleCalendarSource(googleEvents, file.propertyId));
-      googleUnread = !google.polled;
+    const guestyMissing = Boolean(file.calendarLink) && guesty === undefined && !loaded.has("guesty-lite");
+    if (guesty !== undefined && google && (!loaded.has("guesty-lite") || !loaded.has("google-calendar"))) {
+      // The first read of both sources: apply them together once, so neither one's jobs look removed.
+      const feed = interpretFeed(guesty);
+      const both = normalizeSnapshots([{ kind: "guesty-lite", tenantId: google.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, google]).feed;
+      const merged: SourceSnapshot = { kind: "google-calendar", tenantId: google.tenantId, turnovers: both.turnovers, blocks: both.blocks };
+      await engine.readSource({ kind: "google-calendar", read: async () => merged });
+    }
+    if (guesty !== undefined) await engine.pollFeed(guesty);
+    if (google && !(guestyFailed && (options.skipGoogleOnGuestyFailure || guestyMissing))) {
+      const snapshot = google;
+      const applied = await engine.readSource({ kind: "google-calendar", read: async () => snapshot });
+      googleUnread = !applied.polled;
     }
     return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
   }

@@ -17,6 +17,7 @@ import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import {
   ADDRESS,
   BUSINESS,
+  CALENDAR_ICS,
   CALENDAR_URL,
   CLEANER,
   CLEANER_AUTH,
@@ -925,6 +926,11 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
 const TODAY_STAY = { id: "g1", start: "2026-10-10", end: "2026-10-14" };
 /** A stay added after the first job is done. Its own checkout is Oct 28. */
 const LATER_STAY = { id: "g3", start: "2026-10-26", end: "2026-10-28" };
+const GUESTY_JOBS = ["2026-10-18", "2026-10-22"];
+const GOOGLE_STAYS = [
+  { id: "g9", start: "2026-10-25", end: "2026-10-27" },
+  { id: "g10", start: "2026-10-29", end: "2026-10-31" },
+];
 
 async function cleanerSays(wired: WiredApp, body: string, sid: string) {
   const res = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body, sid, token: CLEANER_AUTH });
@@ -947,6 +953,17 @@ async function finishedJob(wired: WiredApp) {
   expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
   await cleanerSays(wired, "DONE", "SM-first-done");
   expect(turnOn(await call(wired, "get_turns"), "2026-10-14")?.status).toBe("done");
+}
+
+/** The Guesty calendar the wired app serves, or a failure when `up` is false. */
+function guestyCalendar(up: boolean) {
+  setCleanerCalendarFetch(async (url) => ({
+    status: up && url === CALENDAR_URL ? 200 : 500,
+    url,
+    async text() {
+      return up && url === CALENDAR_URL ? CALENDAR_ICS : "";
+    },
+  }));
 }
 
 describe("Cleaner Core Grok demo: final review fixes", () => {
@@ -1057,6 +1074,69 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     expect(alertsOf(added).some((line) => line.includes("Saturday, Oct 24"))).toBe(true);
     expect(alertsOf(added).some((line) => line.includes("Oct 20"))).toBe(false);
     expect(toTheCleaner(wired, before)).toEqual([]);
+  });
+
+  it("after a restart with both calendars, check_now without events keeps the Google jobs", async () => {
+    const wired = await app();
+    await setUpBoth(wired);
+    const list = googleList(GOOGLE_STAYS);
+    expect((await call(wired, "run_checks", { googleEvents: list })).isError).toBe(false);
+    expect((await call(wired, "check_now", { googleEvents: list })).isError).toBe(false);
+    const before = wired.cleanerSent.length;
+    resetLiveDesks();
+    const bare = await call(wired, "check_now", {});
+    expect(bare.isError).toBe(false);
+    expect(turnsOf(bare).every((turn) => turn.status !== "canceled")).toBe(true);
+    const again = await call(wired, "check_now", { googleEvents: list });
+    expect(again.isError).toBe(false);
+    expect(turnsOf(again).map((turn) => turn.checkoutDate)).toEqual([...GUESTY_JOBS, "2026-10-27", "2026-10-31"]);
+    expect(turnsOf(again).every((turn) => turn.status !== "canceled")).toBe(true);
+    expect(kindsSince(wired, before)).not.toContain("cancel-update");
+  });
+
+  it("after a restart with Guesty down, Google is not applied alone", async () => {
+    const wired = await app();
+    await setUpBoth(wired);
+    const list = googleList(GOOGLE_STAYS);
+    expect((await call(wired, "run_checks", { googleEvents: list })).isError).toBe(false);
+    resetLiveDesks();
+    guestyCalendar(false);
+    const down = await call(wired, "check_now", { googleEvents: list });
+    expect(down.isError).toBe(false);
+    expect(down.structured?.guestyUnread).toBe(true);
+    expect(turnsOf(down).every((turn) => turn.status !== "canceled")).toBe(true);
+    guestyCalendar(true);
+    const up = await call(wired, "check_now", { googleEvents: list });
+    expect(up.structured?.guestyUnread).toBeUndefined();
+    expect(turnsOf(up).map((turn) => turn.checkoutDate)).toEqual([...GUESTY_JOBS, "2026-10-27", "2026-10-31"]);
+    expect(turnsOf(up).every((turn) => turn.status !== "canceled")).toBe(true);
+  });
+
+  it("ignores Google events when only Guesty is saved", async () => {
+    const wired = await app();
+    await setUpTo(wired);
+    expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const checked = await call(wired, "check_now", { googleEvents: googleList(GOOGLE_STAYS) });
+    expect(checked.isError).toBe(false);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(GUESTY_JOBS);
+  });
+
+  it("treats a Google list with no readable event as unread", async () => {
+    const wired = await app();
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: withNext(TODAY_STAY) })).isError).toBe(false);
+    const odd = await call(wired, "check_now", { googleEvents: { timeZone: ZONE, items: [{ id: "x", when: "2026-10-14" }, { title: "Guest" }] } });
+    expect(odd.isError).toBe(false);
+    expect(odd.structured?.googleUnread).toBe(true);
+    expect(turnsOf(odd)).toHaveLength(2);
+    expect(turnsOf(odd).every((turn) => turn.status !== "canceled")).toBe(true);
+    // An empty list is still a read: every stay was removed.
+    const empty = await call(wired, "check_now", { googleEvents: googleList([]) });
+    expect(empty.structured?.googleUnread).toBeUndefined();
+    expect(turnsOf(empty).every((turn) => turn.status === "canceled")).toBe(true);
   });
 
 });
