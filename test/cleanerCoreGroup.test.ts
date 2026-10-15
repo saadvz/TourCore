@@ -19,8 +19,8 @@ const lane = SCRATCH_TENANTS[0];
 if (!lane) throw new Error("Scratch Lane is missing");
 const PIN = lane.pin;
 const OPT_CLEANER = groupOptInBody("Maria", "Cory", ADDRESS);
-const OPT_HOST = groupOptInBody("Cory", "Maria", ADDRESS);
 const OPT_EXTRA = groupOptInBody("Alex", "Cory and Maria", ADDRESS);
+const OFFER_COPY = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PRIVATE_LINE = privateCodeLine("Maria");
 const TIME_LINE = groupTimeLine("Cory");
@@ -37,9 +37,9 @@ const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const AFTER_CHECKS = "Tell me the checkout time and the next check-in time before I text the cleaner.";
-const PRACTICE_INVITE = groupOptInBody("Cory", "Maria", PRACTICE);
 const PRACTICE_HOLD = holdNote(PRACTICE);
-const PRACTICE_SETUP = [PRACTICE_INVITE, PRACTICE_HOLD];
+const PRACTICE_SETUP = [PRACTICE_HOLD];
+const PRACTICE_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
 const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const PRACTICE_PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const PIN_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
@@ -95,14 +95,13 @@ function groupTexts(sent: CleanerText[]): CleanerText[] {
 }
 
 describe("group thread", () => {
-  it("opts both people in one-on-one before any group text", async () => {
+  it("opts the cleaner in one-on-one and seats the host without a YES text", async () => {
     const sent = box();
     const job = open(sent);
     await job.pollFeed(FEED);
     expect(groupTexts(sent.sent)).toEqual([]);
     expect(sent.sent.filter((text) => text.kind === "opt-in")).toEqual([
       { to: CLEANER, body: OPT_CLEANER, kind: "opt-in" },
-      { to: OWNER, body: OPT_HOST, kind: "opt-in" },
     ]);
     await job.receive({ id: "host-yes", from: OWNER, text: "YES" });
     expect(groupTexts(sent.sent)).toEqual([]);
@@ -289,7 +288,10 @@ describe("group thread", () => {
     await job.receive({ id: "schedule-marker", from: CLEANER, text: "YES" });
     await job.receive({ id: "time-marker", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     await job.receive({ id: "time-marker-again", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
-    expect(job.hostNotes().filter((line) => line.startsWith("I couldn't send"))).toEqual(["I couldn't send the checkout time to the group."]);
+    expect(job.hostNotes().filter((line) => line.startsWith("I couldn't send"))).toEqual([
+      "I couldn't send the cleaning offer to the group.",
+      "I couldn't send the checkout time to the group.",
+    ]);
     expect(job.hostNotes().join("\n").includes(marker)).toBe(false);
     expect(job.hostNotes().join("\n").includes("Gate")).toBe(false);
     expect(sent.filter((text) => text.channel === "group")).toEqual([]);
@@ -704,11 +706,15 @@ describe("live group membership", () => {
   it("keeps Alex out of a saved conversation after STOP, including the next group text and the door code", async () => {
     const live = await ready(true);
     const sid = live.readSid();
-    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE }]);
+    expect(live.posts).toEqual([
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
+    ]);
     await live.job.receive({ id: "stop-alex", from: EXTRA, text: "STOP", channel: "group" });
     await live.job.receive({ id: "time-2", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
     const left = await live.job.receive({ id: "left-alex", from: OWNER, text: "guests have left" });
     expect(live.posts).toEqual([
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: OFFER_COPY },
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
@@ -720,10 +726,16 @@ describe("live group membership", () => {
   it("sends nothing to the group when the saved conversation's members cannot be confirmed", async () => {
     const live = await ready(false);
     const sid = live.readSid();
-    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
+    expect(live.posts).toEqual([
+      { conversationSid: sid, to: [OWNER, CLEANER], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
+    ]);
     live.blockMembership();
     const left = await live.job.receive({ id: "left-unsynced", from: OWNER, text: "guests have left" });
-    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
+    expect(live.posts).toEqual([
+      { conversationSid: sid, to: [OWNER, CLEANER], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
+    ]);
     expect(live.sms.sent.filter((text) => text.body === PRIVATE_PIN).map((text) => ({ to: text.to, body: text.body }))).toEqual([
       { to: CLEANER, body: PRIVATE_PIN },
     ]);
@@ -785,7 +797,7 @@ describe("live group membership", () => {
     if (read.ok) expect(read.result.notes).toEqual([...PRACTICE_SETUP, line]);
     expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
     expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
     const reread = desk.getState();
     expect(reread.ok).toBe(true);
     if (reread.ok) expect(reread.result.notes).toEqual([...PRACTICE_SETUP, line]);
@@ -800,7 +812,7 @@ describe("live group membership", () => {
     const still = restarted.getState();
     expect(still.ok).toBe(true);
     if (still.ok) expect(still.result.notes).toEqual([...PRACTICE_SETUP, line]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
     expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
   });
 
@@ -1201,8 +1213,6 @@ describe("live group membership", () => {
     const direct = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
     const resume = resumeNote(PRACTICE);
     const hold = holdNote(PRACTICE);
-    const invite = groupOptInBody("Cory", "Maria", PRACTICE);
-
     const solo = await readyPractice(false);
     await solo.desk.inbound({ id: "solo-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await solo.desk.inbound({ id: "solo-yes-schedule", from: LIVE_CLEANER, text: "YES" });
@@ -1243,7 +1253,7 @@ describe("live group membership", () => {
     const grouped = await readyPractice(true);
     await grouped.desk.inbound({ id: "group-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "group-yes-schedule", from: LIVE_CLEANER, text: "YES" });
-    expect(notesOf(grouped.desk.getState())).toContain(invite);
+    expect(notesOf(grouped.desk.getState())).toEqual([hold]);
     await grouped.desk.inbound({ id: "group-problem", from: LIVE_CLEANER, text: "The lock is broken", channel: "group" });
     expect(notesOf(grouped.desk.getState())).toContain(hold);
     expect(grouped.posts.filter((text) => text.body === hold || text.body === resume || text.body === stopHold || text.body === pinHeld)).toEqual([]);
@@ -1261,7 +1271,7 @@ describe("live group membership", () => {
     expect(notesOf(grouped.desk.getState())).toContain(pinHeld);
     expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, injuryHold, stopHold]);
     expect(grouped.posts.filter((text) => text.body.includes("Door code:") || text.body === PRIVATE_LINE)).toEqual([]);
-    expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && (text.body.includes("Door code:") || text.body === pinHeld || text.body === resume || text.body === hold || text.body === invite))).toEqual([]);
+    expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && (text.body.includes("Door code:") || text.body === pinHeld || text.body === resume || text.body === hold))).toEqual([]);
   });
 
   it("shows the private line only after a delivered report and never posts it to the group", async () => {
@@ -1392,7 +1402,6 @@ describe("live group membership", () => {
     const direct = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
     const resume = resumeNote(PRACTICE);
     const hold = holdNote(PRACTICE);
-    const invite = groupOptInBody("Cory", "Maria", PRACTICE);
     const review = `I saved a manual Airbnb booking exception for ${PRACTICE}. I did not change the cleaning until you confirm it.`;
     const hostStop = `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`;
     const checkin = `Is check-in at ${PRACTICE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
@@ -1441,7 +1450,7 @@ describe("live group membership", () => {
     expect(hostBodies(sentPin.sms.sent)).toEqual([]);
 
     const grouped = await readyPractice(true);
-    expect(notesOf(grouped.desk.getState())).toEqual(expect.arrayContaining([invite, hold]));
+    expect(notesOf(grouped.desk.getState())).toEqual([hold]);
     await grouped.desk.inbound({ id: "kinds-group-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "kinds-host-yes", from: LIVE_HOST, text: "YES" });
     await grouped.desk.inbound({ id: "kinds-group-yes-schedule", from: LIVE_CLEANER, text: "YES" });

@@ -614,6 +614,7 @@ class Engine implements CleanerCore {
     }
     this.load();
     if (!this.hadStoredConsent && options.cleanerConsent) this.cleanerConsent = options.cleanerConsent;
+    this.seatHost();
   }
 
   async pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult> {
@@ -712,13 +713,6 @@ class Engine implements CleanerCore {
     }
     if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
     if (this.pin && from === this.owner && isDeparture(input.text) && !grouped) return this.clearDeparture(input.id);
-    if (this.groupChat && from === this.owner && isYes(input.text) && this.hostGroup === "pending" && this.delivery(`opt-in:group:${from}`) === "sent") {
-      this.hostGroup = "in";
-      this.inboundIds.push(input.id);
-      const sent = await this.drainOne();
-      this.save();
-      return { handled: true, reason: "opted-in", sent };
-    }
     const moved = await this.moveCheckout(input.id, from, input.text);
     if (moved) return moved;
     if (this.optedOut || !this.everConsented) return this.markIgnored(input.id);
@@ -1022,15 +1016,6 @@ class Engine implements CleanerCore {
   private async sendGroupInvites(): Promise<CleanerText[]> {
     if (!this.groupChat || !this.owner || !this.cleanerPhone) return [];
     const sent: CleanerText[] = [];
-    if (this.hostGroup === "pending") {
-      const text = await this.emit({
-        id: `opt-in:group:${this.owner}`,
-        to: this.owner,
-        kind: "opt-in",
-        body: groupOptInBody(this.groupChat.hostName, this.groupChat.cleanerName, this.options.property.address),
-      });
-      if (text) sent.push(text);
-    }
     for (const extra of this.groupChat.extra ?? []) {
       const phone = parsePhone(extra.phone);
       if (!phone || this.participantConsent.get(phone) !== "pending") continue;
@@ -1667,9 +1652,23 @@ class Engine implements CleanerCore {
     });
   }
 
+  private seatHost(): void {
+    if (!this.groupChat || !this.owner || this.hostGroup !== "pending") return;
+    if (this.ownerOptedOut || this.optedOut) {
+      this.hostGroup = "out";
+      return;
+    }
+    if (this.everConsented) this.hostGroup = "in";
+  }
+
   private async copyOffer(draft: Draft, actor: string): Promise<void> {
     const mode = this.messagingMode();
-    if (mode === "cleaner-only") return;
+    if (mode === "cleaner-only") {
+      if (this.groupChat && this.owner && this.hostGroup === "in" && this.owner !== actor) {
+        await this.emitGroup(`${draft.id}:host`, offerForOthers(draft.body), "offer", draft.jobId);
+      }
+      return;
+    }
     const channel = mode === "native" ? "group" : "mirror";
     const body = offerForOthers(draft.body);
     for (const person of this.audience()) {

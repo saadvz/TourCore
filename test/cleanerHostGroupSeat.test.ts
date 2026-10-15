@@ -98,6 +98,26 @@ describe("host group seat", () => {
     ]);
   });
 
+  it("keeps a host who already opted out off the group when group mode turns on", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-host-out-"));
+    roots.push(root);
+    const soloSent = box();
+    const solo = openCleanerCore(options(soloSent, root, false));
+    await solo.pollFeed(FEED);
+    await solo.receive({ id: "solo-yes", from: CLEANER, text: "YES" });
+    await solo.receive({ id: "solo-stop", from: OWNER, text: "STOP" });
+
+    const sent = box();
+    const grouped = openCleanerCore(options(sent, root, true));
+    const poll = await grouped.pollFeed(FEED);
+    const time = await grouped.receive({ id: "group-time", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+
+    expect(poll.sent.filter((text) => text.to === OWNER || text.kind === "opt-in")).toEqual([]);
+    expect(time.sent).toEqual([
+      { to: CLEANER, body: TIME_LINE, kind: "confirm", channel: "group", audience: [CLEANER] },
+    ]);
+  });
+
   it("sends the host no group text after he replies STOP", async () => {
     const sent = box();
     const job = openCleanerCore(options(sent));
