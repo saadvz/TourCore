@@ -1,0 +1,112 @@
+# Cleaner Core Grok demo: design
+
+Date: 2026-10-15. Status: draft for Saad's review.
+
+## Goal
+
+Saad runs one end-to-end Cleaner Core demo in the cleaning Grok Bot. The demo shows:
+
+- the Grok setup: property, people, group chat, and booking sources
+- a booking arriving in Google Calendar and the texts that follow on their own
+- every text the cleaner receives
+- every alert the host gets from the Grok Bot
+
+The demo is rehearsed on Scratch numbers first. Then it runs once on real phones.
+
+## What Saad decided
+
+- Demo surface: the cleaning Grok Bot. It is a separate Grok Bot from Tour Core.
+- Stages: a Scratch rehearsal on 555 numbers first, then one final run on real phones.
+- Booking sources: Guesty Lite and Google Calendar.
+- Google: Grok reads it with its own Google Calendar connector. Cleaner Core never signs in to Google.
+- New booking on stage: Saad adds a stay in Google during the demo.
+- Scenarios: the happy turnover and booking changes. Opt-out and injury are not shown.
+- Host alerts are instant. A cleaner's reply wakes Grok within seconds.
+- Use Grok's own tools as much as possible. Keep the Cleaner Core tools thin.
+
+## What is not in scope
+
+- A server timer for polls or reminders. That work is parked. The note is in the session notes folder.
+- Notion.
+- A Google sign-in on the Cleaner Core side.
+- A tool that creates the group chat.
+- Opt-out and injury scenarios. Their existing safety behavior stays as it is.
+
+## Design
+
+### Grok's side
+
+1. **Setup conversation.** The steps are the same as today: property, host, cleaner, optional observer, Guesty Lite link, door code in the private box, and texting. One question is added: "Do you also take bookings in Google Calendar?" When the answer is yes, Grok uses its own Google Calendar connector. Cleaner Core stores no Google credential. After texting is saved, `get_state` lists the group chat in `done`, with the people in it.
+2. **Cleaner Core Check routine.** This is a scheduled Grok routine. It runs every few minutes for the demo and hourly in real use. Each run, Grok reads the property's Google Calendar events, calls `check_now` with them, and posts any new alerts in plain words. When Saad says "check my calendars," Grok runs the same steps at once.
+3. **Cleaner Core Alerts routine.** This routine has an authenticated webhook trigger, built the same way as Tour Core's Operator Updates routine. A webhook wakes Grok. Grok calls `check_now` with no events and posts the new alerts. The routine's address and key are installation secrets. Grok collects them with secure secret input and submits them through Tour Core's existing secure setup form. They never appear in chat, tool arguments, files, or logs.
+
+The routine instructions live in `grok-template/routines/`. The tool descriptions and the `get_state` next steps tell Grok when to call each tool.
+
+### Cleaner Core's side
+
+1. **`check_now`.** This is the one new tool. Input: an optional `googleEvents` object in the Google Calendar API `events.list` shape (`timeZone`, `items`), passed through as Grok received it. The tool does these steps in order:
+   - Re-reads the saved Guesty Lite link with `readPublicCalendar`, when one is saved.
+   - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, renamed for live use). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed.
+   - Merges the sources through the existing `readSource` path. A stay in both calendars is one job.
+   - Runs `runReminders()`.
+   - Returns the host alerts added since the last `check_now`, and marks them shown.
+
+   It sends nothing when `CLEANER_CORE_ENABLED` is off. Calls do not overlap: a second call waits for the first.
+2. **`run_checks`** accepts Guesty only, Google only, or both. Today it requires the Guesty link.
+3. **Alert push.** When Cleaner Core records a new host alert, it queues one `cleaning.update` event. The queue and the sender are Tour Core's existing `OperatorEventOutbox` and `GrokRoutineWebhookSink`. Cleaner Core keeps its own outbox file and its own address and key, `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`, in the existing secret store. The event holds only `schemaVersion`, `eventId`, `eventType`, `propertyId`, and `occurredAt`. It holds no text, no phone number, and no door code. The existing 15-second retry delivers it. With no address saved, events wait in the queue and nothing fails.
+4. **`read_outbox`** on Scratch properties shows each text's wording. The door code prints as `[redacted]`.
+
+No new flag. Everything sits behind `CLEANER_CORE_ENABLED`. The Scratch tools stay Scratch-only.
+
+### Safety rules that stay as they are
+
+- The cleaner gets the offer only after the host states the checkout and check-in times. A calendar date never confirms a time.
+- The door code goes only in a private text to the approved cleaner, after the host says the guests have left.
+- A live text goes only to a number on the texting allowlist.
+- `docs/cleaner-core-safety-gates.md` stays green.
+
+## Demo script (Scratch rehearsal)
+
+Property: 12 Scratch Lane. Host `+15555550100`. Cleaner `+15555550101`. The Google calendar is one Saad owns for the demo. The door code is made up.
+
+**Happy turnover**
+1. Grok setup. Grok confirms the group chat.
+2. Saad adds a stay in Google that checks out today and says "check my calendars." Grok reports the new booking and asks for the checkout and check-in times.
+3. Saad answers. The cleaner's offer goes out, and Grok shows its wording.
+4. Saad sends the cleaner's YES with `send_test_text`. Grok shows the host alert.
+5. The reminder goes out on the next check. The default trigger is 8 AM on the cleaning day. To verify: whether `triggerDue` sends a trigger that is already past due. If it does not, add the smallest fix.
+6. "Guests have left." The private door code goes to the cleaner. The cleaner sends DONE, and the host gets the ready note.
+
+**Booking changes**
+1. After the YES, Saad moves the stay in Google and checks. The cleaner and the host get the new time.
+2. Saad deletes the stay and checks. The job is called off.
+
+The exact texts come from the existing engine. The rehearsal records them.
+
+## Real-phone run
+
+This runs after the Scratch rehearsal passes. Before it:
+
+- Run the verify-cleanercore preflight: the Railway connector, the Twilio inbound webhook, and the carrier STOP block.
+- Put both phones on the texting allowlist.
+- Connect the Cleaner Core Alerts routine.
+
+Saad runs the demo. Each live text to a real person waits for Saad's okay. No agent sends one.
+
+## Testing
+
+Tests use fake timers, `setCleanerCalendarFetch` for Guesty, plain event objects for Google, only 555 numbers, and a made-up door code. They show:
+
+- With the flag off, `check_now` sends nothing and queues nothing.
+- Google events become a job. A moved stay updates the job. A removed stay calls it off. A stay in both calendars is one job.
+- A reminder fires once at its trigger time. A restart does not resend it.
+- A `cleaning.update` event has no text, no phone number, and no door code.
+- The Scratch outbox shows the wording, with the door code redacted.
+- Two `check_now` calls at the same time do not double-send.
+
+Proof: run the verify-cleanercore skill's `prove-step-g.sh`, which reruns steps D, E, and F. The safety gates stay green.
+
+## Open items to settle in the plan
+
+- Which secure setup form entry stores the Cleaner Core routine address and key. Fallback: Railway environment variables that Saad sets.
+- How Grok's Google Calendar connector shapes an event. The plan keeps a thin adapter if it differs from `events.list`.
