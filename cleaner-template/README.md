@@ -54,3 +54,9 @@ here or in `CLEANER_CORE_BOOTSTRAP.md`.
 
 Custom MCP servers and credentials don't travel with a Grok Bot template. Each
 host connects with their own Allow and creates their own routines.
+
+## Admin prep (the operator, once)
+
+The host must run in deployment mode `HOSTED_RAILWAY_P0` with OAuth on
+(`TOURCORE_MCP_AUTH_MODE` unset or `oauth`, never `static`), or the Allow
+button never appears.

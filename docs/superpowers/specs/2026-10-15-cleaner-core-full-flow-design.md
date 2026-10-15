@@ -36,7 +36,7 @@ The user never leaves the Grok Bot chat.
 - `/mcp/cleaner-core` joins Tour Core's OAuth server as a second protected resource, with its own scope, `cleanercore.operator`. The server publishes protected-resource metadata for that path.
 - Checks are strict both ways. A grant's resource and scope must match the path. A Tour Core token never opens Cleaner Core, and a Cleaner Core token never opens Tour Core.
 - The approval page has a Cleaner Core version: "Connect your Grok Bot to Cleaner Core."
-- The first Allow binds the cleaner resource's owner. That binding is separate from Tour Core's owner, so a shared host also works. Any other client gets a refusal page. Setting `CLEANER_CORE_HOSTED_OWNER_RESET=reset-cleaner-owner` for one deploy clears the binding.
+- The first Allow binds the cleaner resource's owner. That binding is separate from Tour Core's owner, so a shared host also works. Any other client gets a refusal page. Setting `CLEANER_CORE_HOSTED_OWNER_RESET=reset-cleaner-owner` clears the binding once. The install state records that it was applied, so a variable left set doesn't clear it again on the next deploy; a deploy without the variable re-arms it.
 - When `CLEANER_CORE_MCP_TOKEN` is set, that fixed token still works, for tests and Saad's own bot. On the dedicated host it stays unset.
 
 ## Part 2. The paste-in prompt and what the bot reads
@@ -154,11 +154,13 @@ Each change is the smallest one that does the job.
 
 ## Admin prep on the dedicated host (Saad, once)
 
+- Deployment mode `HOSTED_RAILWAY_P0` with OAuth on (`TOURCORE_MCP_AUTH_MODE` unset or `oauth`, not `static`). Otherwise the Allow button never appears.
 - `CLEANER_CORE_ENABLED=1`.
 - The Cleaner Core Twilio settings.
 - `CLEANER_CORE_SMS_ALLOWLIST` with the real numbers.
 - `PUBLIC_BASE_URL` set to the host's public address.
 - `CLEANER_CORE_MCP_TOKEN` left unset.
+- Nothing to set for the door-code seal key: the server makes `CLEANER_CORE_PIN_KEY` once in its secret store. Keep the secret store with the volume, or the host enters the door code again.
 - The Twilio inbound webhook pointed at the host.
 
 ## Host

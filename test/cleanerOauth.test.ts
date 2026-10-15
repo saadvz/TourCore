@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resetLiveDesks } from "../src/cleaner-core/liveDesk";
-import { bindHostedTenant, CLEANER_HOSTED_OWNER_RESET, resetHostedCleanerOwner } from "../src/install/tenant";
+import { bindHostedTenant, CLEANER_HOSTED_OWNER_RESET, cleanerOwnerResetLeftSet, resetHostedCleanerOwner } from "../src/install/tenant";
 import { CLEANER_SCOPE, OPERATOR_SCOPE } from "../src/mcp/oauth/provider";
 import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
@@ -223,6 +223,34 @@ describe("Cleaner Core OAuth", () => {
     const page = await app.authorize(next, pkce().challenge, CLEANER_RESOURCE, CLEANER_SCOPE);
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("the owner of this Cleaner Core");
+  });
+
+  it("applies the cleaner owner reset once, even when the variable stays set across deploys", async () => {
+    const app = await hostedApp();
+    const revoke = () => new OAuthGrantStore(new FileRuntimeStore(join(app.root, "runtime"))).revokeForPath("/mcp/cleaner-core");
+    const leftSet = { CLEANER_CORE_HOSTED_OWNER_RESET: CLEANER_HOSTED_OWNER_RESET };
+    const first = await app.register("Grok");
+    const old = await app.connect(first, CLEANER_RESOURCE, CLEANER_SCOPE);
+    expect(cleanerOwnerResetLeftSet(leftSet, app.inst.files)).toBe(false);
+    expect(resetHostedCleanerOwner(leftSet, app.inst.files, revoke)).toBe(true);
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", old.access)).status).toBe(401);
+
+    // A new Grok Bot claims it. Later deploys still have the variable set, and they reset nothing.
+    const second = await app.register("Grok again");
+    const fresh = await app.connect(second, CLEANER_RESOURCE, CLEANER_SCOPE);
+    expect(cleanerOwnerResetLeftSet(leftSet, app.inst.files)).toBe(true);
+    expect(resetHostedCleanerOwner(leftSet, app.inst.files, revoke)).toBe(false);
+    expect(resetHostedCleanerOwner(leftSet, app.inst.files, revoke)).toBe(false);
+    expect(app.inst.files.state().hostedCleanerTenant?.clientId).toBe(second);
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", fresh.access)).status).toBe(200);
+
+    // A deploy without the variable re-arms it, so setting it again resets again.
+    expect(resetHostedCleanerOwner({}, app.inst.files, revoke)).toBe(false);
+    expect(app.inst.files.state().cleanerOwnerResetAppliedAt).toBeUndefined();
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", fresh.access)).status).toBe(200);
+    expect(resetHostedCleanerOwner(leftSet, app.inst.files, revoke)).toBe(true);
+    expect(app.inst.files.state().hostedCleanerTenant).toBeUndefined();
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", fresh.access)).status).toBe(401);
   });
 
   it("the fixed token still works", async () => {

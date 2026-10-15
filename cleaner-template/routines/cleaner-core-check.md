@@ -26,7 +26,8 @@ webhook address, no key, and no secret.
    - A new booking names the stay and the usual times. When the host says yes,
      call `confirm_times` with those times.
    - "Have the guests left?" is the checkout nudge. Ask the host. Only the
-     host's yes in chat sends the door code, with `mark_guests_left`.
+     host's yes in chat sends the door code, with `mark_guests_left`. The nudge
+     arrives at the next Check routine run after checkout time.
 5. Read every item in `messages`. Tell the host in your own words when one
    needs them: running late, a question, a problem, supplies, an arrival
    time, a decline, STOP, or an injury. Stay quiet on routine replies.
