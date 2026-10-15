@@ -27,8 +27,9 @@ const NOTHING = "Test turnover saved. Nothing was sent.";
 const WENT = "The test text went through.";
 const PROPERTY_REFUSAL = "That only works on the Scratch test property.";
 const NUMBER_REFUSAL = "That only works with 555 test numbers.";
-const HOST_OPT = groupOptInBody("Cory", "Maria", LANE.property.address);
-const CLEANER_OPT = groupOptInBody("Maria", "Cory", LANE.property.address);
+// No host name is saved, so the group calls the host by the business name.
+const HOST_OPT = groupOptInBody("Scratch", "Maria", LANE.property.address);
+const CLEANER_OPT = groupOptInBody("Maria", "Scratch", LANE.property.address);
 const READY = hostDoneLine(LANE.property.address);
 const HOST_STOP = hostStopReply(LANE.property.address, true);
 const HOST_STOP_OPEN = hostStopReply(LANE.property.address, false);
@@ -411,7 +412,7 @@ describe("Scratch test turnover", () => {
     expect(twilioCalls).toBe(0);
   }, 40_000);
 
-  it("gives the cleaner and Cory only an opt-in before YES, and nothing after STOP", async () => {
+  it("gives the cleaner and the host only an opt-in before YES, and nothing after STOP", async () => {
     const waiting = await scratchApp({ groupChat: true, allowlist: `${HOST},${CLEANER}` });
     await saveLane(waiting);
     expect(nextOf(await call(waiting, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);

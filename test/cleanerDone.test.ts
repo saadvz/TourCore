@@ -28,8 +28,8 @@ const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
 const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
-const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
-const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory and Maria. Reply YES to join that group, or STOP to opt out.";
+const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Scratch. Reply YES to join that group, or STOP to opt out.";
+const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Scratch and Maria. Reply YES to join that group, or STOP to opt out.";
 const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
 
 function sink() {

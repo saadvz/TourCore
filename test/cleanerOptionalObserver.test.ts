@@ -6,6 +6,8 @@ import { groupTimeLine } from "../src/cleaner-core/cleanerTexts";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
+import { fakeConversations } from "./fakeConversations";
+import { PUBLIC } from "./fakeSendblue";
 import {
   ADDRESS,
   CALENDAR_ICS,
@@ -21,7 +23,8 @@ import {
 } from "./wiringProof";
 
 const OLD = "+15555550103";
-const TIME = groupTimeLine("Cory");
+/** LiveDesk names the business when no host name is saved. */
+const TIME = groupTimeLine("Harbor");
 const PIN_KEY = Buffer.from(TEST_PIN_KEY, "base64");
 
 interface GroupPost {
@@ -39,55 +42,9 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function groupFetch() {
-  const conversations = new Map<string, { sid: string; address: string }[]>();
-  const posts: GroupPost[] = [];
-  let sequence = 0;
-  const impl: typeof fetch = async (input, init) => {
-    const url = String(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
-    const root = "https://conversations.twilio.com/v1/Conversations";
-    if (url === root && method === "POST") {
-      const sid = `CH${++sequence}`;
-      conversations.set(sid, []);
-      return reply(201, { sid });
-    }
-    if (!url.startsWith(`${root}/`)) return reply(404, {});
-    const path = url.slice(root.length + 1);
-    const [rawSid, ...rest] = path.split("/");
-    const sid = decodeURIComponent(rawSid ?? "");
-    const tail = rest.join("/").split("?")[0] ?? "";
-    const people = conversations.get(sid);
-    if (!people) return reply(404, {});
-    if (tail === "Messages" && method === "POST") {
-      const params = new URLSearchParams(String(init?.body ?? ""));
-      posts.push({ to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
-      return reply(201, { sid: `IM${posts.length}` });
-    }
-    if (tail === "Participants" && method === "GET") {
-      return reply(200, {
-        participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })),
-        meta: { next_page_url: null },
-      });
-    }
-    if (tail === "Participants" && method === "POST") {
-      const params = new URLSearchParams(String(init?.body ?? ""));
-      const address = params.get("MessagingBinding.Address") ?? "";
-      if (people.some((person) => person.address === address)) return reply(409, {});
-      const person = { sid: `MB${++sequence}`, address };
-      people.push(person);
-      return reply(201, { sid: person.sid });
-    }
-    if (method === "DELETE" && tail.startsWith("Participants/")) {
-      const party = decodeURIComponent(tail.slice("Participants/".length));
-      const index = people.findIndex((person) => person.sid === party);
-      if (index >= 0) people.splice(index, 1);
-      return reply(index >= 0 ? 204 : 404, {});
-    }
-    return reply(404, {});
-  };
-  return { impl, posts };
+/** The Conversations fake for group texting. Each post lists the phones that got it. */
+function groupFetch(): { impl: typeof fetch; posts: GroupPost[] } {
+  return fakeConversations();
 }
 
 function open(phones: string[]) {
@@ -112,6 +69,7 @@ function open(phones: string[]) {
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    PUBLIC_BASE_URL: PUBLIC,
   };
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
   return { root, sms, posts: groups.posts, desk };
@@ -221,7 +179,7 @@ describe("optional observer", () => {
     expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
   });
 
-  it("sends group texts only to the cleaner and Cory when no observer is saved", async () => {
+  it("sends group texts only to the cleaner and the host when no observer is saved", async () => {
     const { desk, sms, posts } = open([HOST, CLEANER, OLD]);
     await setup(desk);
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
@@ -297,10 +255,9 @@ describe("optional observer", () => {
     expect(sms.sent.filter((item) => item.to === CLEANER).some((item) => /opted out/i.test(item.body))).toBe(true);
     const afterStop = posts.length;
     await desk.inbound({ id: "time-after-stop", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    const afterOut = posts.slice(afterStop).filter((post) => post.body === TIME);
-    expect(afterOut.length).toBe(1);
-    expect(afterOut[0]?.to).toEqual([HOST]);
-    expect(afterOut.some((post) => post.to.includes(CLEANER))).toBe(false);
+    // Only the host is left in the group, so the line is a plain text to the host, not a group post.
+    expect(posts.slice(afterStop)).toEqual([]);
+    expect(sms.sent.filter((item) => item.body === TIME).map((item) => item.to)).toEqual([HOST]);
     expect(codeRecipients(sms.sent.filter((item) => item.to === CLEANER))).toEqual([]);
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
     expect(left.ok).toBe(true);

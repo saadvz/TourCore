@@ -3,12 +3,13 @@ import type { IncomingHttpHeaders } from "node:http";
 import { parsePhone } from "../core/phone";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
-import { CLEANER_PIN_STATUS_PATH } from "./liveSms";
-import type { InboundMedia } from "./photos";
+import { CLEANER_GROUP_HOOK_PATH, CLEANER_GROUP_IDENTITY, CLEANER_PIN_STATUS_PATH } from "./liveSms";
+import { conversationMediaUrl, type InboundMedia } from "./photos";
 import { formParams, verifyTwilioSignature } from "../messaging/twilio/signature";
 
 export const CLEANER_TWILIO_PATH = "/webhooks/twilio/cleaner-core";
 export const CLEANER_TWILIO_STATUS_PATH = CLEANER_PIN_STATUS_PATH;
+export const CLEANER_TWILIO_GROUP_PATH = CLEANER_GROUP_HOOK_PATH;
 /** Twilio sends at most 10 attachments with one MMS. */
 const MAX_MEDIA = 10;
 
@@ -84,5 +85,51 @@ export async function handleCleanerTwilioStatus(input: {
     const desk = liveDeskFor(input.root, input.env, input.now);
     await desk.notePinDelivery({ sid, status });
   }
+  return { status: 200, body: "{}" };
+}
+
+/** A group message's attachments, from the Media JSON of onMessageAdded. Each is read through the Conversations media service. */
+function groupMediaOf(params: Record<string, string>): InboundMedia[] {
+  const service = params.ChatServiceSid?.trim() ?? "";
+  let items: unknown;
+  try {
+    items = JSON.parse(params.Media ?? "[]");
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(items)) return [];
+  return items.slice(0, MAX_MEDIA).flatMap((item: { Sid?: unknown; ContentType?: unknown }) => {
+    const url = typeof item?.Sid === "string" ? conversationMediaUrl(service, item.Sid) : undefined;
+    return url ? [{ url, contentType: typeof item.ContentType === "string" ? item.ContentType.trim() : "" }] : [];
+  });
+}
+
+/**
+ * Replies in the group, from the webhook Cleaner Core adds to each group conversation. Signature
+ * required. Only onMessageAdded is read. Cleaner Core's own posts are skipped, and the desk takes a
+ * message only from the saved group and a saved person in it. The HTTP body never includes a reply.
+ */
+export async function handleCleanerGroupWebhook(input: {
+  rawBody: Buffer;
+  headers: IncomingHttpHeaders;
+  url: string | undefined;
+  /** Live: the desk keeps this getter. */
+  env: () => NodeJS.ProcessEnv;
+  root: string;
+  now: () => Date;
+}): Promise<{ status: number; body: string }> {
+  const env = input.env();
+  if (!cleanerCoreEnabled(env)) return { status: 404, body: "" };
+  const params = formParams(input.rawBody);
+  const signature = header(input.headers, "x-twilio-signature");
+  const verified = verifyTwilioSignature(env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim(), input.url, params, signature);
+  if (!verified.ok) return { status: 403, body: JSON.stringify({ error: "unauthorized" }) };
+  const author = params.Author?.trim() ?? "";
+  const conversationSid = params.ConversationSid?.trim() ?? "";
+  const id = params.MessageSid?.trim() ?? "";
+  if (params.EventType !== "onMessageAdded" || !author || author === CLEANER_GROUP_IDENTITY || !conversationSid || !id) return { status: 200, body: "{}" };
+  const media = groupMediaOf(params);
+  const desk = liveDeskFor(input.root, input.env, input.now);
+  await desk.inboundGroup({ conversationSid, id, from: author, text: params.Body ?? "", ...(media.length > 0 ? { media } : {}) });
   return { status: 200, body: "{}" };
 }

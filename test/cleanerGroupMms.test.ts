@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOptInBody } from "../src/cleaner-core/cleanerTexts";
+import { groupOfferBody, groupOptInBody } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { CLEANER_GROUP_IDENTITY, sendLiveGroup, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -126,6 +126,17 @@ describe("group texting: how the group is made", () => {
     expect(fake.calls()).toBe(0);
   });
 
+  it("keeps an old group it couldn't empty, so the next send tries again", async () => {
+    const fake = useFake();
+    const old = fake.seedProxy([HOST, CLEANER], CLEANER_LINE);
+    fake.blockMembership();
+    const failed = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello", conversationSid: old }).catch((err: unknown) => err);
+    expect(failed).toBeInstanceOf(GroupNotConfirmed);
+    expect((failed as GroupNotConfirmed).conversationSid).toBe(old);
+    expect(fake.created).toEqual([]);
+    expect(fake.posts).toEqual([]);
+  });
+
   it("leaves no half-made group when the reply webhook can't be added", async () => {
     const fake = useFake({ failWebhooks: true });
     await expect(sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello" })).rejects.toBeInstanceOf(GroupNotConfirmed);
@@ -169,6 +180,12 @@ async function offered(send: (text: CleanerText) => Promise<void>) {
 }
 
 describe("group texting: the offer goes to the cleaner once", () => {
+  it("names the cleaner in the YES ask and keeps the host's note last", () => {
+    const body = `${OFFER} Note from the host: Leave the porch light on.`;
+    expect(groupOfferBody("Mike", body)).toBe(`${GROUP_OFFER} Note from the host: Leave the porch light on.`);
+    expect(groupOfferBody("Mike", "Something else.")).toBe("Something else.");
+  });
+
   it("posts the offer once into the group, addressed to the cleaner by name, with no one-to-one offer and no host copy", async () => {
     const sent: CleanerText[] = [];
     const job = await offered(async (text) => {
@@ -377,7 +394,78 @@ describe("group texting: the conversation webhook", () => {
   });
 });
 
+describe("group texting: when the group can't be made", () => {
+  it("sends the one-to-one offer, tells the host, and takes Mike's YES by text", async () => {
+    const fake = useFake({ failWebhooks: true });
+    const wired = await app();
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", hostName: "Dana", groupChat: "cleaner-and-host" });
+    await must(wired, "save_calendar_link", { url: CALENDAR_URL });
+    await must(wired, "save_door_code", { code: DOOR_CODE });
+    await must(wired, "set_up_texting");
+    await must(wired, "run_checks");
+    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect((await sms(wired, HOST, "YES")).status).toBe(200);
+    expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
+    expect(fake.posts).toEqual([]);
+    for (const sid of fake.created) expect(fake.people(sid)).toEqual([]);
+    expect(wired.cleanerSent.filter((item) => item.body.startsWith("Turnover at")).map((item) => ({ to: item.to, body: item.body }))).toEqual([
+      { to: CLEANER, body: `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.` },
+    ]);
+    expect((await must(wired, "get_state")).notes).toContain("I couldn't send the cleaning offer to the group.");
+    expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
+    expect(await turnStatus(wired)).toBe("confirmed");
+  });
+});
+
+describe("group texting: what the webhook reads", () => {
+  it("shows the host's own text in the group to Grok as the host, and it moves no job", async () => {
+    const { wired, conversationSid } = await groupReady();
+    expect((await hook(wired, groupText(conversationSid, HOST, "Thanks Mike"))).status).toBe(200);
+    expect(await turnStatus(wired)).toBe("offered");
+    expect((await messages(wired)).filter((item) => item.channel === "group")).toEqual([
+      expect.objectContaining({ from: "host", text: "Thanks Mike", channel: "group" }),
+    ]);
+  });
+
+  it("reads only new messages, not other conversation events", async () => {
+    const { wired, conversationSid } = await groupReady();
+    expect((await hook(wired, groupText(conversationSid, CLEANER, "YES", { EventType: "onMessageUpdated" }))).status).toBe(200);
+    expect(await turnStatus(wired)).toBe("offered");
+  });
+
+  it("skips a group photo whose media ids or temporary link look wrong", async () => {
+    const { wired, conversationSid } = await groupReady();
+    await hook(wired, groupText(conversationSid, CLEANER, "YES"));
+    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    const fetched: string[] = [];
+    setCleanerPhotoFetch(async (url) => {
+      fetched.push(url);
+      return new Response(JSON.stringify({ links: { content_direct_temporary: "http://media.us1.twilio.com/plain-http" } }), { status: 200 });
+    });
+    const service = `IS${"a".repeat(32)}`;
+    const badSid = groupText(conversationSid, CLEANER, "", { ChatServiceSid: service, Media: JSON.stringify([{ Sid: "../../Accounts", ContentType: "image/jpeg" }]) });
+    expect((await hook(wired, badSid)).status).toBe(200);
+    expect(fetched).toEqual([]);
+    const badLink = groupText(conversationSid, CLEANER, "", { ChatServiceSid: service, Media: JSON.stringify([{ Sid: `ME${"c".repeat(32)}`, ContentType: "image/jpeg" }]) });
+    expect((await hook(wired, badLink)).status).toBe(200);
+    expect(fetched).toEqual([`https://mcs.us1.twilio.com/v1/Services/${service}/Media/ME${"c".repeat(32)}`]);
+    expect((await must(wired, "get_job_photos")).photos ?? []).toEqual([]);
+  });
+});
+
 describe("group texting: the host's name", () => {
+  it("refuses a host name that is too long", async () => {
+    useFake();
+    const wired = await app();
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    const reply = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, hostName: "D".repeat(41) });
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain("Keep the host's name under 40 characters.");
+  });
+
   it("names the saved host in the invite", async () => {
     const fake = useFake();
     const wired = await app();

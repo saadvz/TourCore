@@ -2,12 +2,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
+import { groupOfferBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { sendLiveGroup, sendLiveSms, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { fakeConversations } from "./fakeConversations";
+import { PUBLIC } from "./fakeSendblue";
 import { ADDRESS as PRACTICE, CALENDAR_ICS, CALENDAR_URL, CLEANER as LIVE_CLEANER, CLEANER_LINE, DOOR_CODE, fakeSms, FROZEN, HOST as LIVE_HOST, OBSERVER, TEST_PIN_KEY } from "./wiringProof";
 
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
@@ -24,11 +26,15 @@ const OFFER_COPY = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oc
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PRIVATE_LINE = privateCodeLine("Maria");
 const TIME_LINE = groupTimeLine("Cory");
+/** LiveDesk names the business when no host name is saved. */
+const PRACTICE_TIME_LINE = groupTimeLine("Harbor");
 const HOLD = holdNote(ADDRESS);
 const RESUME = resumeNote(ADDRESS);
 const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
 const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
+/** The offer as the group gets it, once, asking the cleaner by name. */
+const GROUP_OFFER = groupOfferBody("Maria", OFFER);
 const CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.";
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
@@ -46,6 +52,7 @@ const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;
 /** After the cleaner's YES, LiveDesk keeps one host note for the newly confirmed job. */
 const PRACTICE_CONFIRMED = [PRACTICE_HOLD, PRACTICE_YES];
 const PRACTICE_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
+const PRACTICE_GROUP_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Maria, reply YES to schedule it, or STOP to opt out.";
 const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const PRACTICE_PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const PIN_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
@@ -492,7 +499,8 @@ describe("group thread", () => {
     expect(groups.some((text) => text.body === TIME_LINE)).toBe(true);
     expect(groups.some((text) => text.body.includes("Door code"))).toBe(false);
     expect(sent.sent.some((text) => text.body === PRIVATE_PIN && !text.channel)).toBe(true);
-    expect(sent.sent.some((text) => text.body === OFFER && !text.channel)).toBe(true);
+    expect(sent.sent.some((text) => text.body === OFFER)).toBe(false);
+    expect(sent.sent.some((text) => text.body === GROUP_OFFER && text.channel === "group")).toBe(true);
     expect(sent.sent.some((text) => text.body === CONFIRM && !text.channel)).toBe(true);
   });
 
@@ -546,6 +554,7 @@ describe("group thread on the desk", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
@@ -594,6 +603,7 @@ describe("group thread on the desk", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
     const checkin = `Is check-in at ${PRACTICE} on Monday, Oct 19 still 4:00 PM? Reply YES or send the new time.`;
@@ -660,73 +670,17 @@ describe("live group send", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     expect(await sendLiveGroup(env, { audience: [OWNER, CLEANER], body: "Hello the group" })).toBeUndefined();
     expect(calls).toEqual([]);
   });
 });
 
-interface GroupPost {
-  conversationSid: string;
-  to: string[];
-  body: string;
-}
-
+/** The Conversations fake for group texting, with the posts each phone received. */
 function groupFetch(options?: { failMessages?: boolean }) {
-  const conversations = new Map<string, { sid: string; address: string }[]>();
-  const posts: GroupPost[] = [];
-  let sequence = 0;
-  let blockMembership = false;
-  const impl: typeof fetch = async (input, init) => {
-    const url = String(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
-    const root = "https://conversations.twilio.com/v1/Conversations";
-    if (url === root && method === "POST") {
-      const sid = `CH${++sequence}`;
-      conversations.set(sid, []);
-      return reply(201, { sid });
-    }
-    if (!url.startsWith(`${root}/`)) return reply(404, {});
-    const path = url.slice(root.length + 1);
-    const [rawSid, ...rest] = path.split("/");
-    const sid = decodeURIComponent(rawSid ?? "");
-    const tail = rest.join("/").split("?")[0] ?? "";
-    const people = conversations.get(sid);
-    if (!people) return reply(404, {});
-    if (tail === "Messages" && method === "POST") {
-      if (options?.failMessages) return reply(500, {});
-      const params = new URLSearchParams(String(init?.body ?? ""));
-      posts.push({ conversationSid: sid, to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
-      return reply(201, { sid: `IM${posts.length}` });
-    }
-    if (tail === "Participants" || tail.startsWith("Participants/")) {
-      if (blockMembership) return reply(500, {});
-      if (tail === "Participants" && method === "GET") {
-        return reply(200, {
-          participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })),
-          meta: { next_page_url: null },
-        });
-      }
-      if (tail === "Participants" && method === "POST") {
-        const params = new URLSearchParams(String(init?.body ?? ""));
-        const address = params.get("MessagingBinding.Address") ?? "";
-        if (people.some((person) => person.address === address)) return reply(409, {});
-        const person = { sid: `MB${++sequence}`, address };
-        people.push(person);
-        return reply(201, { sid: person.sid });
-      }
-      if (method === "DELETE") {
-        const party = decodeURIComponent(tail.slice("Participants/".length));
-        const index = people.findIndex((person) => person.sid === party);
-        if (index < 0) return reply(404, {});
-        people.splice(index, 1);
-        return reply(204, {});
-      }
-    }
-    return reply(404, {});
-  };
-  return { impl, posts, blockMembership() { blockMembership = true; } };
+  const fake = fakeConversations(options);
+  return { impl: fake.impl, posts: fake.posts, blockMembership: fake.blockMembership, people: fake.people };
 }
 
 describe("live group membership", () => {
@@ -761,6 +715,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const job = openCleanerCore({
       enabled: true,
@@ -788,7 +743,7 @@ describe("live group membership", () => {
         ...(extra ? { extra: [{ phone: EXTRA, name: "Alex" }] } : {}),
       },
     });
-    return { job, sms, posts: fetchBox.posts, blockMembership: fetchBox.blockMembership, readSid };
+    return { job, sms, posts: fetchBox.posts, blockMembership: fetchBox.blockMembership, people: fetchBox.people, readSid };
   }
 
   async function ready(extra: boolean) {
@@ -807,16 +762,20 @@ describe("live group membership", () => {
     const live = await ready(true);
     const sid = live.readSid();
     expect(live.posts).toEqual([
-      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
     ]);
     await live.job.receive({ id: "stop-alex", from: EXTRA, text: "STOP", channel: "group" });
     await live.job.receive({ id: "time-2", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
     const left = await live.job.receive({ id: "left-alex", from: OWNER, text: "guests have left" });
+    // Alex left, so the next group text starts a new group and the old one is emptied.
+    const next = live.readSid();
+    expect(next).not.toBe(sid);
+    expect(live.people(sid ?? "")).toEqual([]);
     expect(live.posts).toEqual([
-      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
-      { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
+      { conversationSid: next, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([
       { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },
@@ -827,13 +786,13 @@ describe("live group membership", () => {
     const live = await ready(false);
     const sid = live.readSid();
     expect(live.posts).toEqual([
-      { conversationSid: sid, to: [OWNER, CLEANER], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
     live.blockMembership();
     const left = await live.job.receive({ id: "left-unsynced", from: OWNER, text: "guests have left" });
     expect(live.posts).toEqual([
-      { conversationSid: sid, to: [OWNER, CLEANER], body: OFFER_COPY },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
     expect(live.sms.sent.filter((text) => text.body === PRIVATE_PIN).map((text) => ({ to: text.to, body: text.body }))).toEqual([
@@ -856,6 +815,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const line = "I couldn't send the checkout time to the group.";
     const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
@@ -897,7 +857,7 @@ describe("live group membership", () => {
     if (read.ok) expect(read.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
     expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
     const reread = await desk.getState();
     expect(reread.ok).toBe(true);
     if (reread.ok) expect(reread.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
@@ -912,7 +872,7 @@ describe("live group membership", () => {
     const still = await restarted.getState();
     expect(still.ok).toBe(true);
     if (still.ok) expect(still.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
     expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
   });
 
@@ -929,6 +889,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const line = "Maria got the door code privately.";
     const alert = "I couldn't send the checkout time to the group.";
@@ -963,7 +924,7 @@ describe("live group membership", () => {
     const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
-    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === PRACTICE_TIME_LINE)).toEqual([]);
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(sms.sent.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin)).toEqual([]);
     const waiting = await desk.getState();
@@ -992,7 +953,7 @@ describe("live group membership", () => {
     const afterRestart = await restarted.getState();
     expect(afterRestart.ok).toBe(true);
     if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
-    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === groupPin || text.body === PRACTICE_TIME_LINE)).toEqual([]);
 
     const heldRoot = mkdtempSync(join(tmpdir(), "cleaner-group-private-held-"));
     roots.push(heldRoot);
@@ -1016,7 +977,7 @@ describe("live group membership", () => {
     await held.inbound({ id: "stop-before-sync", from: LIVE_CLEANER, text: "STOP" });
     const stayed = await held.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(stayed.ok).toBe(true);
-    expect(heldFetch.posts.filter((text) => text.body === line || text.body === groupPin || text.body === alert || text.body === TIME_LINE)).toEqual([]);
+    expect(heldFetch.posts.filter((text) => text.body === line || text.body === groupPin || text.body === alert || text.body === PRACTICE_TIME_LINE)).toEqual([]);
     expect(heldSms.sent.filter((text) => text.body === privatePin || text.body === line || text.body === groupPin)).toEqual([]);
     const heldRead = await held.getState();
     expect(heldRead.ok).toBe(true);
@@ -1037,6 +998,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const line = "Maria got the door code privately.";
     const failedAlert = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
@@ -1091,6 +1053,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     const hold = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
     const line = "Maria got the door code privately.";
@@ -1148,6 +1111,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
@@ -1282,6 +1246,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
@@ -1760,6 +1725,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      PUBLIC_BASE_URL: PUBLIC,
     };
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
@@ -1771,7 +1737,7 @@ describe("live group membership", () => {
       },
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    const invite = groupOptInBody("Maria", "Cory", PRACTICE);
+    const invite = groupOptInBody("Maria", "Harbor", PRACTICE);
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
@@ -1791,20 +1757,22 @@ describe("live group membership", () => {
     expect(sms.sent.filter((text) => text.body === invite)).toEqual([
       expect.objectContaining({ to: LIVE_CLEANER, body: invite }),
     ]);
-    expect(fetchBox.posts).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_OFFER }]);
+    expect(fetchBox.posts).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_GROUP_OFFER }]);
 
     forgetHostSeat(root);
     resetLiveDesks();
     const stillSeated = liveDeskFor(root, () => env, () => new Date(FROZEN));
     await stillSeated.inbound({ id: "texting-seat-kept", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    expect(fetchBox.posts.slice(1)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: TIME_LINE }]);
+    expect(fetchBox.posts.slice(1)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_TIME_LINE }]);
 
     forgetHostSeat(root);
     setSavedTexting(root, false);
     resetLiveDesks();
     const unseated = liveDeskFor(root, () => env, () => new Date(FROZEN));
     await unseated.inbound({ id: "texting-seat-off", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
-    expect(fetchBox.posts.slice(2)).toEqual([{ conversationSid: sid, to: [LIVE_CLEANER], body: TIME_LINE }]);
+    // A group of one is a plain text, so no group captures the cleaner's own texts.
+    expect(fetchBox.posts.slice(2)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === PRACTICE_TIME_LINE).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(sms.sent.filter((text) => text.to === LIVE_HOST)).toEqual([]);
   });
 });

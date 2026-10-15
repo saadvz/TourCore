@@ -74,6 +74,16 @@ export function offerForOthers(body: string): string {
   return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${OFFER_WAIT}${note}` : body;
 }
 
+/**
+ * The offer as it goes into the group: the YES ask names the cleaner, since the host reads it too.
+ * The host's note, when there is one, stays after it.
+ */
+export function groupOfferBody(cleanerName: string, body: string): string {
+  const note = hostNoteOf(body);
+  const own = body.slice(0, body.length - note.length);
+  return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${cleanerName}, reply YES to schedule it, or STOP to opt out.${note}` : body;
+}
+
 /** The checklist, after the private code. Each item loses a trailing period or semicolon. */
 export function checklistBody(name: string, items: readonly string[]): string {
   const list = items.map((item) => item.trim().replace(/[.;]+$/, "")).join("; ");

@@ -34,9 +34,10 @@ const TOOLS = [
     name: "save_people",
     title: "Save the people",
     description:
-      "Saves the host and the cleaner. Each one is a phone number. An observer is optional. Optional: cleanerName, up to 4 contacts (name, role co-host, assistant, or observer, and phone), and groupChat: cleaner-only (one-to-one texts), cleaner-and-host, or everyone. Contacts never get the door code.",
+      "Saves the host and the cleaner. Each one is a phone number. An observer is optional. Optional: hostName (what the group calls the host; unset uses the business name), cleanerName, up to 4 contacts (name, role co-host, assistant, or observer, and phone), and groupChat: cleaner-only (one-to-one texts), cleaner-and-host, or everyone. Contacts never get the door code.",
     input: z.object({
       host: z.string(),
+      hostName: z.string().optional(),
       cleaner: z.string(),
       observer: z.string().optional(),
       cleanerName: z.string().optional(),
