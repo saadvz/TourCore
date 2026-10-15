@@ -165,7 +165,7 @@ Each change is the smallest one that does the job.
 
 ## Host
 
-- `hostedCleanerCoreUrl` is `https://tourcore-production-72ec.up.railway.app`, the dedicated Cleaner Core Railway project.
+- `hostedCleanerCoreUrl` is `https://tourcore-production-8b80.up.railway.app`, the dedicated Cleaner Core Railway project.
 
 ## Grok-first revision (Saad, 2026-10-15)
 
