@@ -698,13 +698,13 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     expect(posts).toHaveLength(1);
     await yes(wired, "SM-wake-yes-1");
     await drain(wired);
-    // The opt-in YES leaves no host note, so the notes from Grok's own steps don't wake it either.
-    expect(posts).toHaveLength(1);
+    // Grok reads every message, so the opt-in YES wakes it too.
+    expect(posts).toHaveLength(2);
     await yes(wired, "SM-wake-yes-2");
     await drain(wired);
     const wakes = posts.slice(1);
-    expect(wakes).toHaveLength(1);
-    const raw = wakes[0]?.body ?? "";
+    expect(wakes).toHaveLength(2);
+    const raw = wakes[1]?.body ?? "";
     const body = JSON.parse(raw) as Record<string, unknown>;
     expect(Object.keys(body)).toEqual(["schemaVersion", "eventId", "eventType", "occurredAt"]);
     expect(body.eventType).toBe("cleaning.update");

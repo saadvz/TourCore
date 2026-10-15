@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
@@ -9,7 +9,7 @@ import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { formatWhen, zonedInstant } from "./calendar";
-import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type SourceClaim, type TextKind } from "./core";
+import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -68,6 +68,14 @@ const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routi
 const ROUTINE_NEEDED = "Send the routine's https address and its key.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
 const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
+const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
+const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
+const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
+/** Messages kept for Grok, newest last. */
+const MAX_MESSAGES = 200;
+const MAX_MESSAGE_TEXT = 300;
+/** The receive reasons that mean the engine did not take the text at all, so no message is kept. */
+const UNREAD_REASONS = new Set<ReceiveResult["reason"]>(["disabled", "duplicate", "scratch-only", "wrong-tenant"]);
 const MAX_CALENDARS = 8;
 const MAX_CONTACTS = 4;
 const MAX_NAME = 40;
@@ -123,6 +131,19 @@ interface Preferences {
 }
 /** The name a legacy single calendar link reads as. Its source id stays `guesty-lite`. */
 const LEGACY_CALENDAR = "Guesty Lite";
+
+/** An inbound text from the cleaner, the host in the group, or a saved contact, for Grok to read. */
+interface Message {
+  /** Letters only, so an id can never hold a run of digits like a door code. */
+  id: string;
+  from: "cleaner" | "host" | "contact";
+  name: string;
+  /** Trimmed to 300 characters, with every run of 4 or more digits redacted. */
+  text: string;
+  /** Local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
+  at: string;
+  handled: MessageHandled;
+}
 
 interface PinSend {
   sid: string;
@@ -183,6 +204,10 @@ interface LiveFile {
   alertsShown?: string[];
   /** Ids of the host notes that already woke the cleaning routine. */
   alertsQueued?: string[];
+  /** The last 200 inbound messages, oldest first. */
+  messages?: Message[];
+  /** Ids of the messages `check_now` has already returned. */
+  messagesShown?: string[];
   released?: boolean;
   /** Ids of the jobs the host gave both times for through confirm_times. */
   timedJobs?: string[];
@@ -337,6 +362,11 @@ function contactsOf(file: LiveFile): Contact[] {
   return [...(file.observer ? [{ name: "Observer", role: "observer" as const, phone: file.observer }] : []), ...(file.contacts ?? [])];
 }
 
+/** A message id of 16 random lowercase letters. It never holds a digit. */
+function messageId(): string {
+  return `m-${[...randomBytes(16)].map((byte) => String.fromCharCode(97 + (byte % 26))).join("")}`;
+}
+
 function propertyIdFor(business: string): string {
   const slug = business.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "property";
   return `live-${slug}`;
@@ -425,20 +455,20 @@ export class LiveDesk {
 
   /**
    * Wakes the cleaning routine once when a host note became visible since `before` and the host
-   * has not seen it yet. The event carries no content: Grok reads the notes with `check_now`.
+   * has not seen it yet, or when a new message was kept. The event carries no content: Grok reads
+   * the notes and the messages with `check_now`.
    */
-  private queueNewAlerts(before: Set<string>): void {
+  private queueNewAlerts(before: Set<string>, newMessage = false): void {
     const engine = this.engine;
-    if (!engine) return;
     const queued = new Set(this.file.alertsQueued ?? []);
     const shown = new Set(this.file.alertsShown ?? []);
-    const fresh = this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id));
-    if (fresh.length === 0) return;
-    // One waiting wake-up is enough: check_now returns every note that is new by then. Without a
-    // routine saved, a wake-up per note would arrive later as a backlog of identical wake-ups.
+    const fresh = engine ? this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id)) : [];
+    if (fresh.length === 0 && !newMessage) return;
+    // One waiting wake-up is enough: check_now returns every note and message that is new by then.
+    // Without a routine saved, a wake-up each would arrive later as a backlog of identical wake-ups.
     const waiting = this.alerts.records().some((record) => record.event.eventType === "cleaning.update" && record.status === "pending");
     if (!waiting) this.alerts.enqueue(cleaningUpdateEvent(this.now()));
-    this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
+    if (fresh.length > 0) this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
     this.persist();
     this.startDrain();
   }
@@ -805,9 +835,15 @@ export class LiveDesk {
     const shown = new Set(this.file.alertsShown ?? []);
     const fresh = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].filter((note) => !shown.has(note.id));
     this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
+    const messages = this.file.messages ?? [];
+    const seen = new Set(this.file.messagesShown ?? []);
+    const newMessages = messages.filter((message) => !seen.has(message.id));
+    // Only ids still kept, so the list stays as short as the messages.
+    this.file.messagesShown = messages.map((message) => message.id);
     this.persist();
     return this.reply({
       alerts: fresh.map((note) => note.body),
+      messages: newMessages,
       turns: this.turns(),
       ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
       ...(read.unread.length > 0 ? { unread: read.unread } : {}),
@@ -954,6 +990,20 @@ export class LiveDesk {
     return this.reply({ turns: this.turns(), ...(this.held ? { held: true } : {}) });
   }
 
+  /**
+   * Saves the cleaner's arrival time, which Grok read in their message, on the open job's checkout
+   * day. The time needs AM or PM. The server never reads an arrival time from a text itself.
+   */
+  saveArrival(input: { time?: string }): ToolReply {
+    const time = input.time?.trim() ?? "";
+    const hm = statedClock(time) ? usualTime(time) : undefined;
+    if (!hm) return this.fail(ARRIVAL_NEEDED);
+    this.resume();
+    const [hour = 0, minute = 0] = hm.split(":").map(Number);
+    if (!this.file.checked || !this.engine?.saveArrival(hour * 60 + minute)) return this.fail(NO_OPEN_CLEANING);
+    return this.reply({ next: ARRIVAL_SAVED, turns: this.turns() });
+  }
+
   confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     return this.serial(() => this.confirmTimesNow(input));
   }
@@ -1078,6 +1128,8 @@ export class LiveDesk {
     delete this.file.localSends;
     delete this.file.alertsShown;
     delete this.file.alertsQueued;
+    delete this.file.messages;
+    delete this.file.messagesShown;
     delete this.file.timedJobs;
     this.held = false;
     this.persist();
@@ -1195,7 +1247,10 @@ export class LiveDesk {
     await this.applyPinReport(pinId, input.status.toLowerCase());
   }
 
-  /** A text from the host, the cleaner, or the group. Grok does not see it, so a new host note wakes the routine. */
+  /**
+   * A text from the host, the cleaner, or the group. Grok does not see it, so a new host note or a
+   * new message wakes the routine.
+   */
   inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     return this.serial(() => this.inboundSerial(input));
   }
@@ -1203,8 +1258,9 @@ export class LiveDesk {
   /** The body of `inbound`, for a caller already inside the serial queue. */
   private async inboundSerial(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const before = this.visibleNoteIds();
+    const lastBefore = this.file.messages?.at(-1)?.id;
     const result = await this.inboundNow(input);
-    this.queueNewAlerts(before);
+    this.queueNewAlerts(before, this.file.messages?.at(-1)?.id !== lastBefore);
     return result;
   }
 
@@ -1218,19 +1274,61 @@ export class LiveDesk {
     }
     this.claiming.add(input.id);
     try {
-      if (from === this.file.host) return await this.hostText(input.id, from, input.text);
-      this.resume();
-      const keyword = messagingKeyword(input.text);
-      if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
-      const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
-      const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
-      this.noteCleanerYes(offered);
-      this.noteSeen(input.id);
-      this.syncHold();
-      return { sent: result.sent };
+      const routed = await this.routeInbound(input, from);
+      if (routed.handled) this.keepMessage(from, input, routed.handled);
+      return { sent: routed.sent };
     } finally {
       this.claiming.delete(input.id);
     }
+  }
+
+  /** Handles one inbound text. `handled` is what Cleaner Core did, or undefined when the text was not taken. */
+  private async routeInbound(
+    input: { id: string; from: string; text: string; channel?: "group" },
+    from: string,
+  ): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
+    if (from === this.file.host) return this.hostText(input.id, from, input.text);
+    this.resume();
+    const keyword = messagingKeyword(input.text);
+    if (!this.engine) {
+      const sent = await this.inboundBeforeJob(input.id, from, keyword);
+      return { sent, handled: keyword === "stop" || keyword === "start" ? keyword : "none" };
+    }
+    const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
+    const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
+    this.noteCleanerYes(offered);
+    this.noteSeen(input.id);
+    this.syncHold();
+    return { sent: result.sent, ...this.handledBy(result) };
+  }
+
+  /** The message label from the engine's result. A text the engine did not take is not kept. */
+  private handledBy(result: ReceiveResult): { handled?: MessageHandled } {
+    if (UNREAD_REASONS.has(result.reason)) return {};
+    return { handled: result.outcome ?? "none" };
+  }
+
+  /**
+   * Keeps a text from the cleaner or a saved contact, or from the host in the group, for Grok to
+   * read. Every run of 4 or more digits is redacted, so the door code never reaches a message even
+   * when this desk doesn't hold it in memory. The last 200 are kept.
+   */
+  private keepMessage(from: string, input: { text: string; channel?: "group" }, handled: MessageHandled): void {
+    const who = this.speaker(from, input.channel);
+    if (!who) return;
+    const text = this.hideCode(input.text).replace(/\d{4,}/g, "[redacted]").trim().slice(0, MAX_MESSAGE_TEXT);
+    const when = formatWhen(this.now().toISOString(), this.file.timeZone ?? "UTC");
+    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: `${when.day}, ${when.time}`, handled };
+    this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
+    this.persist();
+  }
+
+  /** Who sent a text Grok reads. The host counts only in the group thread. */
+  private speaker(from: string, channel: "group" | undefined): { from: Message["from"]; name: string } | undefined {
+    if (from === this.file.cleaner) return { from: "cleaner", name: this.file.cleanerName ?? "Cleaner" };
+    if (from === this.file.host) return channel === "group" ? { from: "host", name: "Host" } : undefined;
+    const contact = contactsOf(this.file).find((item) => item.phone === from);
+    return contact ? { from: "contact", name: contact.name } : undefined;
   }
 
   private readonly claiming = new Set<string>();
@@ -1458,6 +1556,7 @@ export class LiveDesk {
       nextCheckInDate: job.nextCheckInDate,
       checkoutTime: job.checkoutTime,
       nextCheckInTime: job.nextCheckInTime,
+      ...(job.arrivalTime ? { arrivalTime: job.arrivalTime } : {}),
       status: job.status,
       ...(this.held ? { held: true } : {}),
     }));
@@ -1503,6 +1602,7 @@ export class LiveDesk {
       ...(file.checkoutTime && file.checkInTime ? { usualTimesName: file.nickname ?? file.address } : {}),
       ...this.scheduleOptions(),
       reminderAsksArrival: true,
+      grokReadsMessages: true,
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),
@@ -1744,31 +1844,31 @@ export class LiveDesk {
     await this.engine?.reportPin(id, status);
   }
 
-  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[] }> {
+  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
     this.noteSeen(id);
     const keyword = messagingKeyword(text);
     if (keyword === "stop" || keyword === "start" || isInjuryReport(text)) {
       this.resume();
       if (!this.engine) {
-        if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword) };
-        return { sent: [] };
+        if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword), handled: keyword };
+        return { sent: [], handled: "none" };
       }
       const result = await this.engine.receive({ id, from, text });
       this.syncHold();
-      return { sent: result.sent };
+      return { sent: result.sent, ...this.handledBy(result) };
     }
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) {
-      if (!this.groupOn()) return { sent: [] };
+      if (!this.groupOn()) return { sent: [], handled: "none" };
       this.resume();
-      if (!this.engine) return { sent: [] };
+      if (!this.engine) return { sent: [], handled: "none" };
       const result = await this.engine.receive({ id, from, text });
       this.syncHold();
-      return { sent: result.sent };
+      return { sent: result.sent, ...this.handledBy(result) };
     }
     this.resume();
     this.engine?.keepHostNote("host:direct-left", DIRECT_TEXT_REPLY);
     if (this.scratchCapture()) this.noteLocal(from, "held");
-    return { sent: [] };
+    return { sent: [], handled: "none" };
   }
 }

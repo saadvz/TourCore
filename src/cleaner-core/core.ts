@@ -96,6 +96,8 @@ export interface JobView {
   hostCheckoutVersion: number;
   hostCheckInVersion: number;
   asking: "checkout" | "checkin" | null;
+  /** The cleaner's arrival time Grok saved, like 11:30 AM. Absent until one is saved. */
+  arrivalTime?: string;
 }
 
 export interface OutboxView {
@@ -211,10 +213,15 @@ export type ReceiveReason =
   | "review"
   | "retry";
 
+/** What Cleaner Core did with an inbound text, for Grok to read beside the message. */
+export type MessageHandled = "opted-in" | "confirmed" | "declined" | "done" | "stop" | "start" | "injury" | "code-held" | "none";
+
 export interface ReceiveResult {
   handled: boolean;
   reason: ReceiveReason;
   sent: CleanerText[];
+  /** Set only when `grokReadsMessages` is on. */
+  outcome?: MessageHandled;
 }
 
 export interface ReminderResult {
@@ -324,6 +331,12 @@ export interface CleanerCoreOptions {
   pinSentBody?: string;
   /** Host sentence when the private text fails. Unset keeps the fixture sentence. */
   pinFailedBody?: string;
+  /**
+   * Grok reads every inbound text. A cleaner text that is not a keyword (YES, NO, DONE, STOP,
+   * START, HELP) gets no generic guide reply, and receive reports what it did as `outcome`.
+   * Unset keeps the guide reply for the Scratch CLI and the smoke runs.
+   */
+  grokReadsMessages?: boolean;
   /** Cory reads the thread with the cleaner. Absent keeps one-to-one texts. */
   groupChat?: {
     hostName: string;
@@ -404,6 +417,8 @@ export interface CleanerCore {
   notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
+  /** Saves the cleaner's arrival time on the open job's checkout day. False when no job is open. Sends nothing. */
+  saveArrival(minutes: number): boolean;
 }
 
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -461,6 +476,8 @@ interface Job {
   done: boolean;
   /** Every source UID this booking was read under while the job was live. Absent means only its id. */
   aliases?: string[];
+  /** The cleaner's arrival instant on the checkout day, saved by Grok. */
+  arrivalAt?: string;
 }
 
 interface Clearance {
@@ -745,13 +762,14 @@ class Engine implements CleanerCore {
     if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.inflight.add(input.id);
     try {
-      return await this.receiveClaimed(input, from);
+      const { codeHeld, ...result } = await this.receiveClaimed(input, from);
+      return this.options.grokReadsMessages ? { ...result, outcome: outcomeOf(result, codeHeld === true) } : result;
     } finally {
       this.inflight.delete(input.id);
     }
   }
 
-  private async receiveClaimed(input: { id: string; from: string; text: string; channel?: "group" }, from: string): Promise<ReceiveResult> {
+  private async receiveClaimed(input: { id: string; from: string; text: string; channel?: "group" }, from: string): Promise<ReceiveResult & { codeHeld?: boolean }> {
     this.transcriptState.push(`${from}: ${this.redactInbound(input.text.trim())}`);
     if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
@@ -792,7 +810,7 @@ class Engine implements CleanerCore {
       if (this.codeOnly(input.text)) {
         this.inboundIds.push(input.id);
         this.save();
-        return { handled: true, reason: "review", sent: alert ? [alert] : [] };
+        return { handled: true, reason: "review", sent: alert ? [alert] : [], codeHeld: true };
       }
     }
     if (from === this.owner && stripFiller(normalize(input.text)) === "retry") return this.retryUncertain(input.id);
@@ -1525,7 +1543,11 @@ class Engine implements CleanerCore {
   }
 
   private async quietOrGuide(from: string, id: string, text: string): Promise<ReceiveResult> {
-    if (from === this.cleanerPhone && this.cleanerConsent === "in" && keywordOf(text) !== "help") return this.guide(from, id);
+    if (from === this.cleanerPhone && this.cleanerConsent === "in" && keywordOf(text) !== "help") {
+      // Grok reads a text that isn't a keyword and decides what happens next.
+      if (this.options.grokReadsMessages && !isCleanerKeyword(text)) return this.markIgnored(id);
+      return this.guide(from, id);
+    }
     return this.markIgnored(id);
   }
 
@@ -2485,6 +2507,7 @@ class Engine implements CleanerCore {
       hostCheckoutVersion: checkout?.version ?? 0,
       hostCheckInVersion: checkin?.version ?? 0,
       asking: status === "discovered" && this.delivery(`host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`) === "sent" ? "checkout" : status === "awaiting_checkin" ? "checkin" : null,
+      ...(job.arrivalAt ? { arrivalTime: formatWhen(job.arrivalAt, this.options.property.timeZone).time } : {}),
     };
   }
 
@@ -2710,6 +2733,14 @@ class Engine implements CleanerCore {
 
   rememberPin(pin: string): void {
     if (!this.pin) this.pin = pin;
+  }
+
+  saveArrival(minutes: number): boolean {
+    const job = this.ordered().find((item) => !item.canceled && !item.declined && !item.done);
+    if (!job) return false;
+    job.arrivalAt = zonedInstant(job.checkoutDate, hm(minutes), this.options.property.timeZone);
+    this.save();
+    return true;
   }
 
   private recordClearance(job: Job): void {
@@ -3147,6 +3178,34 @@ function isYes(text: string): boolean {
 
 function isNo(text: string): boolean {
   return /^(no|nope|nah)$/.test(stripFiller(normalize(text)));
+}
+
+/** A cleaner reply Cleaner Core answers itself. Anything else is left to Grok when it reads the messages. */
+function isCleanerKeyword(text: string): boolean {
+  return keywordOf(text) !== undefined || isYes(text) || isNo(text) || isDone(text);
+}
+
+/** The label Grok reads beside a message: what Cleaner Core did with it. */
+function outcomeOf(result: ReceiveResult, codeHeld: boolean): MessageHandled {
+  if (codeHeld) return "code-held";
+  switch (result.reason) {
+    case "opted-in":
+      return "opted-in";
+    case "scheduled":
+      return "confirmed";
+    case "declined":
+      return "declined";
+    case "done":
+      return "done";
+    case "stop":
+      return "stop";
+    case "start":
+      return "start";
+    case "emergency":
+      return "injury";
+    default:
+      return "none";
+  }
 }
 
 function isDone(text: string): boolean {
