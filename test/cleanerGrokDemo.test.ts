@@ -1,17 +1,22 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { zonedInstant } from "../src/cleaner-core/calendar";
-import { resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
-import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { privateCodeLine } from "../src/cleaner-core/cleanerTexts";
+import type { CleanerCore } from "../src/cleaner-core/core";
+import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
-import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, OBSERVER, startWiredApp, type SentSms, type WiredApp } from "./wiringProof";
+import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, OBSERVER, startWiredApp, TEST_PIN_KEY, type SentSms, type WiredApp } from "./wiringProof";
 
 const PATH = "/mcp/cleaner-core";
 const open: WiredApp[] = [];
 
 afterEach(async () => {
   setCleanerTwilioClient(undefined);
+  setCleanerGroupFetch(undefined);
   setCleanerCalendarFetch(undefined);
   resetLiveDesks();
   while (open.length > 0) {
@@ -214,12 +219,11 @@ describe("Cleaner Core Grok demo: check_now", () => {
     expect(alertsOf(moved).some((line) => line.startsWith(HOST_CHECKOUT) && line.includes("Oct 16"))).toBe(true);
     expect(kindsSince(wired, before)).toEqual([]);
     expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
-    // confirm_times sends both times as host texts, so a second corrected text can follow the first.
-    const kinds = kindsSince(wired, before);
-    expect(kinds.length).toBeGreaterThan(0);
-    expect(kinds.every((kind) => kind === "corrected")).toBe(true);
-    expect(wired.cleanerSent[before]?.body).toContain("Friday, Oct 16 at 10:30 AM");
-    expect(wired.cleanerSent.slice(before).some((item) => item.body.includes(DOOR_CODE))).toBe(false);
+    const got = wired.cleanerSent.slice(before);
+    expect(got.map(textKind)).toEqual(["corrected"]);
+    expect(got[0]?.body).toContain("Friday, Oct 16 at 10:30 AM");
+    expect(got[0]?.body).not.toContain("3:00 PM");
+    expect(got.some((item) => item.body.includes(DOOR_CODE))).toBe(false);
   });
 
   it("removed stay calls the job off", async () => {
@@ -320,30 +324,228 @@ describe("Cleaner Core Grok demo: check_now", () => {
     expect(reminders(wired)).toBe(1);
   });
 
-  it("two check_now calls at once alert the host once", async () => {
-    const wired = await app({ calendar: oneStay });
-    await setUpBoth(wired);
-    expect((await call(wired, "run_checks", { googleEvents: googleList([]) })).isError).toBe(false);
-    // A slow calendar read lets two unqueued calls interleave.
-    setCleanerCalendarFetch(async (url) => {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      return { status: 200, url, async text() { return oneStay(); } };
-    });
-    const list = googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-15" }]);
-    const [a, b] = await Promise.all([call(wired, "check_now", { googleEvents: list }), call(wired, "check_now", { googleEvents: list })]);
-    expect(a.isError).toBe(false);
-    expect(b.isError).toBe(false);
-    const asks = [...alertsOf(a), ...alertsOf(b)].filter((line) => line.startsWith(HOST_CHECKOUT));
-    expect(asks).toHaveLength(1);
-    const stored = JSON.parse(readFileSync(join(wired.root, "cleaner-job", "cleaner-core.json"), "utf8")) as { outbox: { kind: string }[] };
-    expect(stored.outbox.filter((item) => item.kind === "host-checkout")).toHaveLength(1);
-  });
-
   it("is off when Cleaner Core is off", async () => {
     const wired = await app({ enabled: false });
     const off = await call(wired, "check_now", { googleEvents: googleList([]) });
     expect(off.status).toBe(503);
     expect(wired.cleanerSent).toEqual([]);
     expect(wired.tourSent).toEqual([]);
+  });
+});
+
+interface GroupPost {
+  to: string[];
+  body: string;
+}
+
+/** A fake Twilio Conversations API. It records each group message and never leaves the machine. */
+function groupStub(): { impl: typeof fetch; posts: GroupPost[] } {
+  const conversations = new Map<string, { sid: string; address: string }[]>();
+  const posts: GroupPost[] = [];
+  let sequence = 0;
+  const impl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+    const root = "https://conversations.twilio.com/v1/Conversations";
+    if (url === root && method === "POST") {
+      const sid = `CH${++sequence}`;
+      conversations.set(sid, []);
+      return reply(201, { sid });
+    }
+    if (!url.startsWith(`${root}/`)) return reply(404, {});
+    const [rawSid, ...rest] = url.slice(root.length + 1).split("/");
+    const people = conversations.get(decodeURIComponent(rawSid ?? ""));
+    if (!people) return reply(404, {});
+    const tail = rest.join("/").split("?")[0] ?? "";
+    if (tail === "Messages" && method === "POST") {
+      const params = new URLSearchParams(String(init?.body ?? ""));
+      posts.push({ to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
+      return reply(201, { sid: `IM${posts.length}` });
+    }
+    if (tail === "Participants" && method === "GET") {
+      return reply(200, { participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })), meta: { next_page_url: null } });
+    }
+    if (tail === "Participants" && method === "POST") {
+      const address = new URLSearchParams(String(init?.body ?? "")).get("MessagingBinding.Address") ?? "";
+      const person = { sid: `MB${++sequence}`, address };
+      people.push(person);
+      return reply(201, { sid: person.sid });
+    }
+    if (method === "DELETE") {
+      const index = people.findIndex((person) => person.sid === decodeURIComponent(tail.slice("Participants/".length)));
+      if (index >= 0) people.splice(index, 1);
+      return reply(204, {});
+    }
+    return reply(404, {});
+  };
+  return { impl, posts };
+}
+
+/** A Guesty calendar that answers slowly and counts how many reads are open at once. */
+function slowCalendar(): { peak: () => number } {
+  let inFlight = 0;
+  let peak = 0;
+  setCleanerCalendarFetch(async (url) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    inFlight -= 1;
+    return {
+      status: 200,
+      url,
+      async text() {
+        return oneStay();
+      },
+    };
+  });
+  return { peak: () => peak };
+}
+
+function deskEnv(): NodeJS.ProcessEnv {
+  return { CLEANER_CORE_ENABLED: "1", CLEANER_CORE_GROUP_CHAT: "0", CLEANER_CORE_SMS_ALLOWLIST: `${HOST},${CLEANER}` };
+}
+
+function resultOf(reply: ToolReply): Record<string, unknown> {
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.result;
+}
+
+/** A desk with its own state folder and no live texting. */
+async function openDesk(root: string, env: NodeJS.ProcessEnv): Promise<LiveDesk> {
+  const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+  const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+  expect(desk.getState("2").ok).toBe(true);
+  expect(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }).ok).toBe(true);
+  expect(desk.savePeople({ host: HOST, cleaner: CLEANER }).ok).toBe(true);
+  expect(desk.saveCalendarLink({ google: true }).ok).toBe(true);
+  expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+  expect(desk.setUpTexting().ok).toBe(true);
+  expect((await desk.runChecks({ googleEvents: googleList([]) })).ok).toBe(true);
+  return desk;
+}
+
+describe("Cleaner Core Grok demo: check_now follow-ups", () => {
+  it("returns a held-back alert once it becomes visible", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-held-"));
+    try {
+      const env = deskEnv();
+      const desk = await openDesk(root, env);
+      const internals = desk as unknown as { engine: CleanerCore; file: { pinSend?: unknown } };
+      // The private-code line is hidden until the door-code text is confirmed delivered.
+      const line = privateCodeLine("Maria");
+      internals.engine.keepHostNote("pin-private:held", line);
+      const held = resultOf(await desk.checkNow({ googleEvents: googleList([]) }));
+      expect(held.alerts).toEqual([]);
+      internals.file.pinSend = { sid: "SM-held", outcome: "settled", notePending: false, delivered: true };
+      const shown = resultOf(await desk.checkNow({ googleEvents: googleList([]) }));
+      expect(shown.alerts).toEqual([line]);
+      expect(resultOf(await desk.checkNow({ googleEvents: googleList([]) })).alerts).toEqual([]);
+    } finally {
+      resetLiveDesks();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports Google as unread when the engine does not take the read", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-unread-"));
+    try {
+      const env = deskEnv();
+      await openDesk(root, env);
+      // The host's number is no longer approved, so the reopened engine refuses to read any source.
+      env.CLEANER_CORE_SMS_ALLOWLIST = "+15555550199";
+      resetLiveDesks();
+      const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+      const reply = resultOf(await desk.checkNow({ googleEvents: googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-16" }]) }));
+      expect(reply.googleUnread).toBe(true);
+      expect(reply.turns).toEqual([]);
+      expect(reply.guestyUnread).toBeUndefined();
+    } finally {
+      resetLiveDesks();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the alerts the host already saw at run_checks as shown", async () => {
+    const wired = await app();
+    const stay = { id: "g1", start: "2026-10-10", end: "2026-10-15" };
+    await confirmedJob(wired, stay);
+    const state = await call(wired, "get_state");
+    const seen = (state.structured?.notes as string[] | undefined) ?? [];
+    expect(seen.length).toBeGreaterThan(0);
+    expect((await call(wired, "run_checks", { googleEvents: withNext(stay) })).isError).toBe(false);
+    const checked = await call(wired, "check_now", { googleEvents: withNext(stay) });
+    expect(checked.isError).toBe(false);
+    expect(alertsOf(checked).filter((line) => seen.includes(line))).toEqual([]);
+  });
+
+  it("returns a new-booking alert again after reset_scratch", async () => {
+    const lane = SCRATCH_TENANTS[0];
+    if (!lane) throw new Error("missing tenant");
+    const wired = await app({ scratchTools: true, allowlist: `${lane.ownerPhone},${lane.cleanerPhone}` });
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", { business: "Scratch", address: lane.property.address, timeZone: ZONE });
+    await call(wired, "save_people", { host: lane.ownerPhone, cleaner: lane.cleanerPhone });
+    await call(wired, "save_calendar_link", { google: true });
+    await call(wired, "save_door_code", { code: DOOR_CODE });
+    await call(wired, "set_up_texting");
+    expect((await call(wired, "run_checks", { googleEvents: googleList([]) })).isError).toBe(false);
+    const list = googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-15" }]);
+    const first = await call(wired, "check_now", { googleEvents: list });
+    expect(alertsOf(first)).toHaveLength(1);
+    expect(alertsOf(await call(wired, "check_now", { googleEvents: list }))).toEqual([]);
+    expect((await call(wired, "reset_scratch")).isError).toBe(false);
+    const again = await call(wired, "check_now", { googleEvents: list });
+    expect(again.isError).toBe(false);
+    expect(alertsOf(again)).toEqual(alertsOf(first));
+  });
+
+  it("never runs two checks at once", async () => {
+    const wired = await app({ calendar: oneStay });
+    await setUpBoth(wired);
+    const list = googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-18" }]);
+    expect((await call(wired, "run_checks", { googleEvents: list })).isError).toBe(false);
+    const slow = slowCalendar();
+    const pair = await Promise.all([call(wired, "check_now", { googleEvents: list }), call(wired, "check_now", { googleEvents: list })]);
+    expect(pair.map((reply) => reply.isError)).toEqual([false, false]);
+    expect(slow.peak()).toBe(1);
+    const mixed = await Promise.all([call(wired, "run_checks", { googleEvents: list }), call(wired, "check_now", { googleEvents: list })]);
+    expect(mixed.map((reply) => reply.isError)).toEqual([false, false]);
+    expect(slow.peak()).toBe(1);
+  });
+
+  it("with group chat on, a moved stay waits for the host and then sends one corrected text", async () => {
+    const stub = groupStub();
+    setCleanerGroupFetch(stub.impl);
+    const wired = await app({ groupChat: true });
+    await confirmedJob(wired, { id: "g1", start: "2026-10-10", end: "2026-10-15" });
+    const sms = wired.cleanerSent.length;
+    const posts = stub.posts.length;
+    const moved = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
+    expect(moved.isError).toBe(false);
+    expect(turnsOf(moved)[0]?.checkoutDate).toBe("2026-10-16");
+    expect((moved.structured?.turns as { checkoutTime: string | null }[])[0]?.checkoutTime).toBeNull();
+    expect(wired.cleanerSent).toHaveLength(sms);
+    expect(stub.posts).toHaveLength(posts);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    const got = wired.cleanerSent.slice(sms);
+    expect(got.map(textKind)).toEqual(["corrected"]);
+    expect(got[0]?.body).toContain("Friday, Oct 16 at 10:30 AM");
+    expect(got[0]?.body).not.toContain("3:00 PM");
+    expect(stub.posts).toHaveLength(posts);
+  });
+
+  it("with group chat on, a removed stay sends the cleaner one cancellation", async () => {
+    const stub = groupStub();
+    setCleanerGroupFetch(stub.impl);
+    const wired = await app({ groupChat: true });
+    await confirmedJob(wired, { id: "g1", start: "2026-10-10", end: "2026-10-15" });
+    const sms = wired.cleanerSent.length;
+    const posts = stub.posts.length;
+    const removed = await call(wired, "check_now", { googleEvents: googleList([]) });
+    expect(removed.isError).toBe(false);
+    expect(wired.cleanerSent.slice(sms).map(textKind)).toEqual(["cancel-update"]);
+    expect(stub.posts).toHaveLength(posts);
+    expect(turnsOf(removed).every((turn) => turn.status === "canceled")).toBe(true);
   });
 });

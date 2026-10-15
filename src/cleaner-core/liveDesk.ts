@@ -86,8 +86,8 @@ interface LiveFile {
   pinSend?: PinSend;
   texting?: boolean;
   checked?: boolean;
-  /** How many `engine.hostNotes()` entries `check_now` has already returned. */
-  alertsShown?: number;
+  /** Ids of the host notes `check_now` has already returned, or that the host saw before it. */
+  alertsShown?: string[];
   released?: boolean;
   cleanerOut?: boolean;
   seenInbound?: string[];
@@ -303,15 +303,12 @@ export class LiveDesk {
     const read = await this.readCalendars(input.googleEvents);
     await engine.runReminders();
     this.syncHold();
-    const notes = engine.hostNotes();
-    const shown = Math.min(this.file.alertsShown ?? 0, notes.length);
-    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
-    let alerts = notes.slice(shown).filter((line) => delivered || !isPrivateCodeLine(line));
-    if (!engine.pinAccepted()) alerts = alerts.filter((line) => line !== PIN_SENT);
-    this.file.alertsShown = notes.length;
+    const shown = new Set(this.file.alertsShown ?? []);
+    const fresh = this.visibleNotes(engine).filter((note) => !shown.has(note.id));
+    this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
     this.persist();
     return this.reply({
-      alerts,
+      alerts: fresh.map((note) => note.body),
       turns: this.turns(),
       ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
       ...(read.googleUnread ? { googleUnread: true as const } : {}),
@@ -341,6 +338,7 @@ export class LiveDesk {
       return this.fail(read.reason ?? "I couldn't read that calendar.");
     }
     this.file.checked = true;
+    this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...this.visibleNotes(this.engine).map((note) => note.id)])];
     this.persist();
     const turns = this.turns();
     return this.reply({
@@ -395,7 +393,11 @@ export class LiveDesk {
       await this.engine.confirmHostTimes({ checkout, checkIn });
     } else {
       await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
-      await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+      // The engine reads a lone time as the checkout while the job is still open. When the next
+      // check-in is already stored (a moved stay keeps it), a second text would overwrite the checkout.
+      if (!this.checkInStored(this.engine)) {
+        await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+      }
     }
     const job = this.engine.jobs().find((item) => item.checkoutTime && item.nextCheckInTime);
     if (!job) {
@@ -472,6 +474,7 @@ export class LiveDesk {
     delete this.file.conversationSid;
     delete this.file.deliveries;
     delete this.file.localSends;
+    delete this.file.alertsShown;
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
@@ -614,11 +617,23 @@ export class LiveDesk {
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
     if (this.held) next = this.holdLine();
-    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
-    let notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
-    if (this.engine && !this.engine.pinAccepted()) notes = notes.filter((line) => line !== PIN_SENT);
+    const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
     return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
+  }
+
+  /** True when the job the host is answering about already has its next check-in time saved. */
+  private checkInStored(engine: CleanerCore): boolean {
+    const open = new Set(["discovered", "awaiting_checkin", "host_confirmed", "offered"]);
+    return Boolean(engine.jobs().find((job) => open.has(job.status))?.nextCheckInTime);
+  }
+
+  /** The host notes the host may see now. A private-code line waits for delivery, and PIN_SENT for the accepted text. */
+  private visibleNotes(engine: CleanerCore): { id: string; body: string }[] {
+    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
+    return engine
+      .hostNoteEntries()
+      .filter((note) => (delivered || !isPrivateCodeLine(note.body)) && (note.body !== PIN_SENT || engine.pinAccepted()));
   }
 
   private turns(): Record<string, unknown>[] {

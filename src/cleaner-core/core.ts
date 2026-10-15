@@ -341,6 +341,8 @@ export interface CleanerCore {
   /** True once after a failure, then clear. */
   pullPinFailure(): boolean;
   hostNotes(): string[];
+  /** The same notes with the id each one is kept under, so a caller can tell which it has already shown. */
+  hostNoteEntries(): { id: string; body: string }[];
   keepHostNote(id: string, body: string): void;
   holdNotice(): string | undefined;
   notePrivateCodeDelivered(): void;
@@ -1719,6 +1721,10 @@ class Engine implements CleanerCore {
 
   hostNotes(): string[] {
     return this.hostNoteState.map((note) => note.body);
+  }
+
+  hostNoteEntries(): { id: string; body: string }[] {
+    return this.hostNoteState.map((note) => ({ id: note.id, body: note.body }));
   }
 
   notePrivateCodeDelivered(): void {
