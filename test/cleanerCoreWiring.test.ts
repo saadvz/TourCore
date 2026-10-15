@@ -198,7 +198,7 @@ describe("Cleaner Core live wiring", () => {
     expect(stopSends.find((item) => item.to === CLEANER)?.body).toBe(
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     );
-    const stopNote = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
+    const stopNote = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
     expect(stopSends.filter((item) => item.to === HOST).map((item) => item.body)).toEqual([stopNote]);
     const held = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     remember(held);
@@ -462,7 +462,7 @@ describe("Cleaner Core live wiring", () => {
       },
     ]);
     const held = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
-    expect(held.text).toContain("The cleaner opted out of cleaning texts, so the job is on hold.");
+    expect(held.text).toContain(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`);
   });
 
   it("sends the door code once when the departure text, START, and STOP are retried", async () => {
@@ -503,9 +503,9 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.to === CLEANER && item.body.startsWith("You're opted out of cleaning texts")).map((item) => item.body)).toEqual([
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     ]);
-    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`)).toHaveLength(1);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`)).toHaveLength(1);
     const stopState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
-    expect(stopState.text).toContain(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`);
+    expect(stopState.text).toContain(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`);
 
     const start = { from: CLEANER, to: CLEANER_LINE, body: "START", sid: "SM-once-start", token: CLEANER_AUTH };
     const beforeStart = wired.cleanerSent.length;

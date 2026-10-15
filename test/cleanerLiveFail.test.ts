@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
+import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import {
@@ -19,8 +19,9 @@ const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot t
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const STOP_ACK = "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
-const HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold.";
-const OPTED_OUT_HOLD = "The cleaner opted out of cleaning texts, so the job is on hold.";
+const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
+const OWNER_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because you opted out of texts. Tell your Grok Bot to restart it.";
+const CLEANER_HOLD = "The cleaner opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.";
 
 const open: WiredApp[] = [];
 
@@ -148,19 +149,19 @@ describe("live Scratch failures from 19087415", () => {
     const before = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "I fell and I'm hurt" }))).toBe("The test text went through.");
     const state = await call(wired, "get_state");
-    expect(nextOf(state)).toBe(HOLD);
+    expect(nextOf(state)).toBe(INJURY_HOLD);
     expect(state.text).toContain("\"held\":true");
     const blocked = await call(wired, "mark_guests_left", { said: "The guests have left" });
-    expect(nextOf(blocked)).toBe(HOLD);
+    expect(nextOf(blocked)).toBe(INJURY_HOLD);
     expect(blocked.text).not.toContain("I sent the door code");
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
-    expect((await call(wired, "get_state")).text).toContain(HOLD);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "guests left" }))).toBe(HOLD);
+    expect((await call(wired, "get_state")).text).toContain(INJURY_HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "guests left" }))).toBe(INJURY_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     const resumed = await call(wired, "resume_job");
     expect(resumed.text).toContain("The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.");
-    expect(nextOf(await call(wired, "get_state"))).not.toBe(HOLD);
+    expect(nextOf(await call(wired, "get_state"))).not.toBe(INJURY_HOLD);
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
@@ -185,9 +186,9 @@ describe("live Scratch failures from 19087415", () => {
       expect(nextOf(await call(wired, "send_test_text", { from: HOST, text }))).toBe("The test text went through.");
       expect(redact(wired.cleanerSent.slice(sentBefore), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
       const state = await call(wired, "get_state");
-      expect(state.text).toContain(HOLD);
+      expect(state.text).toContain(OWNER_HOLD);
       expect(state.text).toContain("\"held\":true");
-      expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(HOLD);
+      expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(OWNER_HOLD);
       expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
       const repeatBefore = wired.cleanerSent.length;
       const notesBefore = ((await call(wired, "get_state")).structured?.notes as string[] | undefined)?.length ?? 0;
@@ -197,7 +198,7 @@ describe("live Scratch failures from 19087415", () => {
       expect(notesAfter).toBe(notesBefore);
       if (text !== "UNSUBSCRIBE") {
         expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "START" }))).toBe("The test text went through.");
-        expect((await call(wired, "get_state")).text).toContain(HOLD);
+        expect((await call(wired, "get_state")).text).toContain(OWNER_HOLD);
       }
     }
     expect(linesOf(await call(wired, "read_inbox"))).toContain("Text from the host: STOP.");
@@ -206,10 +207,10 @@ describe("live Scratch failures from 19087415", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "START" }))).toBe("The test text went through.");
     expect(redact(wired.cleanerSent.slice(startBefore), LANE.pin)).toEqual([{ to: HOST, body: START_ACK }]);
     const afterStart = await call(wired, "get_state");
-    expect(afterStart.text).toContain(HOLD);
+    expect(afterStart.text).toContain(OWNER_HOLD);
     expect(afterStart.text).toContain(START_ACK);
     expect(afterStart.text).toContain(STOP_ACK);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(OWNER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect((await call(wired, "resume_job")).text).toContain("is back on");
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
@@ -222,7 +223,7 @@ describe("live Scratch failures from 19087415", () => {
     await saveLane(wired);
     await confirmJob(wired);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" }))).toBe("The test text went through.");
-    const once = redact(wired.cleanerSent, LANE.pin).filter((item) => item.body === STOP_ACK || item.body.includes("so the job is on hold"));
+    const once = redact(wired.cleanerSent, LANE.pin).filter((item) => item.body === STOP_ACK || item.body === CLEANER_HOLD);
     expect(once.filter((item) => item.to === LANE.cleanerPhone && item.body === STOP_ACK)).toHaveLength(1);
     const notesOnce = linesOf(await call(wired, "read_outbox")).filter((line) => line.startsWith("Hold note") || line.startsWith("Opt-out"));
     const sentOnce = wired.cleanerSent.length;
@@ -230,10 +231,10 @@ describe("live Scratch failures from 19087415", () => {
     expect(wired.cleanerSent.length).toBe(sentOnce);
     expect(linesOf(await call(wired, "read_outbox")).filter((line) => line.startsWith("Hold note") || line.startsWith("Opt-out"))).toEqual(notesOnce);
     const state = await call(wired, "get_state");
-    expect(state.text).toContain(OPTED_OUT_HOLD);
+    expect(state.text).toContain(CLEANER_HOLD);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_state")).text).toContain("on hold");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(CLEANER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect((await call(wired, "resume_job")).isError).toBe(false);
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
@@ -256,7 +257,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(bodies.filter((body) => body.includes("Door code:"))).toHaveLength(1);
     expect(bodies.filter((body) => body === "Got it, cleaning started.")).toHaveLength(1);
     expect(bodies.filter((body) => body === "Thanks, cleaning marked done.")).toHaveLength(1);
-    expect(bodies.filter((body) => body === PIN_FAILED || body === HOLD || body === OPTED_OUT_HOLD)).toEqual([]);
+    expect(bodies.filter((body) => body === PIN_FAILED || body === INJURY_HOLD || body === OWNER_HOLD || body === CLEANER_HOLD)).toEqual([]);
     expect(wired.cleanerSent.filter((item) => item.to !== LANE.cleanerPhone && item.to !== HOST)).toEqual([]);
   }, 40_000);
 
@@ -303,5 +304,30 @@ describe("live Scratch failures from 19087415", () => {
     expect(notes).toContain(backOn);
     expect(notes).toContain(held);
     expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
+  }, 40_000);
+
+  it("after STOP, a reminder and DONE text Cory nothing and the job is done", async () => {
+    if (!LANE) throw new Error("missing lane");
+    const wired = await scratchApp();
+    await saveLane(wired);
+    await confirmJob(wired);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
+    expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
+    const beforeStop = wired.cleanerSent.length;
+    expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    const afterStop = wired.cleanerSent.length;
+    await liveDeskFor(wired.root, () => process.env, () => new Date()).runReminders();
+    expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
+    const after = redact(wired.cleanerSent.slice(afterStop), LANE.pin);
+    expect(after.filter((item) => item.to === HOST)).toEqual([]);
+    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "Thanks, cleaning marked done." }]);
+    expect((await call(wired, "get_turns")).text).toContain("\"status\":\"done\"");
+    expect(nextOf(await call(wired, "get_state"))).toBe(OWNER_HOLD);
+    expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
+    const repeat = wired.cleanerSent.length;
+    expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
+    expect(wired.cleanerSent.length).toBe(repeat);
   }, 40_000);
 });
