@@ -160,6 +160,6 @@ Each change is the smallest one that does the job.
 - `CLEANER_CORE_MCP_TOKEN` left unset.
 - The Twilio inbound webhook pointed at the host.
 
-## Open item
+## Host
 
-- `hostedCleanerCoreUrl`: the dedicated host's public URL. Until Saad sends it, the template holds a placeholder, and a test fails the build if the placeholder ships to `master`.
+- `hostedCleanerCoreUrl` is `https://tourcore-production-72ec.up.railway.app`, the dedicated Cleaner Core Railway project.
