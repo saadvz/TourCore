@@ -1095,7 +1095,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     expect(kindsSince(wired, before)).not.toContain("cancel-update");
   });
 
-  it("after a restart with Guesty down, Google is not applied alone", async () => {
+  it("after a restart with Guesty down, Google is applied beside the saved Guesty snapshot", async () => {
     const wired = await app();
     await setUpBoth(wired);
     const list = googleList(GOOGLE_STAYS);
@@ -1189,8 +1189,174 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
   });
 });
 
+const AIRBNB_URL = "https://calendar.example/airbnb.ics";
+const VRBO_URL = "https://calendar.example/vrbo.ics";
+
+function icsOf(events: { uid: string; start: string; end: string }[]): string {
+  const lines = ["BEGIN:VCALENDAR"];
+  for (const event of events) {
+    lines.push("BEGIN:VEVENT", `UID:${event.uid}`, `DTSTART;VALUE=DATE:${event.start}`, `DTEND;VALUE=DATE:${event.end}`, "SUMMARY:Guest", "END:VEVENT");
+  }
+  lines.push("END:VCALENDAR", "");
+  return lines.join("\n");
+}
+
+/** Airbnb has one stay. Vrbo has a later stay and the same Airbnb stay under its own UID. */
+const AIRBNB_ICS = icsOf([{ uid: "air-1", start: "20261014", end: "20261018" }]);
+const VRBO_ICS = icsOf([
+  { uid: "vrbo-1", start: "20261020", end: "20261024" },
+  { uid: "vrbo-dup", start: "20261014", end: "20261018" },
+]);
+
+/** Serves each link's calendar. `null` makes that link fail. */
+function serveCalendars(bodies: { airbnb: string | null; vrbo: string | null }) {
+  setCleanerCalendarFetch(async (url) => {
+    const body = url === AIRBNB_URL ? bodies.airbnb : url === VRBO_URL ? bodies.vrbo : null;
+    return {
+      status: body === null ? 500 : 200,
+      url,
+      async text() {
+        return body ?? "";
+      },
+    };
+  });
+}
+
+async function setUpSources(wired: WiredApp, google: boolean) {
+  await setUpTo(wired);
+  const saved = await call(wired, "save_sources", {
+    calendars: [
+      { name: "Airbnb", url: AIRBNB_URL },
+      { name: "Vrbo", url: VRBO_URL },
+    ],
+    ...(google ? { google: true } : {}),
+  });
+  expect(saved.isError, saved.text).toBe(false);
+  expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+  expect((await call(wired, "set_up_texting")).isError).toBe(false);
+}
+
+function storeFile(wired: WiredApp): string {
+  const path = join(wired.root, "cleaner-job", "cleaner-core.json");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+describe("Cleaner Core Grok demo: several calendar links", () => {
+  it("two iCal links and Google make one job per stay", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
+    await setUpSources(wired, true);
+    const list = googleList([
+      { id: "g1", start: "2026-10-14", end: "2026-10-18" },
+      { id: "g5", start: "2026-10-26", end: "2026-10-28" },
+    ]);
+    const checks = await call(wired, "run_checks", { googleEvents: list });
+    expect(checks.isError, checks.text).toBe(false);
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    const checked = await call(wired, "check_now", { googleEvents: list });
+    expect(checked.isError).toBe(false);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
+    expect(checked.structured?.unread).toBeUndefined();
+    expect(wired.cleanerSent).toEqual([]);
+  });
+
+  it("a restart keeps every source", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const before = wired.cleanerSent.length;
+    expect(storeFile(wired)).not.toContain(AIRBNB_URL);
+    expect(storeFile(wired)).not.toContain(VRBO_URL);
+
+    // After a restart, Vrbo fails. Airbnb's new stay is applied, and Vrbo's jobs stay.
+    resetLiveDesks();
+    serveCalendars({ airbnb: icsOf([{ uid: "air-1", start: "20261014", end: "20261018" }, { uid: "air-2", start: "20261026", end: "20261028" }]), vrbo: null });
+    const checked = await call(wired, "check_now", {});
+    expect(checked.isError).toBe(false);
+    expect(checked.structured?.unread).toEqual(["Vrbo"]);
+    expect(checked.structured?.guestyUnread).toBeUndefined();
+    expect(checked.text).not.toContain(VRBO_URL);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
+
+    // Another restart with Airbnb down keeps Airbnb's jobs.
+    resetLiveDesks();
+    serveCalendars({ airbnb: null, vrbo: VRBO_ICS });
+    const other = await call(wired, "check_now", {});
+    expect(other.isError).toBe(false);
+    expect(other.structured?.unread).toEqual(["Airbnb"]);
+    expect(turnsOf(other).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(other).every((turn) => turn.status !== "canceled")).toBe(true);
+    expect(kindsSince(wired, before)).not.toContain("cancel-update");
+  });
+
+  it("save_sources refuses a private or http link", async () => {
+    const wired = await app();
+    await setUpTo(wired);
+    for (const url of ["http://calendar.example/airbnb.ics", "https://192.168.1.20/airbnb.ics", "https://10.0.0.5/airbnb.ics", "https://localhost/airbnb.ics"]) {
+      const refused = await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url }] });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).not.toContain(url);
+    }
+    // One bad link refuses the whole list.
+    const mixed = await call(wired, "save_sources", {
+      calendars: [
+        { name: "Airbnb", url: AIRBNB_URL },
+        { name: "Vrbo", url: "http://calendar.example/vrbo.ics" },
+      ],
+    });
+    expect(mixed.isError).toBe(true);
+    expect((await call(wired, "save_sources", { calendars: [] })).isError).toBe(true);
+    const nine = Array.from({ length: 9 }, (_, index) => ({ name: `Calendar ${index + 1}`, url: `https://calendar.example/${index}.ics` }));
+    expect((await call(wired, "save_sources", { calendars: nine })).isError).toBe(true);
+    expect(liveFile(wired)).not.toContain("calendar.example");
+    expect((await done(wired)).some((line) => /calendar/i.test(line))).toBe(false);
+    // Google alone is enough.
+    expect((await call(wired, "save_sources", { google: true })).isError).toBe(false);
+    expect(await done(wired)).toContain("Google Calendar saved.");
+  });
+
+  it("two links with the same name stay two sources", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: icsOf([{ uid: "vrbo-1", start: "20261020", end: "20261024" }]) });
+    await setUpTo(wired);
+    const saved = await call(wired, "save_sources", {
+      calendars: [
+        { name: "Airbnb", url: AIRBNB_URL },
+        { name: "airbnb!", url: VRBO_URL },
+      ],
+    });
+    expect(saved.isError).toBe(false);
+    expect(await done(wired)).toContain("2 calendar links saved.");
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24"]);
+  });
+
+  it("save_calendar_link still saves one link", async () => {
+    const wired = await app();
+    await setUpTo(wired);
+    expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
+    expect(await done(wired)).toContain("Calendar link saved.");
+    expect(JSON.parse(liveFile(wired)).calendarLink).toBe(CALENDAR_URL);
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(checks.isError).toBe(false);
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(GUESTY_JOBS);
+    guestyCalendar(false);
+    const down = await call(wired, "check_now", {});
+    expect(down.structured?.guestyUnread).toBe(true);
+    expect(down.structured?.unread).toEqual(["Guesty Lite"]);
+    expect(turnsOf(down).every((turn) => turn.status !== "canceled")).toBe(true);
+  });
+});
+
 const LANE = SCRATCH_TENANTS[0];
-const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_SENT ="I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 
 interface OutText {
   label: string;

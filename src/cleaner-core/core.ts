@@ -153,7 +153,8 @@ export interface SourceFreshness {
 export interface SyncState {
   reason: PollResult["reason"];
   conversation: "closed" | "open";
-  sources: BookingSourceKind[];
+  /** Source ids the engine holds a snapshot for, in dedupe order. */
+  sources: string[];
   conflicts: SourceConflict[];
   fallback?: string;
   freshness?: SourceFreshness[];
@@ -302,6 +303,11 @@ export interface CleanerCoreOptions {
 export interface CleanerCore {
   pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult>;
   readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
+  /**
+   * Several sources as one read. Every snapshot is applied together, so no source looks like it
+   * removed another's stays. When any one is refused, none is applied.
+   */
+  readSources(sources: readonly BookingSource[], options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
   receive(input: { id: string; from: string; text: string; channel?: "group" }): Promise<ReceiveResult>;
   confirmHostTimes(input: { checkout: string; checkIn: string }): Promise<CleanerText[]>;
   resumeJob(): Promise<CleanerText | null>;
@@ -315,6 +321,11 @@ export interface CleanerCore {
   lastSync(): SyncState;
   beginOnboarding(): SetupView;
   attachPreview(kind: "guesty-lite" | "notion", body: string): void;
+  /**
+   * The saved sources, in dedupe order. A held snapshot of any other source is forgotten, so its
+   * stays leave the next read. Returns the ids the engine holds a snapshot for. Sends nothing.
+   */
+  keepSources(order: readonly string[]): string[];
   answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult>;
   setupView(): SetupView | undefined;
   messagingView(): MessagingView | undefined;
@@ -473,6 +484,8 @@ interface Stored {
   isolate?: boolean;
   participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
   sourceRecords?: SourceRecord[];
+  /** The last snapshot of each source, by source id. Booking dates and UIDs only. */
+  snapshots?: Record<string, SourceSnapshot>;
   reviews?: ReviewItem[];
   audit?: AuditEvent[];
   counters?: Counters;
@@ -512,6 +525,7 @@ interface StoreFile {
   isolate?: boolean;
   participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
   sourceRecords?: SourceRecord[];
+  snapshots?: Record<string, SourceSnapshot>;
   reviews?: ReviewItem[];
   audit?: AuditEvent[];
   counters?: Counters;
@@ -553,7 +567,9 @@ class Engine implements CleanerCore {
   private readonly now: () => Date;
   private readonly file: string | undefined;
   private readonly tenantId: string;
-  private readonly latest = new Map<BookingSourceKind, SourceSnapshot>();
+  /** The last snapshot of each source, by source id. Saved, so a restart keeps every source. */
+  private readonly latest = new Map<string, SourceSnapshot>();
+  private sourceOrder: string[] = [];
   private conflictState: SourceConflict[] = [];
   private provenanceState: JobProvenance[] = [];
   private fallbackText: string | undefined;
@@ -637,15 +653,32 @@ class Engine implements CleanerCore {
     const blocked = this.syncBlocked(conversation);
     if (blocked) return blocked;
     const feed = interpretFeed(ical);
-    return this.applySnapshot(this.stamp({ kind: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }), conversation);
+    return this.applySnapshots(
+      [this.stamp({ kind: "guesty-lite", sourceId: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks })],
+      conversation,
+    );
   }
 
-  async readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
+  readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
+    return this.readSources([source], options);
+  }
+
+  async readSources(sources: readonly BookingSource[], options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
     const conversation = options?.conversation ?? "open";
     const blocked = this.syncBlocked(conversation);
     if (blocked) return this.withSync(blocked);
-    const snapshot = await source.read();
-    if (snapshot.kind !== source.kind) throw new Error("Booking source kind does not match the read.");
+    const snapshots: SourceSnapshot[] = [];
+    for (const source of sources) {
+      const snapshot = await source.read();
+      if (snapshot.kind !== source.kind) throw new Error("Booking source kind does not match the read.");
+      const refused = this.refuseSnapshot(snapshot, conversation);
+      if (refused) return refused;
+      snapshots.push(this.stamp(snapshot));
+    }
+    return this.withSync(await this.applySnapshots(snapshots, conversation));
+  }
+
+  private refuseSnapshot(snapshot: SourceSnapshot, conversation: "closed" | "open"): (PollResult & SyncState) | undefined {
     const permission = snapshot.permission ?? "granted";
     if (permission !== "granted") {
       if (snapshot.tenantId !== "" && snapshot.tenantId !== this.tenantId) {
@@ -661,7 +694,7 @@ class Engine implements CleanerCore {
       this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
       return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
     }
-    return this.withSync(await this.applySnapshot(this.stamp(snapshot), conversation));
+    return undefined;
   }
 
   async receive(input: { id: string; from: string; text: string; channel?: "group" }): Promise<ReceiveResult> {
@@ -834,6 +867,17 @@ class Engine implements CleanerCore {
     this.previewFeeds.push({ kind, body });
   }
 
+  keepSources(order: readonly string[]): string[] {
+    this.sourceOrder = [...order];
+    const dropped = [...this.latest.keys()].filter((id) => !order.includes(id));
+    if (dropped.length > 0) {
+      for (const id of dropped) this.latest.delete(id);
+      this.sourceRecords = this.sourceRecords.filter((record) => !dropped.includes(record.kind));
+      this.save();
+    }
+    return this.sourceNames();
+  }
+
   async answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult> {
     if (!this.session) this.beginOnboarding();
     const session = this.session;
@@ -1001,7 +1045,7 @@ class Engine implements CleanerCore {
         continue;
       }
       const read = interpretFeed(feed.body);
-      snapshots.push({ kind: "guesty-lite", tenantId: this.session?.tenantId || this.tenantId, turnovers: read.turnovers, blocks: read.blocks });
+      snapshots.push({ kind: "guesty-lite", sourceId: "guesty-lite", tenantId: this.session?.tenantId || this.tenantId, turnovers: read.turnovers, blocks: read.blocks });
     }
     const normalized = normalizeSnapshots(snapshots);
     const stale = snapshots.some((snapshot) => this.isStale(snapshot.fetchedAt));
@@ -1131,10 +1175,10 @@ class Engine implements CleanerCore {
 
   private freshnessView(): SourceFreshness[] {
     const rows: SourceFreshness[] = [];
-    for (const [kind, snapshot] of this.latest) {
-      if (kind !== "notion") continue;
+    for (const snapshot of this.latest.values()) {
+      if (snapshot.kind !== "notion") continue;
       const fetchedAt = snapshot.fetchedAt ?? null;
-      rows.push({ kind, fetchedAt, stale: this.isStale(fetchedAt ?? undefined) });
+      rows.push({ kind: snapshot.kind, fetchedAt, stale: this.isStale(fetchedAt ?? undefined) });
     }
     return rows;
   }
@@ -1176,17 +1220,20 @@ class Engine implements CleanerCore {
     return result;
   }
 
-  private async applySnapshot(snapshot: SourceSnapshot, conversation: "closed" | "open"): Promise<PollResult> {
+  private async applySnapshots(snapshots: readonly SourceSnapshot[], conversation: "closed" | "open"): Promise<PollResult> {
     const started = Date.now();
-    this.latest.set(snapshot.kind, snapshot);
-    this.rememberSource(snapshot, "ok");
-    if (freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs) === "fresh") this.resolveKind("stale-source");
-    const normalized = normalizeSnapshots([...this.latest.values()]);
+    for (const snapshot of snapshots) {
+      this.latest.set(snapshot.sourceId, snapshot);
+      this.rememberSource(snapshot, "ok");
+    }
+    const freshness = snapshots.map((snapshot) => freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs));
+    if (freshness.length > 0 && freshness.every((status) => status === "fresh")) this.resolveKind("stale-source");
+    const normalized = normalizeSnapshots(this.orderedSnapshots());
     this.conflictState = normalized.conflicts;
     this.provenanceState = normalized.provenance;
     this.fallbackText = undefined;
     this.blockState = normalized.feed.blocks;
-    const preserveHostClock = this.watchFreshness && freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale";
+    const preserveHostClock = this.watchFreshness && freshness.includes("stale");
     this.reconcile(normalized.feed.turnovers, preserveHostClock);
     const settled = await this.settleUncertain();
     const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
@@ -1206,8 +1253,21 @@ class Engine implements CleanerCore {
     return result;
   }
 
-  private sourceNames(): BookingSourceKind[] {
-    return BOOKING_SOURCE_KINDS.filter((kind) => this.latest.has(kind));
+  private sourceNames(): string[] {
+    return this.orderedSnapshots().map((snapshot) => snapshot.sourceId);
+  }
+
+  /** Guesty Lite, then the saved calendar links in saved order, then Google, then Notion. */
+  private orderedSnapshots(): SourceSnapshot[] {
+    const rank = (snapshot: SourceSnapshot) => BOOKING_SOURCE_KINDS.indexOf(snapshot.kind);
+    const place = (snapshot: SourceSnapshot) => {
+      const index = this.sourceOrder.indexOf(snapshot.sourceId);
+      return index === -1 ? this.sourceOrder.length : index;
+    };
+    return [...this.latest.values()]
+      .map((snapshot, index) => ({ snapshot, index }))
+      .sort((a, b) => rank(a.snapshot) - rank(b.snapshot) || place(a.snapshot) - place(b.snapshot) || a.index - b.index)
+      .map((item) => item.snapshot);
   }
 
   private withSync(result: PollResult): PollResult & SyncState {
@@ -2560,6 +2620,10 @@ class Engine implements CleanerCore {
     for (const person of record.participantConsent ?? []) this.participantConsent.set(person.phone, person.consent);
     if (this.origin === "onboarding" && !this.activated) this.everConsented = false;
     this.sourceRecords = record.sourceRecords ?? [];
+    this.latest.clear();
+    for (const snapshot of Object.values(record.snapshots ?? {})) {
+      if (isSnapshot(snapshot)) this.latest.set(snapshot.sourceId, snapshot);
+    }
     this.reviewItems = record.reviews ?? [];
     this.auditLog = record.audit ?? [];
     this.counters = { ...emptyCounters(), ...record.counters };
@@ -2613,6 +2677,7 @@ class Engine implements CleanerCore {
         : {}),
       ...(this.options.sealPinAtRest !== false && this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
       ...(this.sourceRecords.length > 0 ? { sourceRecords: this.sourceRecords } : {}),
+      ...(this.latest.size > 0 ? { snapshots: Object.fromEntries(this.latest) } : {}),
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
@@ -2736,13 +2801,13 @@ class Engine implements CleanerCore {
       ...snapshot.blocks.map((block) => `block|${block.uid}|${block.summary}`),
     ];
     const record: SourceRecord = {
-      kind: snapshot.kind,
+      kind: snapshot.sourceId,
       fetchedAt: snapshot.fetchedAt ?? null,
       fingerprint: fingerprintOf(parts),
       freshness: freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs),
       interpretation,
     };
-    this.sourceRecords = [...this.sourceRecords.filter((item) => item.kind !== snapshot.kind), record];
+    this.sourceRecords = [...this.sourceRecords.filter((item) => item.kind !== snapshot.sourceId), record];
   }
 
   private sourceFeedStale(): boolean {
@@ -2945,6 +3010,21 @@ function foreignTenantId(slice: Stored): string {
   const phones = new Set(slice.outbox.map((item) => item.to));
   const match = SCRATCH_TENANTS.find((tenant) => [tenant.ownerPhone, tenant.cleanerPhone, tenant.unapprovedPhone].some((phone) => phones.has(phone)));
   return match?.id ?? "scratch-lane";
+}
+
+/** A saved snapshot is used only when it has the shape the engine wrote. */
+function isSnapshot(value: unknown): value is SourceSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as Partial<SourceSnapshot>;
+  return (
+    typeof snapshot.sourceId === "string" &&
+    snapshot.sourceId !== "" &&
+    typeof snapshot.kind === "string" &&
+    (BOOKING_SOURCE_KINDS as readonly string[]).includes(snapshot.kind) &&
+    typeof snapshot.tenantId === "string" &&
+    Array.isArray(snapshot.turnovers) &&
+    Array.isArray(snapshot.blocks)
+  );
 }
 
 function sliceForTenant(file: StoreFile, tenantId: string): Stored | undefined {

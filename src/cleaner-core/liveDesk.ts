@@ -8,7 +8,7 @@ import { FileRuntimeStore } from "../storage/runtimeStore";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
-import { formatWhen, interpretFeed, zonedInstant } from "./calendar";
+import { formatWhen, zonedInstant } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
@@ -18,7 +18,7 @@ import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 import { isScratchTestNumber } from "./scratch";
-import { googleCalendarSource, normalizeSnapshots, type GoogleEventList, type SourceSnapshot } from "./sources";
+import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
@@ -60,6 +60,10 @@ const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
 const ROUTINE_NEEDED = "Send the routine's https address and its key.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
+const DOOR_CODE_ASK = "What's the door code? I'll save it and I won't repeat it.";
+const MAX_CALENDARS = 8;
+/** The name a legacy single calendar link reads as. Its source id stays `guesty-lite`. */
+const LEGACY_CALENDAR = "Guesty Lite";
 
 interface PinSend {
   sid: string;
@@ -89,7 +93,10 @@ interface LiveFile {
   host?: string;
   cleaner?: string;
   observer?: string;
+  /** Legacy single link from save_calendar_link. It reads as one calendar named Guesty Lite. */
   calendarLink?: string;
+  /** Saved calendar links in dedupe order. Each one is the source `ical:<slug>`. */
+  calendars?: { name: string; url: string }[];
   google?: boolean;
   pinSeal?: PinSeal;
   pinSend?: PinSend;
@@ -111,9 +118,19 @@ interface LiveFile {
 }
 
 interface CalendarRead {
+  /** The legacy Guesty Lite link did not read. */
   guestyFailed: boolean;
+  /** Why the first failed link did not read. Never the URL. */
   reason?: string;
   googleUnread: boolean;
+  /** Names of the calendar links that were not applied. Never a URL. */
+  unread: string[];
+}
+
+interface SavedCalendar {
+  name: string;
+  url: string;
+  sourceId: string;
 }
 
 interface OutboxRow {
@@ -176,6 +193,32 @@ function choiceOf(said: string): "tours" | "cleaners" | undefined {
 
 function statedClock(text: string): boolean {
   return Boolean(spokenTimes(normalize(text))[0]?.meridiem);
+}
+
+/** Lowercase, each run of other characters as one dash, at most 32 characters, and unique. */
+function calendarSlug(name: string, used: Set<string>): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "calendar";
+  for (let count = 1; ; count++) {
+    const suffix = count === 1 ? "" : `-${count}`;
+    const slug = `${base.slice(0, 32 - suffix.length).replace(/-+$/, "")}${suffix}`;
+    if (used.has(slug)) continue;
+    used.add(slug);
+    return slug;
+  }
+}
+
+/** The saved calendar links with their source ids. A legacy single link reads as Guesty Lite. */
+function calendarsOf(file: LiveFile): SavedCalendar[] {
+  if (file.calendars && file.calendars.length > 0) {
+    const used = new Set<string>();
+    return file.calendars.map((calendar) => ({ name: calendar.name, url: calendar.url, sourceId: `ical:${calendarSlug(calendar.name, used)}` }));
+  }
+  if (file.calendarLink) return [{ name: LEGACY_CALENDAR, url: file.calendarLink, sourceId: "guesty-lite" }];
+  return [];
+}
+
+function hasSources(file: LiveFile): boolean {
+  return calendarsOf(file).length > 0 || file.google === true;
 }
 
 function propertyIdFor(business: string): string {
@@ -354,15 +397,44 @@ export class LiveDesk {
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
-    if (url) this.file.calendarLink = url;
+    if (url) {
+      this.file.calendarLink = url;
+      delete this.file.calendars;
+    }
     if (input.google) this.file.google = true;
     this.persist();
-    return this.reply({ next: "What's the door code? I'll save it and I won't repeat it." });
+    return this.reply({ next: DOOR_CODE_ASK });
+  }
+
+  /**
+   * Saves every booking source at once: the calendar links in the order given, and whether Google
+   * Calendar is used. It replaces what was saved before. A link that is not public https is refused,
+   * and the reply never repeats a link.
+   */
+  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean }): ToolReply {
+    if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    const calendars = (input.calendars ?? []).map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
+    const google = input.google === true;
+    if (calendars.length === 0 && !google) return this.fail("Send at least one calendar link, or say you use Google Calendar.");
+    if (calendars.length > MAX_CALENDARS) return this.fail(`I can keep up to ${MAX_CALENDARS} calendar links.`);
+    for (const calendar of calendars) {
+      if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
+      if (!calendarUrlAllowed(calendar.url)) {
+        return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
+      }
+    }
+    if (calendars.length > 0) this.file.calendars = calendars;
+    else delete this.file.calendars;
+    delete this.file.calendarLink;
+    if (google) this.file.google = true;
+    else delete this.file.google;
+    this.persist();
+    return this.reply({ next: DOOR_CODE_ASK });
   }
 
   saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
-    if (!this.file.calendarLink && !this.file.google && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
+    if (!hasSources(this.file) && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
     if (!pinKey) return this.fail(PIN_KEY_MISSING);
@@ -446,13 +518,15 @@ export class LiveDesk {
       alerts: fresh.map((note) => note.body),
       turns: this.turns(),
       ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
+      ...(read.unread.length > 0 ? { unread: read.unread } : {}),
+      // Kept for one release beside `unread`, for Grok setups that still read it.
       ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
       ...(read.googleUnread ? { googleUnread: true as const } : {}),
     });
   }
 
   private async runChecksNow(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
-    if (!this.file.texting || !(this.file.calendarLink || this.file.google) || !this.pin) return this.fail("Set up texting first.");
+    if (!this.file.texting || !hasSources(this.file) || !this.pin) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
     }
@@ -462,16 +536,17 @@ export class LiveDesk {
     this.checking = true;
     let read: CalendarRead;
     try {
-      read = await this.readCalendars(input.googleEvents, { skipGoogleOnGuestyFailure: true });
+      read = await this.readCalendars(input.googleEvents, { allOrNothing: true });
     } catch (err) {
       this.engine = before;
       throw err;
     } finally {
       this.checking = false;
     }
-    if (read.guestyFailed) {
+    if (read.reason) {
       this.engine = before;
-      return this.fail(read.reason ?? "I couldn't read that calendar.");
+      if (read.guestyFailed) return this.fail(read.reason);
+      return this.fail(`I couldn't read the calendar link for ${read.unread.join(", ")}. Each link has to be a public https address, and not a private network.`);
     }
     if (read.googleUnread) {
       this.engine = before;
@@ -493,24 +568,26 @@ export class LiveDesk {
   }
 
   /**
-   * Reads every saved booking source into the engine. Guesty Lite first, then Google. A failed
-   * Guesty read does not stop Google, unless the caller says so. An unread Google source is reported.
+   * Reads every saved booking source into the engine as one read: the calendar links in saved order,
+   * then Google. The engine saves each source's last snapshot, so after a restart a link that fails
+   * keeps its snapshot and its jobs. A link that fails is not applied, and is named in `unread`.
    *
-   * Each read is a full snapshot of its source, and the engine calls off a job that no loaded source
-   * lists. Its loaded sources live in memory only, so after a restart a read of one source alone would
-   * call off the other source's jobs. So with both sources saved, a source is applied alone only when
-   * the engine already holds the other one, and the first read of both is applied as one.
+   * A saved source the engine holds no snapshot of (never read, or saved before snapshots were kept)
+   * and that is not read now would make the others look like they removed its stays, so then nothing
+   * is applied. With `allOrNothing` (run_checks), any failed link applies nothing.
    */
-  private async readCalendars(googleEvents?: GoogleEventList, options: { skipGoogleOnGuestyFailure?: boolean } = {}): Promise<CalendarRead> {
+  private async readCalendars(googleEvents?: GoogleEventList, options: { allOrNothing?: boolean } = {}): Promise<CalendarRead> {
     const engine = this.engine;
     const file = this.file;
-    if (!engine) throw new Error("Setup is incomplete.");
-    const loaded = new Set(engine.lastSync().sources);
+    const tenantId = file.propertyId;
+    if (!engine || !tenantId) throw new Error("Setup is incomplete.");
+    const calendars = calendarsOf(file);
+    const held = new Set(engine.keepSources([...calendars.map((calendar) => calendar.sourceId), ...(file.google ? ["google-calendar"] : [])]));
     let googleUnread = false;
     let google: SourceSnapshot | undefined;
     // Google events count only when the host saved Google as a source.
-    if (googleEvents && file.google && file.propertyId) {
-      google = await googleCalendarSource(googleEvents, file.propertyId).read();
+    if (googleEvents && file.google) {
+      google = await googleCalendarSource(googleEvents, tenantId).read();
       // Events that are there but none of which reads as a stay or a block are a shape this reader
       // doesn't know. Applying them would remove every Google stay, so the read counts as unread.
       if (googleEvents.items.length > 0 && google.turnovers.length === 0 && google.blocks.length === 0) {
@@ -518,33 +595,34 @@ export class LiveDesk {
         googleUnread = true;
       }
     }
-    let guestyFailed = false;
-    let reason: string | undefined;
-    let guesty: string | undefined;
-    const googleMissing = Boolean(file.google) && !google && !loaded.has("google-calendar");
-    if (file.calendarLink && !googleMissing) {
-      const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
-      if (read.ok) guesty = read.body;
-      else {
-        guestyFailed = true;
-        reason = read.reason;
-      }
+    if (file.google && !google && !held.has("google-calendar")) return { guestyFailed: false, googleUnread, unread: [] };
+    const reads = await Promise.all(calendars.map(async (calendar) => ({ calendar, read: await readPublicCalendar(calendar.url, calendarFetch ?? fetch) })));
+    const failed = reads.flatMap(({ calendar, read }) => (read.ok ? [] : [{ calendar, reason: read.reason }]));
+    const result: CalendarRead = {
+      guestyFailed: failed.some((item) => item.calendar.sourceId === "guesty-lite"),
+      ...(failed[0] ? { reason: failed[0].reason } : {}),
+      googleUnread,
+      unread: failed.map((item) => item.calendar.name),
+    };
+    if (failed.length > 0 && (options.allOrNothing || failed.some((item) => !held.has(item.calendar.sourceId)))) return result;
+    const sources: BookingSource[] = [];
+    const applied: string[] = [];
+    for (const { calendar, read } of reads) {
+      if (!read.ok) continue;
+      sources.push(calendar.sourceId === "guesty-lite" ? guestyLiteSource(read.body, tenantId) : icalSource(read.body, tenantId, calendar.sourceId));
+      applied.push(calendar.name);
     }
-    const guestyMissing = Boolean(file.calendarLink) && guesty === undefined && !loaded.has("guesty-lite");
-    if (guesty !== undefined && google && (!loaded.has("guesty-lite") || !loaded.has("google-calendar"))) {
-      // The first read of both sources: apply them together once, so neither one's jobs look removed.
-      const feed = interpretFeed(guesty);
-      const both = normalizeSnapshots([{ kind: "guesty-lite", tenantId: google.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, google]).feed;
-      const merged: SourceSnapshot = { kind: "google-calendar", tenantId: google.tenantId, turnovers: both.turnovers, blocks: both.blocks };
-      await engine.readSource({ kind: "google-calendar", read: async () => merged });
-    }
-    if (guesty !== undefined) await engine.pollFeed(guesty);
-    if (google && !(guestyFailed && (options.skipGoogleOnGuestyFailure || guestyMissing))) {
+    if (google) {
       const snapshot = google;
-      const applied = await engine.readSource({ kind: "google-calendar", read: async () => snapshot });
-      googleUnread = !applied.polled;
+      sources.push({ kind: "google-calendar", read: async () => snapshot });
     }
-    return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
+    if (sources.length === 0) return result;
+    const polled = (await engine.readSources(sources)).polled;
+    if (!polled) {
+      result.unread.push(...applied);
+      if (google) result.googleUnread = true;
+    }
+    return result;
   }
 
   /**
@@ -896,7 +974,9 @@ export class LiveDesk {
     const done: string[] = [];
     if (this.file.address) done.push("Property saved.");
     if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
-    if (this.file.calendarLink) done.push("Calendar link saved.");
+    const calendars = calendarsOf(this.file).length;
+    if (calendars === 1) done.push("Calendar link saved.");
+    if (calendars > 1) done.push(`${calendars} calendar links saved.`);
     if (this.file.google) done.push("Google Calendar saved.");
     if (this.pin) done.push("Door code saved.");
     if (this.file.texting) done.push("Texting saved.");
@@ -907,8 +987,8 @@ export class LiveDesk {
     let next = "What's the property address, and what should I call the business?";
     if (!this.file.address) next = "What's the property address, and what should I call the business?";
     else if (!this.file.cleaner) next = PEOPLE_ASK;
-    else if (!this.file.calendarLink && !this.file.google) next = CALENDAR_ASK;
-    else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
+    else if (!hasSources(this.file)) next = CALENDAR_ASK;
+    else if (!this.pin) next = DOOR_CODE_ASK;
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
