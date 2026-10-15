@@ -112,6 +112,12 @@ const SCRATCH_TOOL_LIST = [
     description: scratchCopy("report_delivery").description,
     input: z.object({ which: z.string(), status: z.enum(DELIVERY_REPORTS) }),
   },
+  {
+    name: "add_test_turn",
+    title: scratchCopy("add_test_turn").title,
+    description: scratchCopy("add_test_turn").description,
+    input: z.object({ checkout: z.string(), checkIn: z.string() }),
+  },
 ] as const;
 
 type ToolName = (typeof TOOLS)[number]["name"] | (typeof SCRATCH_TOOL_LIST)[number]["name"];
@@ -218,6 +224,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.sendTestText(args as { from?: string; text?: string });
     case "report_delivery":
       return desk.reportDelivery(args as { which?: string; status?: string });
+    case "add_test_turn":
+      return desk.addTestTurn(args as { checkout?: string; checkIn?: string });
   }
 }
 

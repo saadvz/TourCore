@@ -144,6 +144,7 @@ describe("Scratch test tools", () => {
       "read_outbox",
       "send_test_text",
       "report_delivery",
+      "add_test_turn",
     ]);
     expect(listed.raw).toContain("Clears Scratch jobs, notes, and test texts. The door code and texting setup stay. It only works on the Scratch test property.");
     expect(listed.raw).toContain("Lists test texts that came in, in everyday words. It never includes a door code.");
@@ -365,6 +366,7 @@ describe("Scratch test tools", () => {
     expect(listed.names).not.toContain("read_outbox");
     expect(listed.names).not.toContain("send_test_text");
     expect(listed.names).not.toContain("report_delivery");
+    expect(listed.names).not.toContain("add_test_turn");
     const refused = await call(wired, "reset_scratch");
     expect(refused.isError).toBe(true);
     expect(refused.text).toBe("I can't do that from this chat.");
