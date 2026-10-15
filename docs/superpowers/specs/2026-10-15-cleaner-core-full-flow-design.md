@@ -221,3 +221,19 @@ This replaces the "Cleaner replies" point in the Grok-first revision.
   - It is capped at 600 characters and 10 messages an hour.
   - It is recorded in the message history.
   - Quiet hours don't hold it, because the host chose to send it now.
+
+## Demo script: the full diagram (Scratch rehearsal)
+
+This extends the Scratch rehearsal in `2026-10-15-cleaner-core-grok-demo-design.md` to the whole diagram. The test `"diagram rehearsal"` in `test/cleanerFullSetup.test.ts` runs it on 12 Scratch Lane with 555 numbers, a made-up door code, and group chat set to `cleaner-and-host`.
+
+1. Grok connects to `/mcp/cleaner-core` with one Allow.
+2. Setup: property with the usual 11:00 AM checkout and 4:00 PM check-in, Google Calendar, the people, the schedule (first text 1 day after check-in, reminder 1 day before checkout at 6:00 PM), the door code with the lock location, and the preferences. Grok reviews the setup, and the host replies Activate.
+3. Grok saves the alert routine.
+4. A stay appears in Google. The alert names the usual times, and the host says yes. The cleaner gets the group invite.
+5. The cleaner replies YES to the invite. The offer waits until 9:00 AM the day after check-in. The cleaner replies YES to the offer.
+6. The reminder asks "What time do you plan to arrive?" The cleaner answers "around 11:30". Grok reads it, saves the arrival time, and offers the host a reply. The host approves "Parking is on the street today.", and it reaches the cleaner once.
+7. At checkout time, Grok asks the host whether the guests have left. The host says they have. The door code and the lock location go to the cleaner in a private text, then the checklist.
+8. The cleaner sends one photo, the note "need paper towels", and DONE.
+9. `check_now` returns the finished cleaning. Grok gets the photo link with `get_job_photos` and writes the summary.
+
+After every step, every text goes to a Scratch number, and the door code is in no saved file, reply, or log.
