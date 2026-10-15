@@ -1,0 +1,2 @@
+typecheck exit 1
+evidence: /workspace/.cursor/skills/verify-cleanercore/ci-gate-evidence/broken-typecheck
