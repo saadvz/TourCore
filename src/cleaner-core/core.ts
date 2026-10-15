@@ -231,6 +231,8 @@ export interface ReminderTrigger {
   kind: "morning-of" | "days-before-checkout";
   localTime: string;
   days?: number;
+  /** Trigger ids whose reminder, once sent for the same checkout, counts as this one. */
+  replaces?: string[];
 }
 
 /**
@@ -281,8 +283,11 @@ export interface CleanerCoreOptions {
     capable: boolean;
     participants: { phone: string; role: "owner" | "manager" | "observer" | "cleaner"; approved?: boolean }[];
   };
-  /** Local quiet window. Overnight windows wrap. Reminders wait. The door code does not. */
-  quietHours?: { from: string; until: string };
+  /**
+   * Local quiet window. Overnight windows wrap. Reminders wait. The door code does not.
+   * null means none, and a window stored by an earlier run is ignored. Unset keeps a stored window.
+   */
+  quietHours?: { from: string; until: string } | null;
   /** This tenant was created by onboarding and must not see Lane or Court phones. */
   isolate?: boolean;
   /** Set when publishing an onboarded tenant. */
@@ -663,7 +668,7 @@ class Engine implements CleanerCore {
     this.file = options.dataDir ? join(options.dataDir, "cleaner-core.json") : undefined;
     this.tenantId = options.tenantId?.trim() || options.property.id;
     this.messaging = options.messaging;
-    this.quiet = options.quietHours;
+    this.quiet = options.quietHours ?? undefined;
     this.isolate = options.isolate === true;
     this.origin = options.origin;
     this.thresholdMs = staleAfterMs(process.env, options.staleAfterMs);
@@ -823,6 +828,8 @@ class Engine implements CleanerCore {
         this.cancelOtherReminders(job.id, trigger.id, id);
         const existing = this.outboxState.find((item) => item.id === id);
         if (existing?.status === "sent" || existing?.status === "canceled") continue;
+        const replaced = (trigger.replaces ?? []).some((other) => this.delivery(`reminder:${job.id}:${other}:${job.checkoutDate}:${fact.version}:${fact.minutes}`) === "sent");
+        if (replaced) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
         const addressed = addressCleaner(this.cleanerRecord(), {
           kind: "reminder",
@@ -2772,8 +2779,8 @@ class Engine implements CleanerCore {
     if (record.origin === "onboarding") this.origin = "onboarding";
     if (record.activated === true) this.activated = true;
     if (record.isolate === true) this.isolate = true;
-    // Quiet hours passed in by the caller are the saved setting. A stored window counts only when none are.
-    if (record.quietFrom && record.quietUntil && !this.options.quietHours) this.quiet = { from: record.quietFrom, until: record.quietUntil };
+    // Quiet hours passed in by the caller (a window, or null for none) are the saved setting. A stored window counts only when none are passed.
+    if (record.quietFrom && record.quietUntil && this.options.quietHours === undefined) this.quiet = { from: record.quietFrom, until: record.quietUntil };
     for (const person of record.participantConsent ?? []) this.participantConsent.set(person.phone, person.consent);
     if (this.origin === "onboarding" && !this.activated) this.everConsented = false;
     this.sourceRecords = record.sourceRecords ?? [];
