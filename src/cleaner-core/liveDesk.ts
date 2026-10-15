@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
@@ -9,7 +9,7 @@ import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { formatWhen, zonedInstant } from "./calendar";
-import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
+import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -80,6 +80,8 @@ export interface ToolOk {
 export interface ToolNo {
   ok: false;
   error: string;
+  /** Details for Grok beside the refusal, such as the cleanings a save would call off. */
+  result?: Record<string, unknown>;
 }
 
 export type ToolReply = ToolOk | ToolNo;
@@ -95,7 +97,7 @@ interface LiveFile {
   observer?: string;
   /** Legacy single link from save_calendar_link. It reads as one calendar named Guesty Lite. */
   calendarLink?: string;
-  /** Saved calendar links in dedupe order. Each one is the source `ical:<slug>`. */
+  /** Saved calendar links in dedupe order, after the legacy link. Each one is the source `ical:<slug>`. */
   calendars?: { name: string; url: string }[];
   google?: boolean;
   pinSeal?: PinSeal;
@@ -131,6 +133,8 @@ interface SavedCalendar {
   name: string;
   url: string;
   sourceId: string;
+  /** A hash of the link, so a held snapshot follows the link and not the name. */
+  origin: string;
 }
 
 interface OutboxRow {
@@ -207,18 +211,35 @@ function calendarSlug(name: string, used: Set<string>): string {
   }
 }
 
-/** The saved calendar links with their source ids. A legacy single link reads as Guesty Lite. */
+function originOf(url: string): string {
+  return createHash("sha256").update(url).digest("hex").slice(0, 16);
+}
+
+/** The saved calendar links with their source ids. A legacy single link reads as Guesty Lite and comes first. */
 function calendarsOf(file: LiveFile): SavedCalendar[] {
-  if (file.calendars && file.calendars.length > 0) {
-    const used = new Set<string>();
-    return file.calendars.map((calendar) => ({ name: calendar.name, url: calendar.url, sourceId: `ical:${calendarSlug(calendar.name, used)}` }));
-  }
-  if (file.calendarLink) return [{ name: LEGACY_CALENDAR, url: file.calendarLink, sourceId: "guesty-lite" }];
-  return [];
+  const used = new Set<string>();
+  const legacy = file.calendarLink ? [{ name: LEGACY_CALENDAR, url: file.calendarLink, sourceId: "guesty-lite", origin: originOf(file.calendarLink) }] : [];
+  const named = (file.calendars ?? []).map((calendar) => ({
+    name: calendar.name,
+    url: calendar.url,
+    sourceId: `ical:${calendarSlug(calendar.name, used)}`,
+    origin: originOf(calendar.url),
+  }));
+  return [...legacy, ...named];
+}
+
+/** Every saved source in dedupe order, as the engine holds them. */
+function claimsOf(file: LiveFile): SourceClaim[] {
+  return [...calendarsOf(file).map((calendar) => ({ id: calendar.sourceId, origin: calendar.origin })), ...(file.google ? [{ id: "google-calendar" }] : [])];
 }
 
 function hasSources(file: LiveFile): boolean {
   return calendarsOf(file).length > 0 || file.google === true;
+}
+
+/** Stamps a read with the hash of the link it came from. */
+function fromLink(source: BookingSource, origin: string): BookingSource {
+  return { kind: source.kind, read: async () => ({ ...(await source.read()), origin }) };
 }
 
 function propertyIdFor(business: string): string {
@@ -397,37 +418,48 @@ export class LiveDesk {
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
-    if (url) {
-      this.file.calendarLink = url;
-      delete this.file.calendars;
-    }
+    // Replaces only the Guesty Lite link. Every other saved calendar stays.
+    if (url) this.file.calendarLink = url;
     if (input.google) this.file.google = true;
     this.persist();
     return this.reply({ next: DOOR_CODE_ASK });
   }
 
   /**
-   * Saves every booking source at once: the calendar links in the order given, and whether Google
-   * Calendar is used. It replaces what was saved before. A link that is not public https is refused,
-   * and the reply never repeats a link.
+   * Saves the booking sources: the calendar links in the order given, and whether Google Calendar is
+   * used. A calendars list replaces every saved link, the legacy one too. Leaving calendars or google
+   * out keeps what was saved. A link that is not public https is refused, and the reply never repeats
+   * a link. When the change would call off an upcoming cleaning that only a dropped source lists, it
+   * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
    */
-  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean }): ToolReply {
+  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
-    const calendars = (input.calendars ?? []).map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
-    const google = input.google === true;
-    if (calendars.length === 0 && !google) return this.fail("Send at least one calendar link, or say you use Google Calendar.");
-    if (calendars.length > MAX_CALENDARS) return this.fail(`I can keep up to ${MAX_CALENDARS} calendar links.`);
-    for (const calendar of calendars) {
-      if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
-      if (!calendarUrlAllowed(calendar.url)) {
-        return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
+    const next: LiveFile = { ...this.file };
+    if (input.calendars !== undefined) {
+      const calendars = input.calendars.map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
+      if (calendars.length > MAX_CALENDARS) return this.fail(`I can keep up to ${MAX_CALENDARS} calendar links.`);
+      for (const calendar of calendars) {
+        if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
+        if (!calendarUrlAllowed(calendar.url)) {
+          return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
+        }
+      }
+      if (calendars.length > 0) next.calendars = calendars;
+      else delete next.calendars;
+      delete next.calendarLink;
+    }
+    if (input.google === true) next.google = true;
+    if (input.google === false) delete next.google;
+    if (!hasSources(next)) return this.fail("Send at least one calendar link, or say you use Google Calendar.");
+    if (input.dropJobs !== true) {
+      this.resume();
+      const lost = this.engine?.wouldCancel(claimsOf(next)) ?? [];
+      if (lost.length > 0) {
+        const count = `${lost.length} upcoming ${lost.length === 1 ? "cleaning" : "cleanings"}`;
+        return this.failWith(`Removing that calendar would call off ${count}. Ask the host, then save again with dropJobs: true.`, { wouldCancel: lost });
       }
     }
-    if (calendars.length > 0) this.file.calendars = calendars;
-    else delete this.file.calendars;
-    delete this.file.calendarLink;
-    if (google) this.file.google = true;
-    else delete this.file.google;
+    this.file = next;
     this.persist();
     return this.reply({ next: DOOR_CODE_ASK });
   }
@@ -582,7 +614,7 @@ export class LiveDesk {
     const tenantId = file.propertyId;
     if (!engine || !tenantId) throw new Error("Setup is incomplete.");
     const calendars = calendarsOf(file);
-    const held = new Set(engine.keepSources([...calendars.map((calendar) => calendar.sourceId), ...(file.google ? ["google-calendar"] : [])]));
+    const held = new Set(engine.keepSources(claimsOf(file)));
     let googleUnread = false;
     let google: SourceSnapshot | undefined;
     // Google events count only when the host saved Google as a source.
@@ -609,7 +641,8 @@ export class LiveDesk {
     const applied: string[] = [];
     for (const { calendar, read } of reads) {
       if (!read.ok) continue;
-      sources.push(calendar.sourceId === "guesty-lite" ? guestyLiteSource(read.body, tenantId) : icalSource(read.body, tenantId, calendar.sourceId));
+      const source = calendar.sourceId === "guesty-lite" ? guestyLiteSource(read.body, tenantId) : icalSource(read.body, tenantId, calendar.sourceId);
+      sources.push(fromLink(source, calendar.origin));
       applied.push(calendar.name);
     }
     if (google) {
@@ -1203,6 +1236,11 @@ export class LiveDesk {
   private fail(error: string): ToolReply {
     if (this.leaks(error)) return { ok: false, error: "That didn't work. Try again." };
     return { ok: false, error };
+  }
+
+  private failWith(error: string, result: Record<string, unknown>): ToolReply {
+    if (this.leaks(error) || this.leaks(JSON.stringify(result))) return { ok: false, error: "That didn't work. Try again." };
+    return { ok: false, error, result };
   }
 
   private load(): void {

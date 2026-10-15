@@ -18,6 +18,7 @@ import {
   type BookingSource,
   type BookingSourceKind,
   type JobProvenance,
+  type NormalizedSources,
   type SourceConflict,
   type SourceSnapshot,
 } from "./sources";
@@ -148,6 +149,12 @@ export interface SourceFreshness {
   kind: BookingSourceKind;
   fetchedAt: string | null;
   stale: boolean;
+}
+
+/** A saved source: its id and, for a calendar link, a hash of the link it reads. Never the link. */
+export interface SourceClaim {
+  id: string;
+  origin?: string;
 }
 
 export interface SyncState {
@@ -322,10 +329,13 @@ export interface CleanerCore {
   beginOnboarding(): SetupView;
   attachPreview(kind: "guesty-lite" | "notion", body: string): void;
   /**
-   * The saved sources, in dedupe order. A held snapshot of any other source is forgotten, so its
-   * stays leave the next read. Returns the ids the engine holds a snapshot for. Sends nothing.
+   * The saved sources, in dedupe order. Each one keeps the held snapshot read from the same link
+   * (by origin), even when its name or place changed. A held snapshot no saved source claims is
+   * forgotten, so its stays leave the next read. Returns the ids it holds a snapshot for. Sends nothing.
    */
-  keepSources(order: readonly string[]): string[];
+  keepSources(saved: readonly SourceClaim[]): string[];
+  /** Upcoming open jobs the next read would call off if only these sources were saved. Changes nothing. */
+  wouldCancel(saved: readonly SourceClaim[]): { checkoutDate: string }[];
   answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult>;
   setupView(): SetupView | undefined;
   messagingView(): MessagingView | undefined;
@@ -867,15 +877,45 @@ class Engine implements CleanerCore {
     this.previewFeeds.push({ kind, body });
   }
 
-  keepSources(order: readonly string[]): string[] {
-    this.sourceOrder = [...order];
-    const dropped = [...this.latest.keys()].filter((id) => !order.includes(id));
-    if (dropped.length > 0) {
-      for (const id of dropped) this.latest.delete(id);
+  keepSources(saved: readonly SourceClaim[]): string[] {
+    this.sourceOrder = saved.map((source) => source.id);
+    const next = this.claimSnapshots(saved);
+    const changed = next.size !== this.latest.size || [...next].some(([id, snapshot]) => this.latest.get(id) !== snapshot);
+    if (changed) {
+      const dropped = [...this.latest.keys()].filter((id) => !next.has(id));
+      this.latest.clear();
+      for (const [id, snapshot] of next) this.latest.set(id, snapshot);
       this.sourceRecords = this.sourceRecords.filter((record) => !dropped.includes(record.kind));
       this.save();
     }
     return this.sourceNames();
+  }
+
+  wouldCancel(saved: readonly SourceClaim[]): { checkoutDate: string }[] {
+    const now = normalizeSnapshots(this.orderedSnapshots());
+    const next = normalizeSnapshots(this.orderedSnapshots(this.claimSnapshots(saved), saved.map((source) => source.id)));
+    return this.jobsState
+      .filter((job) => !job.canceled && !job.done && !job.started && !this.pinDelivered(job) && !this.beforeToday(job.checkoutDate))
+      .filter((job) => listsJob(now, job) && !listsJob(next, job))
+      .map((job) => ({ checkoutDate: job.checkoutDate }))
+      .sort((a, b) => a.checkoutDate.localeCompare(b.checkoutDate));
+  }
+
+  /** Each saved source keeps its own held snapshot when it reads the same link, or else the one read from that link. */
+  private claimSnapshots(saved: readonly SourceClaim[]): Map<string, SourceSnapshot> {
+    const next = new Map<string, SourceSnapshot>();
+    for (const source of saved) {
+      const own = this.latest.get(source.id);
+      const claimed =
+        source.origin === undefined
+          ? own
+          : own?.origin === source.origin
+            ? own
+            : [...this.latest.values()].find((snapshot) => snapshot.origin === source.origin);
+      if (!claimed) continue;
+      next.set(source.id, claimed.sourceId === source.id ? claimed : { ...claimed, sourceId: source.id });
+    }
+    return next;
   }
 
   async answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult> {
@@ -1234,7 +1274,8 @@ class Engine implements CleanerCore {
     this.fallbackText = undefined;
     this.blockState = normalized.feed.blocks;
     const preserveHostClock = this.watchFreshness && freshness.includes("stale");
-    this.reconcile(normalized.feed.turnovers, preserveHostClock);
+    const kept = this.keepJobIds(normalized.feed.turnovers, normalized.provenance);
+    this.reconcile(kept.turnovers, preserveHostClock, kept.moved);
     const settled = await this.settleUncertain();
     const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
     sent.unshift(...settled);
@@ -1258,13 +1299,13 @@ class Engine implements CleanerCore {
   }
 
   /** Guesty Lite, then the saved calendar links in saved order, then Google, then Notion. */
-  private orderedSnapshots(): SourceSnapshot[] {
+  private orderedSnapshots(held: ReadonlyMap<string, SourceSnapshot> = this.latest, order: readonly string[] = this.sourceOrder): SourceSnapshot[] {
     const rank = (snapshot: SourceSnapshot) => BOOKING_SOURCE_KINDS.indexOf(snapshot.kind);
     const place = (snapshot: SourceSnapshot) => {
-      const index = this.sourceOrder.indexOf(snapshot.sourceId);
-      return index === -1 ? this.sourceOrder.length : index;
+      const index = order.indexOf(snapshot.sourceId);
+      return index === -1 ? order.length : index;
     };
-    return [...this.latest.values()]
+    return [...held.values()]
       .map((snapshot, index) => ({ snapshot, index }))
       .sort((a, b) => rank(a.snapshot) - rank(b.snapshot) || place(a.snapshot) - place(b.snapshot) || a.index - b.index)
       .map((item) => item.snapshot);
@@ -1556,7 +1597,41 @@ class Engine implements CleanerCore {
     return sent;
   }
 
-  private reconcile(turnovers: Turnover[], preserveHostClock = false): void {
+  /**
+   * A stay read under another source's UID keeps the job it already has, so the host's times and the
+   * cleaner's YES stay and nobody gets a cancel and a new offer. That happens when calendars are
+   * reordered or a duplicate calendar is removed. A job matches when one of the merged stay's source
+   * UIDs is its id, or else when it has the same checkout day. A called-off job is never taken over.
+   */
+  private keepJobIds(turnovers: Turnover[], provenance: JobProvenance[]): { turnovers: Turnover[]; moved: Set<string> } {
+    const ids = new Set(turnovers.map((turnover) => turnover.id));
+    const claimed = new Set(this.jobsState.filter((job) => ids.has(job.id)).map((job) => job.id));
+    const rename = new Map<string, string>();
+    for (const turnover of turnovers) {
+      if (claimed.has(turnover.id)) continue;
+      const uids = provenance.find((item) => item.jobId === turnover.id)?.sources.map((source) => source.uid) ?? [];
+      const open = this.jobsState.filter((job) => !job.canceled && !claimed.has(job.id));
+      const match = open.find((job) => uids.includes(job.id)) ?? open.find((job) => job.checkoutDate === turnover.checkoutDate);
+      if (!match) continue;
+      claimed.add(match.id);
+      rename.set(turnover.id, match.id);
+    }
+    if (rename.size === 0) return { turnovers, moved: new Set() };
+    const mapped = turnovers.map((turnover) => {
+      const id = rename.get(turnover.id) ?? turnover.id;
+      const arrivingUid = turnover.arrivingUid === null ? null : (rename.get(turnover.arrivingUid) ?? turnover.arrivingUid);
+      return {
+        ...turnover,
+        id,
+        departingUid: id === turnover.id ? turnover.departingUid : id,
+        arrivingUid,
+        contentHash: `${turnover.checkoutDate}|${turnover.nextCheckInDate ?? ""}|${arrivingUid ?? ""}`,
+      };
+    });
+    return { turnovers: mapped, moved: new Set(rename.values()) };
+  }
+
+  private reconcile(turnovers: Turnover[], preserveHostClock = false, moved: ReadonlySet<string> = new Set()): void {
     const seen = new Set<string>();
     for (const turnover of turnovers) {
       seen.add(turnover.id);
@@ -1583,7 +1658,8 @@ class Engine implements CleanerCore {
         continue;
       }
       if (existing.canceled && turnover.contentHash === existing.contentHash) continue;
-      if (turnover.sequence < existing.sourceSequence) continue;
+      // Sequence numbers from different sources don't compare, so a stay taken over from another UID skips this.
+      if (!moved.has(existing.id) && turnover.sequence < existing.sourceSequence) continue;
       if (preserveHostClock && this.latestFact(existing.id, "checkout")) {
         existing.sourceSequence = Math.max(existing.sourceSequence, turnover.sequence);
         continue;
@@ -3010,6 +3086,12 @@ function foreignTenantId(slice: Stored): string {
   const phones = new Set(slice.outbox.map((item) => item.to));
   const match = SCRATCH_TENANTS.find((tenant) => [tenant.ownerPhone, tenant.cleanerPhone, tenant.unapprovedPhone].some((phone) => phones.has(phone)));
   return match?.id ?? "scratch-lane";
+}
+
+/** The read lists this job: its id is a stay or a merged source UID, or a stay checks out that day. */
+function listsJob(normalized: NormalizedSources, job: Job): boolean {
+  if (normalized.feed.turnovers.some((turnover) => turnover.id === job.id || turnover.checkoutDate === job.checkoutDate)) return true;
+  return normalized.provenance.some((item) => item.sources.some((source) => source.uid === job.id));
 }
 
 /** A saved snapshot is used only when it has the shape the engine wrote. */

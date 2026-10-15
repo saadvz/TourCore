@@ -37,10 +37,11 @@ const TOOLS = [
     name: "save_sources",
     title: "Save the booking calendars",
     description:
-      "Saves every place bookings come from, replacing what was saved before. Pass each calendar link as a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8, and google true when the host also uses Google Calendar. The reply never repeats a link.",
+      "Saves where bookings come from. calendars replaces every saved link: each is a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8. Pass google true or false only to change Google Calendar; leaving it out keeps it. If the change would call off an upcoming cleaning, it is refused with wouldCancel: ask the host, then save again with dropJobs true. The reply never repeats a link.",
     input: z.object({
       calendars: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
       google: z.boolean().optional(),
+      dropJobs: z.boolean().optional(),
     }),
   },
   {
@@ -210,8 +211,8 @@ export async function handleCleanerMcpMessage(
       reply = { ok: false, error: "That didn't work. Try again." };
     }
     if (!reply.ok) {
-      if (desk.leaks(reply.error)) reply = { ok: false, error: "That didn't work. Try again." };
-      return rpcResult(id, { content: [{ type: "text", text: reply.error }], isError: true });
+      if (desk.leaks(reply.error) || (reply.result && desk.leaks(JSON.stringify(reply.result)))) reply = { ok: false, error: "That didn't work. Try again." };
+      return rpcResult(id, { content: [{ type: "text", text: reply.error }], ...(reply.result ? { structuredContent: reply.result } : {}), isError: true });
     }
     const text = JSON.stringify(reply.result);
     if (desk.leaks(text)) return rpcResult(id, { content: [{ type: "text", text: "That didn't work. Try again." }], isError: true });
@@ -244,7 +245,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url?: string; google?: boolean });
     case "save_sources":
-      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean });
+      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean });
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string }, pinKey);
     case "set_up_texting":
