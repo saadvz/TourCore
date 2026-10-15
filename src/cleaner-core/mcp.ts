@@ -141,6 +141,12 @@ const TOOLS = [
     input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
+    name: "save_arrival",
+    title: "Save the arrival time",
+    description: "Saves the cleaner's arrival time after you read it in their message. Use AM or PM.",
+    input: z.object({ time: z.string() }),
+  },
+  {
     name: "save_alert_routine",
     title: "Connect alerts",
     description: "Saves the alert routine's webhook address and token from the secure card. The reply never repeats them.",
@@ -236,6 +242,7 @@ export async function handleCleanerMcpMessage(
         "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it. Post each alert in your own short words. Collect secrets only with your secure card.",
         "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
+        "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
       ].join(" "),
     });
   }
@@ -327,6 +334,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.runChecks(args as { googleEvents?: GoogleEventList });
     case "check_now":
       return desk.checkNow(args as { googleEvents?: GoogleEventList });
+    case "save_arrival":
+      return desk.saveArrival(args as { time?: string });
     case "save_alert_routine":
       if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
       return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);

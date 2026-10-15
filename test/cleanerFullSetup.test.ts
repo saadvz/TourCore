@@ -1,13 +1,16 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupTimeLine } from "../src/cleaner-core/cleanerTexts";
+import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
+import { OperatorEventOutbox } from "../src/alerts/outbox";
+import { cleanerOptOutHold, groupTimeLine } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
-import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
+import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import {
   ADDRESS,
   BUSINESS,
@@ -53,6 +56,7 @@ afterEach(async () => {
   setCleanerTwilioClient(undefined);
   setCleanerGroupFetch(undefined);
   setCleanerCalendarFetch(undefined);
+  setCleanerAlertFetch(undefined);
   resetLiveDesks();
   while (open.length > 0) await open.pop()?.close();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -376,7 +380,7 @@ function groupFetch() {
   return { impl, posts, calls: () => calls };
 }
 
-function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () => new Date(FROZEN)) {
+function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () => new Date(FROZEN), extraEnv: NodeJS.ProcessEnv = {}) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-full-setup-"));
   roots.push(root);
   const sms = fakeSms();
@@ -398,9 +402,10 @@ function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () =
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    ...extraEnv,
   };
   const desk = liveDeskFor(root, () => env, now);
-  return { desk, sms, groups };
+  return { desk, sms, groups, root };
 }
 
 function ok(reply: ToolReply): Record<string, unknown> {
@@ -766,5 +771,180 @@ describe("Cleaner Core schedule: save_schedule", () => {
     expect(desk.saveSchedule({ firstText: "never" as never }).ok).toBe(false);
     expect(ok(desk.getState()).next).toBe(SCHEDULE_NEXT);
     expect(ok(desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "7:30 AM" })).next).toBe(PREFERENCES_NEXT);
+  });
+});
+
+interface Message {
+  id: string;
+  from: string;
+  name: string;
+  text: string;
+  at: string;
+  handled: string;
+}
+
+async function messagesNow(desk: LiveDesk): Promise<Message[]> {
+  return (ok(await desk.checkNow()).messages as Message[] | undefined) ?? [];
+}
+
+function brief(messages: Message[]): { from: string; name: string; text: string; handled: string }[] {
+  return messages.map(({ from, name, text, handled }) => ({ from, name, text, handled }));
+}
+
+function wakes(root: string) {
+  const outbox = new OperatorEventOutbox(new FileRuntimeStore(join(root, "cleaner-alerts")), () => new NoopOperatorNotificationSink());
+  return outbox.records().filter((record) => record.event.eventType === "cleaning.update");
+}
+
+async function mcp(desk: LiveDesk, method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const reply = await handleCleanerMcpMessage(desk, { jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }, PIN_KEY);
+  return (reply.body as { result: Record<string, unknown> }).result;
+}
+
+/** Cleaner-only Lake House with the cleaner opted in and the offer taken. */
+async function confirmedCleaner(extraEnv: NodeJS.ProcessEnv = {}) {
+  const opened = openDesk([HOST, CLEANER], "0", () => new Date(FROZEN), extraEnv);
+  await setUp(opened.desk, { groupChat: "cleaner-only" });
+  await opened.desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+  await opened.desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+  return opened;
+}
+
+const ARRIVAL_TEXT = "Yes I'll be there around 11:30";
+
+describe("Cleaner Core messages: Grok reads every message", () => {
+  it("records a non-keyword text with handled none and sends the cleaner no reply", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const before = sms.sent.filter((item) => item.to === CLEANER).length;
+    await desk.inbound({ id: "arrival", from: CLEANER, text: ARRIVAL_TEXT });
+    expect(sms.sent.filter((item) => item.to === CLEANER)).toHaveLength(before);
+    expect(brief(await messagesNow(desk))).toEqual([
+      { from: "cleaner", name: "Ana", text: "YES", handled: "opted-in" },
+      { from: "cleaner", name: "Ana", text: "YES", handled: "confirmed" },
+      { from: "cleaner", name: "Ana", text: ARRIVAL_TEXT, handled: "none" },
+    ]);
+  });
+
+  it("records DONE as done", async () => {
+    const { desk } = await confirmedCleaner();
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "done" });
+  });
+
+  it("records STOP as stop and still sends the host the existing note", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    await desk.inbound({ id: "stop", from: CLEANER, text: "STOP" });
+    expect(sms.sent.filter((item) => item.to === HOST).map((item) => item.body)).toContain(cleanerOptOutHold(ADDRESS));
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "STOP", handled: "stop" });
+  });
+
+  it("records an injury and still sends the host the direct injury text", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    await desk.inbound({ id: "hurt", from: CLEANER, text: "I fell and I'm hurt" });
+    expect(sms.sent.filter((item) => item.to === HOST).map((item) => item.body)).toContain(`The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`);
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "I fell and I'm hurt", handled: "injury" });
+  });
+
+  it("redacts the door code from a message, and holds a code-only text", async () => {
+    const { desk, root } = await confirmedCleaner();
+    await desk.inbound({ id: "code-only", from: CLEANER, text: DOOR_CODE });
+    await desk.inbound({ id: "code-in", from: CLEANER, text: `Is the code ${DOOR_CODE}?` });
+    const reply = ok(await desk.checkNow());
+    const messages = brief((reply.messages as Message[] | undefined) ?? []).slice(-2);
+    expect(messages[0]).toEqual({ from: "cleaner", name: "Ana", text: "[redacted]", handled: "code-held" });
+    expect(messages[1]?.text).toBe("Is the code [redacted]?");
+    expect(JSON.stringify(reply).includes(DOOR_CODE)).toBe(false);
+    expect(readFileSync(join(root, "cleaner-live.json"), "utf8").includes(DOOR_CODE)).toBe(false);
+  });
+
+  it("keeps a message to 300 characters", async () => {
+    const { desk } = await confirmedCleaner();
+    await desk.inbound({ id: "long", from: CLEANER, text: `  ${"a".repeat(400)}  ` });
+    expect((await messagesNow(desk)).at(-1)?.text).toBe("a".repeat(300));
+  });
+
+  it("records group messages from the cleaner and a saved contact", async () => {
+    const { desk } = openDesk([HOST, CLEANER, OBSERVER], "1");
+    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+    await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
+    await desk.inbound({ id: "g-cleaner", from: CLEANER, text: "Running a little behind today", channel: "group" });
+    await desk.inbound({ id: "g-sam", from: OBSERVER, text: "See you all tomorrow", channel: "group" });
+    const messages = brief(await messagesNow(desk));
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        { from: "cleaner", name: "Ana", text: "Running a little behind today", handled: "none" },
+        { from: "contact", name: "Sam", text: "See you all tomorrow", handled: "none" },
+      ]),
+    );
+  });
+
+  it("wakes the routine for each new message, with one pending wake", async () => {
+    const posts: string[] = [];
+    let status = 200;
+    setCleanerAlertFetch(async (_url, init) => {
+      posts.push(init.body);
+      return { status };
+    });
+    const { desk, root } = await confirmedCleaner({ CLEANER_CORE_ROUTINE_URL: "https://routine.example/hook", CLEANER_CORE_ROUTINE_KEY: "k-test-routine-key" });
+    await desk.drainAlerts();
+    const started = posts.length;
+    await desk.inbound({ id: "m1", from: CLEANER, text: "On my way" });
+    await desk.drainAlerts();
+    expect(posts).toHaveLength(started + 1);
+    await desk.inbound({ id: "m2", from: CLEANER, text: ARRIVAL_TEXT });
+    await desk.drainAlerts();
+    expect(posts).toHaveLength(started + 2);
+    status = 503;
+    await desk.inbound({ id: "m3", from: CLEANER, text: "Out of paper towels" });
+    await desk.inbound({ id: "m4", from: CLEANER, text: "Never mind, found some" });
+    expect(wakes(root).filter((record) => record.status === "pending")).toHaveLength(1);
+  });
+
+  it("does not repeat messages on a second check_now", async () => {
+    const { desk } = await confirmedCleaner();
+    await desk.inbound({ id: "arrival", from: CLEANER, text: ARRIVAL_TEXT });
+    expect(await messagesNow(desk)).toHaveLength(3);
+    expect(await messagesNow(desk)).toEqual([]);
+    await desk.inbound({ id: "late", from: CLEANER, text: "Running late" });
+    expect(brief(await messagesNow(desk))).toEqual([{ from: "cleaner", name: "Ana", text: "Running late", handled: "none" }]);
+  });
+});
+
+describe("Cleaner Core messages: save_arrival", () => {
+  it("saves an AM or PM arrival time on the open job and shows it in turns", async () => {
+    const { desk } = await confirmedCleaner();
+    expect(desk.saveArrival({ time: "11:30" }).ok).toBe(false);
+    const saved = ok(desk.saveArrival({ time: "11:30 AM" }));
+    const turns = (saved.turns as { arrivalTime?: string }[] | undefined) ?? [];
+    expect(plain(turns[0]?.arrivalTime ?? "")).toBe("11:30 AM");
+    const listed = (ok(desk.getTurns()).turns as { arrivalTime?: string }[] | undefined) ?? [];
+    expect(plain(listed[0]?.arrivalTime ?? "")).toBe("11:30 AM");
+  });
+
+  it("fails with no open cleaning", async () => {
+    const { desk } = openDesk([HOST, CLEANER], "0");
+    ok(desk.getState("2"));
+    ok(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    ok(desk.saveSources({ google: true }));
+    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    ok(desk.savePreferences({}));
+    ok(await desk.activate({ googleEvents: googleList([]) }));
+    expect(desk.saveArrival({ time: "11:30 AM" })).toEqual({ ok: false, error: "There's no open cleaning to save an arrival time for." });
+  });
+
+  it("lists save_arrival and tells Grok to read every message", async () => {
+    const { desk } = await confirmedCleaner();
+    const tools = ((await mcp(desk, "tools/list")).tools as { name: string; description: string }[]) ?? [];
+    expect(tools.find((tool) => tool.name === "save_arrival")?.description).toBe("Saves the cleaner's arrival time after you read it in their message. Use AM or PM.");
+    const text = String((await mcp(desk, "initialize")).instructions);
+    expect(text).toContain(
+      "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
+    );
+    const called = await mcp(desk, "tools/call", { name: "save_arrival", arguments: { time: "1:15 PM" } });
+    expect(called.isError).toBe(false);
   });
 });
