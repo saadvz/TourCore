@@ -161,13 +161,13 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     expect(text).toMatch(/timed event/);
   });
 
-  it("picks cleaning with the said value it names", () => {
+  it("picks cleaning with the said value it names", async () => {
     const said = /`said: "([^"]+)"`/.exec(read(BOOTSTRAP))?.[1];
     expect(said).toBeTruthy();
     const root = mkdtempSync(join(tmpdir(), "cleaner-template-"));
     try {
       const desk = liveDeskFor(root, () => ({}), () => new Date());
-      const reply = desk.getState(said);
+      const reply = await desk.getState(said);
       expect(reply.ok).toBe(true);
       expect((reply.result as { done: string[] }).done).toContain("You chose cleaning.");
     } finally {

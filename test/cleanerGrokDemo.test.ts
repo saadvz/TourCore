@@ -439,12 +439,12 @@ function resultOf(reply: ToolReply): Record<string, unknown> {
 async function openDesk(root: string, env: NodeJS.ProcessEnv): Promise<LiveDesk> {
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
   const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-  expect(desk.getState("2").ok).toBe(true);
-  expect(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }).ok).toBe(true);
-  expect(desk.savePeople({ host: HOST, cleaner: CLEANER }).ok).toBe(true);
-  expect(desk.saveCalendarLink({ google: true }).ok).toBe(true);
-  expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
-  expect(desk.setUpTexting().ok).toBe(true);
+  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE })).ok).toBe(true);
+  expect((await desk.savePeople({ host: HOST, cleaner: CLEANER })).ok).toBe(true);
+  expect((await desk.saveCalendarLink({ google: true })).ok).toBe(true);
+  expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
+  expect((await desk.setUpTexting()).ok).toBe(true);
   expect((await desk.runChecks({ googleEvents: googleList([]) })).ok).toBe(true);
   return desk;
 }

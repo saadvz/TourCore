@@ -128,12 +128,12 @@ describe("host texts after 46105bc", () => {
     };
     setCleanerTwilioClient(sms);
     const desk = liveDeskFor(root, () => env, () => new Date("2026-10-14T15:00:00.000Z"));
-    expect(desk.getState("2").ok).toBe(true);
-    expect(desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-    expect(desk.savePeople({ host: HOST, cleaner: LANE.cleanerPhone, observer: OBSERVER }).ok).toBe(true);
+    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+    expect((await desk.savePeople({ host: HOST, cleaner: LANE.cleanerPhone, observer: OBSERVER })).ok).toBe(true);
     await desk.inbound({ id: "early-stop", from: HOST, text: "STOP" });
     await desk.inbound({ id: "early-start", from: HOST, text: "START" });
-    const earlyState = desk.getState();
+    const earlyState = await desk.getState();
     if (!earlyState.ok) throw new Error("missing state");
     expect(JSON.stringify(earlyState.result).includes("on hold")).toBe(false);
     await desk.inbound({ id: "early-cleaner-stop", from: LANE.cleanerPhone, text: "STOP" });

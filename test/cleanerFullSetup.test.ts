@@ -426,12 +426,12 @@ function ok(reply: ToolReply): Record<string, unknown> {
 type PeopleInput = Parameters<LiveDesk["savePeople"]>[0];
 
 async function setUp(desk: LiveDesk, people: Partial<PeopleInput>) {
-  ok(desk.getState("2"));
-  ok(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30 AM", checkInTime: "3:00 PM" }));
-  ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-  ok(desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", ...people }));
-  ok(desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
-  ok(desk.savePreferences({}));
+  ok(await desk.getState("2"));
+  ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30 AM", checkInTime: "3:00 PM" }));
+  ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", ...people }));
+  ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
+  ok(await desk.savePreferences({}));
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" }));
 }
@@ -444,7 +444,7 @@ describe("Cleaner Core full setup: who gets the texts", () => {
   it("cleaner-only with group chat on sends one-to-one texts and makes no Conversations call", async () => {
     const { desk, sms, groups } = openDesk([HOST, CLEANER, OBSERVER], "1");
     await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "cleaner-only" });
-    expect((ok(desk.getState()).done as string[]).some((line) => line.startsWith("Group chat set up"))).toBe(false);
+    expect((ok(await desk.getState()).done as string[]).some((line) => line.startsWith("Group chat set up"))).toBe(false);
     await desk.inbound({ id: "yes-1", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-2", from: CLEANER, text: "YES" });
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
@@ -478,7 +478,7 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
     expect(sms.sent.find((item) => item.body.includes(DOOR_CODE))?.body).toBe(PRIVATE_PIN);
     expect(groups.posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
-    const notes = JSON.stringify(ok(desk.getState()));
+    const notes = JSON.stringify(ok(await desk.getState()));
     expect(notes.includes(DOOR_CODE)).toBe(false);
   });
 
@@ -499,11 +499,11 @@ describe("Cleaner Core full setup: who gets the texts", () => {
 describe("Cleaner Core full setup: the MCP door-code guard", () => {
   it("refuses a door code hidden in a checklist item or a contact name", async () => {
     const { desk } = openDesk([HOST, CLEANER], "0");
-    ok(desk.getState("2"));
-    ok(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
-    ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
-    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    ok(await desk.getState("2"));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
     const send = async (name: string, args: Record<string, unknown>) => {
       const res = await handleCleanerMcpMessage(desk, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, PIN_KEY);
       return res.body as { result?: { isError?: boolean; content?: { text?: string }[] } };
@@ -539,13 +539,13 @@ async function withSchedule(schedule: ScheduleInput | undefined, groupChat: "0" 
   const time = testClock(FROZEN);
   const opened = openDesk([HOST, CLEANER], groupChat, time.now);
   const { desk } = opened;
-  ok(desk.getState("2"));
-  ok(desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
-  ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-  ok(desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana" }));
-  if (schedule) ok(desk.saveSchedule(schedule));
-  ok(desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
-  ok(desk.savePreferences({}));
+  ok(await desk.getState("2"));
+  ok(await desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
+  ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana" }));
+  if (schedule) ok(await desk.saveSchedule(schedule));
+  ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
+  ok(await desk.savePreferences({}));
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" }));
   return { ...opened, time };
@@ -607,13 +607,13 @@ describe("Cleaner Core schedule: the first cleaning text", () => {
   it("never sends a timed offer before the host confirmed the times", async () => {
     const time = testClock(FROZEN);
     const { desk, sms } = openDesk([HOST, CLEANER], "0", time.now);
-    ok(desk.getState("2"));
-    ok(desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
-    ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
-    ok(desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 1 }));
-    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
-    ok(desk.savePreferences({}));
+    ok(await desk.getState("2"));
+    ok(await desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 1 }));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    ok(await desk.savePreferences({}));
     ok(await desk.activate());
     await alertsAt(desk, time, "2026-10-16T13:00:00.000Z");
     expect(sms.sent.filter((item) => item.to === CLEANER)).toEqual([]);
@@ -673,8 +673,8 @@ describe("Cleaner Core schedule: changing the schedule", () => {
     await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
     await alertsAt(desk, time, "2026-10-17T21:30:00.000Z");
     expect(reminders(sms.sent)).toEqual([]);
-    ok(desk.saveSchedule({ quietFrom: "", quietUntil: "" }));
-    const reviewed = ok(desk.getState());
+    ok(await desk.saveSchedule({ quietFrom: "", quietUntil: "" }));
+    const reviewed = ok(await desk.getState());
     expect(JSON.stringify(reviewed).includes("quietFrom")).toBe(false);
     await alertsAt(desk, time, "2026-10-17T22:00:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
@@ -686,10 +686,10 @@ describe("Cleaner Core schedule: changing the schedule", () => {
     await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
     await alertsAt(desk, time, "2026-10-18T12:00:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
-    ok(desk.saveSchedule({}));
+    ok(await desk.saveSchedule({}));
     await alertsAt(desk, time, "2026-10-18T12:10:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
-    ok(desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" }));
+    ok(await desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" }));
     await alertsAt(desk, time, "2026-10-18T12:20:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
   });
@@ -700,18 +700,65 @@ describe("Cleaner Core schedule: changing the schedule", () => {
     await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
     await alertsAt(desk, time, "2026-10-17T22:00:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
-    ok(desk.saveSchedule({ reminder: "morning-of", reminderTime: "8:00 AM" }));
+    ok(await desk.saveSchedule({ reminder: "morning-of", reminderTime: "8:00 AM" }));
     await alertsAt(desk, time, "2026-10-18T12:00:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
+  });
+});
+
+describe("Cleaner Core: one step at a time", () => {
+  it("check_now with a slow calendar read beside save_schedule and save_arrival loses nothing, sends nothing twice, and doesn't crash", async () => {
+    const { desk, sms, time, root, env } = await withSchedule({ reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" }, "0");
+    await optIn(desk, "0");
+    await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+    let started = (): void => undefined;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // The calendar read hangs until the test lets it go.
+    setCleanerCalendarFetch(async (url) => {
+      started();
+      await held;
+      return { status: url === CALENDAR_URL ? 200 : 404, url, text: async () => (url === CALENDAR_URL ? CALENDAR_ICS : "") };
+    });
+    time.set("2026-10-17T22:00:00.000Z");
+    const checking = desk.checkNow();
+    await reading;
+    const schedule = desk.saveSchedule({ quietFrom: "9:00 PM", quietUntil: "8:00 AM" });
+    const arrival = desk.saveArrival({ time: "11:30 AM" });
+    const state = desk.getState();
+    const turns = desk.getTurns();
+    release();
+    const replies = await Promise.all([checking, schedule, arrival, state, turns]);
+    for (const reply of replies) ok(reply);
+    expect(reminders(sms.sent).map((item) => plain(item.body))).toEqual([REMINDER_ARRIVAL]);
+
+    // Every later step, and a restart, sees the reminder as sent, the arrival time, and the schedule.
+    const arrived = (reply: ToolReply) => (ok(reply).turns as { arrivalTime?: string }[]).map((turn) => turn.arrivalTime);
+    await alertsAt(desk, time, "2026-10-17T22:30:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+    expect(arrived(await desk.getTurns())[0]).toBe("11:30 AM");
+    resetLiveDesks();
+    const restarted = liveDeskFor(root, () => env, time.now);
+    await alertsAt(restarted, time, "2026-10-17T23:00:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+    expect(arrived(await restarted.getTurns())[0]).toBe("11:30 AM");
+    const saved = JSON.parse(readFileSync(join(root, "cleaner-live.json"), "utf8")) as { schedule?: { quietFrom?: string; reminderTime?: string } };
+    expect(saved.schedule).toEqual(expect.objectContaining({ quietFrom: "21:00", reminderTime: "18:00" }));
+    expect(codeRecipients(sms.sent)).toEqual([]);
   });
 });
 
 describe("Cleaner Core schedule: the new-booking alert", () => {
   async function bookingAlert(groupChat: "0" | "1", usual: boolean): Promise<string[]> {
     const { desk } = openDesk([HOST, CLEANER], groupChat);
-    ok(desk.getState("2"));
+    ok(await desk.getState("2"));
     ok(
-      desk.saveProperty({
+      await desk.saveProperty({
         business: BUSINESS,
         nickname: "Lake House",
         address: ADDRESS,
@@ -719,11 +766,11 @@ describe("Cleaner Core schedule: the new-booking alert", () => {
         ...(usual ? { checkoutTime: "10:30 AM", checkInTime: "3:00 PM" } : {}),
       }),
     );
-    ok(desk.saveSources({ google: true }));
-    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
-    ok(desk.saveSchedule({}));
-    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
-    ok(desk.savePreferences({}));
+    ok(await desk.saveSources({ google: true }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveSchedule({}));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    ok(await desk.savePreferences({}));
     ok(await desk.activate({ googleEvents: googleList([]) }));
     const checked = ok(await desk.checkNow({ googleEvents: googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-18" }]) }));
     return ((checked.alerts as string[] | undefined) ?? []).map(plain);
@@ -764,23 +811,23 @@ describe("Cleaner Core schedule: the checkout-time nudge", () => {
 describe("Cleaner Core schedule: save_schedule", () => {
   it("refuses days outside 1 to 14, a bad time, one-sided quiet hours, and a door code", async () => {
     const { desk } = openDesk([HOST, CLEANER], "0");
-    ok(desk.getState("2"));
-    ok(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
-    expect(desk.saveSchedule({}).ok).toBe(false);
-    ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
-    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
-    expect(desk.saveSchedule({ firstText: "days-after-check-in" }).ok).toBe(false);
-    expect(desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 0 }).ok).toBe(false);
-    expect(desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 15 }).ok).toBe(false);
-    expect(desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 1.5 }).ok).toBe(false);
-    expect(desk.saveSchedule({ reminder: "days-before-checkout", reminderTime: "6:00 PM" }).ok).toBe(false);
-    expect(desk.saveSchedule({ reminderTime: "18" }).ok).toBe(false);
-    expect(desk.saveSchedule({ quietFrom: "9:00 PM" }).ok).toBe(false);
-    expect(desk.saveSchedule({ escalateTo: `Sam ${DOOR_CODE}` }).ok).toBe(false);
-    expect(desk.saveSchedule({ firstText: "never" as never }).ok).toBe(false);
-    expect(ok(desk.getState()).next).toBe(SCHEDULE_NEXT);
-    expect(ok(desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "7:30 AM" })).next).toBe(PREFERENCES_NEXT);
+    ok(await desk.getState("2"));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    expect((await desk.saveSchedule({})).ok).toBe(false);
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    expect((await desk.saveSchedule({ firstText: "days-after-check-in" })).ok).toBe(false);
+    expect((await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 0 })).ok).toBe(false);
+    expect((await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 15 })).ok).toBe(false);
+    expect((await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 1.5 })).ok).toBe(false);
+    expect((await desk.saveSchedule({ reminder: "days-before-checkout", reminderTime: "6:00 PM" })).ok).toBe(false);
+    expect((await desk.saveSchedule({ reminderTime: "18" })).ok).toBe(false);
+    expect((await desk.saveSchedule({ quietFrom: "9:00 PM" })).ok).toBe(false);
+    expect((await desk.saveSchedule({ escalateTo: `Sam ${DOOR_CODE}` })).ok).toBe(false);
+    expect((await desk.saveSchedule({ firstText: "never" as never })).ok).toBe(false);
+    expect(ok(await desk.getState()).next).toBe(SCHEDULE_NEXT);
+    expect(ok(await desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "7:30 AM" })).next).toBe(PREFERENCES_NEXT);
   });
 });
 
@@ -846,7 +893,7 @@ describe("Cleaner Core messages: Grok reads every message", () => {
     const { desk, sms } = openDesk([HOST, CLEANER], "0");
     await setUp(desk, { groupChat: "cleaner-only" });
     await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
-    expect((ok(desk.getTurns()).turns as { status: string }[])[0]?.status).toBe("offered");
+    expect((ok(await desk.getTurns()).turns as { status: string }[])[0]?.status).toBe("offered");
     await desk.inbound({ id: "near-yes", from: CLEANER, text: ARRIVAL_TEXT });
     expect(sms.sent.at(-1)).toEqual(expect.objectContaining({ to: CLEANER, body: "Reply YES to schedule the cleaning, or STOP to opt out." }));
     expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: ARRIVAL_TEXT, handled: "none" });
@@ -880,7 +927,7 @@ describe("Cleaner Core messages: Grok reads every message", () => {
     });
     await desk.inbound({ id: "done-failed", from: CLEANER, text: "DONE" });
     expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "none" });
-    expect((ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status)).not.toContain("done");
+    expect((ok(await desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status)).not.toContain("done");
   });
 
   it("records STOP as stop and still sends the host the existing note", async () => {
@@ -967,24 +1014,24 @@ describe("Cleaner Core messages: Grok reads every message", () => {
 describe("Cleaner Core messages: save_arrival", () => {
   it("saves an AM or PM arrival time on the open job and shows it in turns", async () => {
     const { desk } = await confirmedCleaner();
-    expect(desk.saveArrival({ time: "11:30" }).ok).toBe(false);
-    const saved = ok(desk.saveArrival({ time: "11:30 AM" }));
+    expect((await desk.saveArrival({ time: "11:30" })).ok).toBe(false);
+    const saved = ok(await desk.saveArrival({ time: "11:30 AM" }));
     const turns = (saved.turns as { arrivalTime?: string }[] | undefined) ?? [];
     expect(plain(turns[0]?.arrivalTime ?? "")).toBe("11:30 AM");
-    const listed = (ok(desk.getTurns()).turns as { arrivalTime?: string }[] | undefined) ?? [];
+    const listed = (ok(await desk.getTurns()).turns as { arrivalTime?: string }[] | undefined) ?? [];
     expect(plain(listed[0]?.arrivalTime ?? "")).toBe("11:30 AM");
   });
 
   it("fails with no open cleaning", async () => {
     const { desk } = openDesk([HOST, CLEANER], "0");
-    ok(desk.getState("2"));
-    ok(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
-    ok(desk.saveSources({ google: true }));
-    ok(desk.savePeople({ host: HOST, cleaner: CLEANER }));
-    ok(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
-    ok(desk.savePreferences({}));
+    ok(await desk.getState("2"));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    ok(await desk.saveSources({ google: true }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+    ok(await desk.savePreferences({}));
     ok(await desk.activate({ googleEvents: googleList([]) }));
-    expect(desk.saveArrival({ time: "11:30 AM" })).toEqual({ ok: false, error: "There's no open cleaning to save an arrival time for." });
+    expect(await desk.saveArrival({ time: "11:30 AM" })).toEqual({ ok: false, error: "There's no open cleaning to save an arrival time for." });
   });
 
   it("lists save_arrival and tells Grok to read every message", async () => {
@@ -1227,20 +1274,20 @@ describe("Cleaner Core send_message: the host approves first", () => {
 
   it("sends a host message that says ready, and the job's status doesn't change", async () => {
     const { desk, sms } = await confirmedCleaner();
-    const statuses = () => (ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
-    const before = statuses();
+    const statuses = async () => (ok(await desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
+    const before = await statuses();
     const text = "The unit is ready for you whenever you arrive.";
     const approval = await preview(desk, "Ana", text);
     ok(await desk.sendMessage({ to: "cleaner", text, confirmation: approval.code }));
     expect(sms.sent.at(-1)).toEqual(expect.objectContaining({ to: CLEANER, body: text }));
-    expect(statuses()).toEqual(before);
+    expect(await statuses()).toEqual(before);
   });
 
   it("is not held by quiet hours", async () => {
     let clock = new Date(FROZEN);
     const { desk, sms } = openDesk([HOST, CLEANER], "0", () => clock);
     await setUp(desk, { groupChat: "cleaner-only" });
-    ok(desk.saveSchedule({ quietFrom: "9:00 PM", quietUntil: "8:00 AM" }));
+    ok(await desk.saveSchedule({ quietFrom: "9:00 PM", quietUntil: "8:00 AM" }));
     await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
     // 10:00 PM in New York.
     clock = new Date("2026-10-15T02:00:00.000Z");
@@ -1346,12 +1393,12 @@ async function takenWith(preferences: PreferencesInput, extraEnv: NodeJS.Process
   const time = testClock(FROZEN);
   const opened = openDesk([HOST, CLEANER], "0", time.now, extraEnv);
   const { desk } = opened;
-  ok(desk.getState("2"));
-  ok(desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
-  ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
-  ok(desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }));
-  ok(desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
-  ok(desk.savePreferences(preferences));
+  ok(await desk.getState("2"));
+  ok(await desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
+  ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }));
+  ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
+  ok(await desk.savePreferences(preferences));
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" }));
   await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
@@ -1363,8 +1410,8 @@ function toCleanerBodies(sent: SentSms[]): string[] {
   return sent.filter((item) => item.to === CLEANER).map((item) => item.body);
 }
 
-function statuses(desk: LiveDesk): string[] {
-  return (ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
+async function statuses(desk: LiveDesk): Promise<string[]> {
+  return (ok(await desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
 }
 
 describe("Cleaner Core cleaning: the checklist", () => {
@@ -1420,12 +1467,12 @@ describe("Cleaner Core cleaning: photos and notes", () => {
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
     await desk.inbound({ id: "done-early", from: CLEANER, text: "DONE" });
     expect(toCleanerBodies(sms.sent).at(-1)).toBe(PHOTO_FIRST);
-    expect(statuses(desk)).not.toContain("done");
+    expect(await statuses(desk)).not.toContain("done");
     expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "none" });
     await desk.inbound({ id: "mms", from: CLEANER, text: "", media: [photo()] });
     await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
     expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
-    expect(statuses(desk)[0]).toBe("done");
+    expect((await statuses(desk))[0]).toBe("done");
   });
 
   it("DONE goes through without a photo when photos aren't required", async () => {
@@ -1458,7 +1505,7 @@ describe("Cleaner Core cleaning: the completed record", () => {
   it("check_now returns the finished cleaning once, with exact counts and times, and no door code", async () => {
     stubPhotos();
     const { desk, time, root } = await takenWith(PREFERENCES);
-    ok(desk.saveArrival({ time: "11:30 AM" }));
+    ok(await desk.saveArrival({ time: "11:30 AM" }));
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
     time.set("2026-10-14T15:32:00.000Z");
     await desk.inbound({ id: "start", from: CLEANER, text: "START" });
@@ -1535,9 +1582,9 @@ describe("Cleaner Core cleaning: get_job_photos", () => {
     }
     await handleCleanerMcpMessage(desk, request, PIN_KEY, false, save);
     expect(saves).toEqual(["CLEANER_CORE_PHOTO_KEY"]);
-    const byDay = ok(desk.getJobPhotos({ job: "2026-10-18" }));
+    const byDay = ok(await desk.getJobPhotos({ job: "2026-10-18" }));
     expect((byDay.photos as unknown[]).length).toBe(2);
-    expect(desk.getJobPhotos({ job: "2026-12-25" }).ok).toBe(false);
+    expect((await desk.getJobPhotos({ job: "2026-12-25" })).ok).toBe(false);
   });
 
   it("lists get_job_photos and tells Grok to summarize a completed cleaning", async () => {
@@ -1588,9 +1635,11 @@ describe("Cleaner Core cleaning: a photo download can't crash or trap the cleane
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
     const pending = desk.inbound({ id: "mms-held", from: CLEANER, text: "", media: [photo()] });
     await fetching;
-    ok(desk.savePreferences({ photosRequired: true, supplyNotes: true }));
+    // The save waits its turn behind the text, so it can't drop the engine the text is using.
+    const saved = desk.savePreferences({ photosRequired: true, supplyNotes: true });
     finish();
     await expect(pending).resolves.toEqual({ sent: [] });
+    ok(await saved);
     expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "[photo]", handled: "none" });
     // The same text again is a duplicate: the id was seen.
     await desk.inbound({ id: "mms-held", from: CLEANER, text: "", media: [photo()] });
@@ -1612,11 +1661,11 @@ describe("Cleaner Core cleaning: a photo download can't crash or trap the cleane
     await desk.inbound({ id: "mms-failed", from: CLEANER, text: "", media: [photo(), photo()] });
     await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
     expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
-    expect(statuses(desk)[0]).toBe("done");
+    expect((await statuses(desk))[0]).toBe("done");
     const completed = (ok(await desk.checkNow()).completed as Record<string, unknown>[])[0] ?? {};
     expect(completed.photos).toBe(2);
     expect(completed.photosMissing).toBe(2);
-    expect(ok(desk.getJobPhotos({ job: "2026-10-18" })).photos).toEqual([]);
+    expect(ok(await desk.getJobPhotos({ job: "2026-10-18" })).photos).toEqual([]);
   });
 
   it("a photo sent without a Twilio login still counts", async () => {

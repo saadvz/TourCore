@@ -184,6 +184,36 @@ interface PinSend {
   delivered?: boolean;
 }
 
+interface PropertyInput {
+  address?: string;
+  business?: string;
+  timeZone?: string;
+  nickname?: string;
+  propertyType?: string;
+  checkoutTime?: string;
+  checkInTime?: string;
+}
+
+interface PeopleInput {
+  host?: string;
+  cleaner?: string;
+  observer?: string;
+  cleanerName?: string;
+  contacts?: { name?: string; role?: string; phone?: string }[];
+  groupChat?: string;
+}
+
+interface ScheduleInput {
+  firstText?: "when-confirmed" | "days-after-check-in";
+  firstTextDays?: number;
+  reminder?: "morning-of" | "days-before-checkout";
+  reminderDays?: number;
+  reminderTime?: string;
+  quietFrom?: string;
+  quietUntil?: string;
+  escalateTo?: string;
+}
+
 export interface ToolOk {
   ok: true;
   result: Record<string, unknown>;
@@ -426,6 +456,8 @@ export class LiveDesk {
   private file: LiveFile = {};
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
+  /** A setup save changed what the engine reads when it opens. The next serial step reopens it. */
+  private stale = false;
   private checking = false;
   private queue: Promise<void> = Promise.resolve();
   private inFlight = 0;
@@ -466,6 +498,14 @@ export class LiveDesk {
     input: { url?: string; token?: string },
     save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
     pinKey?: Buffer,
+  ): Promise<ToolReply> {
+    return this.serial(async () => this.saveAlertRoutineNow(input, save, pinKey));
+  }
+
+  private saveAlertRoutineNow(
+    input: { url?: string; token?: string },
+    save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
+    pinKey: Buffer | undefined,
   ): ToolReply {
     const url = input.url?.trim() ?? "";
     const token = input.token?.trim() ?? "";
@@ -549,7 +589,11 @@ export class LiveDesk {
     return /\bdoor code\b/i.test(text) && /\b\d{4,8}\b/.test(text);
   }
 
-  getState(said?: string): ToolReply {
+  getState(said?: string): Promise<ToolReply> {
+    return this.serial(async () => this.getStateNow(said));
+  }
+
+  private getStateNow(said: string | undefined): ToolReply {
     if (this.file.choice === "cleaners") this.resume();
     const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
     if (!this.file.choice) {
@@ -564,15 +608,11 @@ export class LiveDesk {
     return this.withFailure(this.reply(this.cleaningState()), failure);
   }
 
-  saveProperty(input: {
-    address?: string;
-    business?: string;
-    timeZone?: string;
-    nickname?: string;
-    propertyType?: string;
-    checkoutTime?: string;
-    checkInTime?: string;
-  }): ToolReply {
+  saveProperty(input: PropertyInput): Promise<ToolReply> {
+    return this.serial(async () => this.savePropertyNow(input));
+  }
+
+  private savePropertyNow(input: PropertyInput): ToolReply {
     if (this.file.choice !== "cleaners") return this.fail("Tell me which job you want help with first.");
     const address = input.address?.trim() ?? "";
     const business = input.business?.trim() ?? "";
@@ -600,7 +640,7 @@ export class LiveDesk {
     if (checkInTime) this.file.checkInTime = checkInTime;
     this.persist();
     // The engine reads the usual times when it opens.
-    this.engine = undefined;
+    this.stale = true;
     return this.reply({ next: this.setupNext() });
   }
 
@@ -608,14 +648,11 @@ export class LiveDesk {
    * Saves the host, the cleaner (with an optional name), up to four extra contacts, and the
    * group-chat choice. Each save replaces the saved people. The legacy observer counts as a contact.
    */
-  savePeople(input: {
-    host?: string;
-    cleaner?: string;
-    observer?: string;
-    cleanerName?: string;
-    contacts?: { name?: string; role?: string; phone?: string }[];
-    groupChat?: string;
-  }): ToolReply {
+  savePeople(input: PeopleInput): Promise<ToolReply> {
+    return this.serial(async () => this.savePeopleNow(input));
+  }
+
+  private savePeopleNow(input: PeopleInput): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const host = parsePhone(input.host ?? "");
     const cleaner = parsePhone(input.cleaner ?? "");
@@ -658,7 +695,7 @@ export class LiveDesk {
     this.keep("contacts", contacts.length > 0 ? contacts : undefined);
     this.keep("groupChat", (groupChat || undefined) as GroupChoice | undefined);
     this.persist();
-    this.engine = undefined;
+    this.stale = true;
     return this.reply({ next: this.setupNext() });
   }
 
@@ -669,16 +706,11 @@ export class LiveDesk {
    * quiet hours clear them. The schedule can only hold a text back. The first cleaning text still
    * waits for the host's confirmed times, and the door code still waits for "guests have left".
    */
-  saveSchedule(input: {
-    firstText?: "when-confirmed" | "days-after-check-in";
-    firstTextDays?: number;
-    reminder?: "morning-of" | "days-before-checkout";
-    reminderDays?: number;
-    reminderTime?: string;
-    quietFrom?: string;
-    quietUntil?: string;
-    escalateTo?: string;
-  }): ToolReply {
+  saveSchedule(input: ScheduleInput): Promise<ToolReply> {
+    return this.serial(async () => this.saveScheduleNow(input));
+  }
+
+  private saveScheduleNow(input: ScheduleInput): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
     const saved = this.file.schedule ?? DEFAULT_SCHEDULE;
     const firstText = input.firstText ?? saved.firstText;
@@ -718,11 +750,15 @@ export class LiveDesk {
     };
     this.persist();
     // The engine reads the schedule when it opens.
-    this.engine = undefined;
+    this.stale = true;
     return this.reply({ next: this.setupNext() });
   }
 
-  saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
+  saveCalendarLink(input: { url?: string; google?: boolean }): Promise<ToolReply> {
+    return this.serial(async () => this.saveCalendarLinkNow(input));
+  }
+
+  private saveCalendarLinkNow(input: { url?: string; google?: boolean }): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
@@ -741,7 +777,11 @@ export class LiveDesk {
    * a link. When the change would call off an upcoming cleaning that only a dropped source lists, it
    * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
    */
-  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): ToolReply {
+  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): Promise<ToolReply> {
+    return this.serial(async () => this.saveSourcesNow(input));
+  }
+
+  private saveSourcesNow(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const next: LiveFile = { ...this.file };
     if (input.calendars !== undefined) {
@@ -777,7 +817,11 @@ export class LiveDesk {
    * Seals the door code. lockLocation names where the lock is, for the private code text. Leaving it
    * out keeps the saved one, and an empty one clears it. It may not carry a run of 4 or more digits.
    */
-  saveDoorCode(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): ToolReply {
+  saveDoorCode(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    return this.serial(async () => this.saveDoorCodeNow(input, pinKey));
+  }
+
+  private saveDoorCodeNow(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
     if (!hasSources(this.file) && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
@@ -799,7 +843,7 @@ export class LiveDesk {
       if (json.includes(code) || json.includes(key.toString("base64"))) continue;
       this.writeFile(json);
       // The engine names the lock in the private code text, so it reopens with the new location.
-      if (this.file.lockLocation !== previousLock) this.engine = undefined;
+      if (this.file.lockLocation !== previousLock) this.stale = true;
       return this.reply({
         next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
       });
@@ -814,7 +858,11 @@ export class LiveDesk {
    * Saves the cleaning preferences. A field left out keeps what was saved, and `{}` the first time
    * means there are none, which still moves setup on to the review.
    */
-  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): ToolReply {
+  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): Promise<ToolReply> {
+    return this.serial(async () => this.savePreferencesNow(input));
+  }
+
+  private savePreferencesNow(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): ToolReply {
     if (!this.pin && !this.file.pinSeal) return this.fail("Save the door code first.");
     const saved = this.file.preferences ?? { checklist: [], photosRequired: false, supplyNotes: false };
     const checklist = input.checklist === undefined ? saved.checklist : input.checklist.map((item) => item.trim()).filter((item) => item.length > 0);
@@ -831,11 +879,15 @@ export class LiveDesk {
     };
     this.persist();
     // The engine reads the checklist, the photo rule, supply notes, and the offer note when it opens.
-    this.engine = undefined;
+    this.stale = true;
     return this.reply({ next: this.setupNext() });
   }
 
-  setUpTexting(): ToolReply {
+  setUpTexting(): Promise<ToolReply> {
+    return this.serial(async () => this.setUpTextingNow());
+  }
+
+  private setUpTextingNow(): ToolReply {
     if (!this.codeSaved()) return this.fail("Save the door code first.");
     this.file.texting = true;
     this.persist();
@@ -846,10 +898,13 @@ export class LiveDesk {
 
   /** Review & Activate: saves texting, then runs the checks. Takes the same input as run_checks. */
   activate(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
-    if (!this.file.preferences) return Promise.resolve(this.fail("Save the cleaning preferences first, or save empty ones if there are none."));
-    const texting = this.setUpTexting();
-    if (!texting.ok) return Promise.resolve(texting);
-    return this.runChecks(input);
+    return this.serial(async () => {
+      if (!this.file.preferences) return this.fail("Save the cleaning preferences first, or save empty ones if there are none.");
+      // Already inside the serial queue, so the inner steps, never runChecks.
+      const texting = this.setUpTextingNow();
+      if (!texting.ok) return texting;
+      return this.runChecksNow(input);
+    });
   }
 
   /**
@@ -860,6 +915,7 @@ export class LiveDesk {
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const now = (): Promise<T> => {
       try {
+        this.beginStep();
         return work();
       } catch (err) {
         return Promise.reject(err);
@@ -877,6 +933,18 @@ export class LiveDesk {
       },
     );
     return run;
+  }
+
+  /**
+   * The start of every serial step: a setup save since the last step reopens the engine now, never
+   * while another step still holds it, and a sealed code opens with the server's key.
+   */
+  private beginStep(): void {
+    if (this.stale) {
+      this.stale = false;
+      this.engine = undefined;
+    }
+    this.openSeal();
   }
 
   runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
@@ -933,7 +1001,8 @@ export class LiveDesk {
     }
     if (this.file.google && !input.googleEvents) return this.fail("Read Google Calendar and pass its events.");
     const before = this.engine;
-    this.engine = this.openEngine();
+    const engine = this.openEngine();
+    this.engine = engine;
     this.checking = true;
     let read: CalendarRead;
     try {
@@ -955,7 +1024,7 @@ export class LiveDesk {
     }
     this.file.checked = true;
     // run_checks' own reply already asks for the times, so its new-booking alert counts as shown too.
-    const seen = [...this.visibleNotes(this.engine), ...this.newBookingAlert(this.engine)].map((note) => note.id);
+    const seen = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].map((note) => note.id);
     this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
@@ -1088,7 +1157,11 @@ export class LiveDesk {
    * 2026-10-18 or the day check_now named, like Sunday, Oct 18. Without it, the latest job with
    * photos. The signing key is CLEANER_CORE_PHOTO_KEY, or one made once and saved through `save`.
    */
-  getJobPhotos(input: { job?: string }, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): ToolReply {
+  getJobPhotos(input: { job?: string }, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): Promise<ToolReply> {
+    return this.serial(async () => this.getJobPhotosNow(input, save));
+  }
+
+  private getJobPhotosNow(input: { job?: string }, save: ((values: { CLEANER_CORE_PHOTO_KEY: string }) => void) | undefined): ToolReply {
     this.resume();
     const engine = this.engine;
     if (!this.file.checked || !engine) return this.fail("Run the checks first.");
@@ -1107,7 +1180,11 @@ export class LiveDesk {
     return this.reply({ photos: photoLinks(this.root, job.id, base, key, this.now()) });
   }
 
-  getTurns(): ToolReply {
+  getTurns(): Promise<ToolReply> {
+    return this.serial(async () => this.getTurnsNow());
+  }
+
+  private getTurnsNow(): ToolReply {
     this.resume();
     return this.reply({ turns: this.turns(), ...(this.held ? { held: true } : {}) });
   }
@@ -1116,7 +1193,11 @@ export class LiveDesk {
    * Saves the cleaner's arrival time, which Grok read in their message, on the open job's checkout
    * day. The time needs AM or PM. The server never reads an arrival time from a text itself.
    */
-  saveArrival(input: { time?: string }): ToolReply {
+  saveArrival(input: { time?: string }): Promise<ToolReply> {
+    return this.serial(async () => this.saveArrivalNow(input));
+  }
+
+  private saveArrivalNow(input: { time?: string }): ToolReply {
     const time = input.time?.trim() ?? "";
     const hm = statedClock(time) ? usualTime(time) : undefined;
     if (!hm) return this.fail(ARRIVAL_NEEDED);
@@ -1357,7 +1438,11 @@ export class LiveDesk {
     return this.reply({ next: SCRATCH_RESET_LINE });
   }
 
-  readInbox(): ToolReply {
+  readInbox(): Promise<ToolReply> {
+    return this.serial(async () => this.readInboxNow());
+  }
+
+  private readInboxNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
@@ -1368,7 +1453,11 @@ export class LiveDesk {
     return this.reply({ lines });
   }
 
-  readOutbox(): ToolReply {
+  readOutbox(): Promise<ToolReply> {
+    return this.serial(async () => this.readOutboxNow());
+  }
+
+  private readOutboxNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
@@ -1509,8 +1598,7 @@ export class LiveDesk {
     if (from === this.file.host) return this.hostText(input.id, from, input.text);
     this.resume();
     const keyword = messagingKeyword(input.text);
-    // One engine for the whole text. A setup save outside the queue can drop this.engine while a
-    // photo downloads, so the text is still taken, counted, and seen by the engine that started it.
+    // One engine for the whole text, so it is taken, counted, and seen by the engine that started it.
     const engine = this.engine;
     if (!engine) {
       const sent = await this.inboundBeforeJob(input.id, from, keyword);
@@ -1529,7 +1617,7 @@ export class LiveDesk {
     });
     this.noteCleanerYes(engine, offered);
     this.noteSeen(input.id);
-    // The setup changed during the download: reopen from the saved store with the new setup.
+    // Every setup save runs in the queue, so this is only a guard: reopen from the saved store.
     if (this.engine !== engine) {
       this.engine = undefined;
       this.resume();
@@ -2063,9 +2151,11 @@ export class LiveDesk {
     return this.reply({ ...reply.result, next: failure });
   }
 
-  async runReminders(): Promise<void> {
-    this.resume();
-    await this.engine?.runReminders();
+  runReminders(): Promise<void> {
+    return this.serial(async () => {
+      this.resume();
+      await this.engine?.runReminders();
+    });
   }
 
   private holdLine(): string {
