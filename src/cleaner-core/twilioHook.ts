@@ -31,19 +31,21 @@ export async function handleCleanerTwilioWebhook(input: {
   rawBody: Buffer;
   headers: IncomingHttpHeaders;
   url: string | undefined;
-  env: NodeJS.ProcessEnv;
+  /** Live: the desk keeps this getter. */
+  env: () => NodeJS.ProcessEnv;
   root: string;
   now: () => Date;
 }): Promise<{ status: number; body: string }> {
-  if (!cleanerCoreEnabled(input.env)) return { status: 404, body: "" };
+  const env = input.env();
+  if (!cleanerCoreEnabled(env)) return { status: 404, body: "" };
   const params = formParams(input.rawBody);
   const signature = header(input.headers, "x-twilio-signature");
-  const verified = verifyTwilioSignature(input.env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim(), input.url, params, signature);
+  const verified = verifyTwilioSignature(env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim(), input.url, params, signature);
   if (!verified.ok) return { status: 403, body: JSON.stringify({ error: "unauthorized" }) };
   const from = params.From ?? "";
   const text = params.Body ?? "";
   const id = params.MessageSid?.trim() || createHash("sha256").update(`${from}\n${text}`).digest("hex");
-  const desk = liveDeskFor(input.root, () => input.env, input.now);
+  const desk = liveDeskFor(input.root, input.env, input.now);
   await desk.inbound({ id, from, text });
   return { status: 200, body: "{}" };
 }
@@ -53,19 +55,21 @@ export async function handleCleanerTwilioStatus(input: {
   rawBody: Buffer;
   headers: IncomingHttpHeaders;
   url: string | undefined;
-  env: NodeJS.ProcessEnv;
+  /** Live: the desk keeps this getter. */
+  env: () => NodeJS.ProcessEnv;
   root: string;
   now: () => Date;
 }): Promise<{ status: number; body: string }> {
-  if (!cleanerCoreEnabled(input.env)) return { status: 404, body: "" };
+  const env = input.env();
+  if (!cleanerCoreEnabled(env)) return { status: 404, body: "" };
   const params = formParams(input.rawBody);
   const signature = header(input.headers, "x-twilio-signature");
-  const verified = verifyTwilioSignature(input.env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim(), input.url, params, signature);
+  const verified = verifyTwilioSignature(env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim(), input.url, params, signature);
   if (!verified.ok) return { status: 403, body: JSON.stringify({ error: "unauthorized" }) };
   const sid = params.MessageSid?.trim() || params.SmsSid?.trim() || "";
   const status = (params.MessageStatus || params.SmsStatus || "").toLowerCase();
   if (sid && status) {
-    const desk = liveDeskFor(input.root, () => input.env, input.now);
+    const desk = liveDeskFor(input.root, input.env, input.now);
     await desk.notePinDelivery({ sid, status });
   }
   return { status: 200, body: "{}" };

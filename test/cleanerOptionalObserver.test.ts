@@ -158,7 +158,7 @@ describe("optional observer", () => {
       expect(saved.ok).toBe(true);
       if (!saved.ok) continue;
       expect(asksForThird(String(saved.result.next))).toBe(false);
-      expect(String(saved.result.next)).toMatch(/calendar link/i);
+      expect(String(saved.result.next)).toMatch(/Guesty Lite link/i);
     }
     const state = desk.getState();
     expect(state.ok).toBe(true);

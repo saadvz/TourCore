@@ -138,6 +138,8 @@ describe("Scratch test tools", () => {
       "confirm_times",
       "mark_guests_left",
       "run_checks",
+      "check_now",
+      "save_alert_routine",
       "resume_job",
       "reset_scratch",
       "read_inbox",
@@ -281,6 +283,39 @@ describe("Scratch test tools", () => {
     expect(sentBodies.join("\n")).not.toContain(LANE.pin);
     expect(sentBodies.join("\n")).not.toContain(COURT.pin);
     expect(sentBodies.filter((body) => body.includes("Door code:"))).toHaveLength(3);
+  }, 40_000);
+
+  it("outbox shows the wording with the code redacted", async () => {
+    if (!LANE) throw new Error("missing lane");
+    const wired = await scratchApp({ allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
+    await saveScratch(wired, { address: LANE.property.address, host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, pin: LANE.pin }, "Scratch");
+    await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" });
+    await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" });
+    const left = await call(wired, "mark_guests_left", { said: "The guests have left" });
+    expect(left.text).toContain(PIN_SENT);
+    await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" });
+
+    const outbox = await call(wired, "read_outbox");
+    const lines = linesOf(outbox);
+    const texts = outbox.structured?.texts as { label: string; status: string; body: string }[];
+    expect(Array.isArray(texts)).toBe(true);
+    expect(texts).toHaveLength(lines.length);
+    const door = texts.find((item) => item.label === "Door code text to the cleaner");
+    expect(door?.status).toBe("sent");
+    expect(door?.body).toContain("[redacted]");
+    expect(door?.body).not.toContain(LANE.pin);
+    expect(door?.body).not.toContain(DOOR_CODE);
+    const optIn = texts.find((item) => item.label === "Opt-in text to the cleaner");
+    expect(optIn?.body.startsWith("Hi, this is ")).toBe(true);
+    const offer = texts.find((item) => item.label === "Cleaning offer to the cleaner");
+    expect(offer?.body).toContain("Reply YES to schedule it");
+    const optOut = texts.find((item) => item.label === "Opt-out text to the cleaner");
+    expect(optOut?.body).toContain("You're opted out of cleaning texts");
+    expect(texts.map((item) => `${item.label}: ${item.status}.`)).toEqual(lines);
+    expect(JSON.stringify(outbox.structured)).not.toContain(LANE.pin);
+    expect(readFileSync(join(wired.root, "cleaner-live.json"), "utf8")).not.toContain(LANE.pin);
+    expect(twilioCalls).toBe(0);
   }, 40_000);
 
   it("hides both Scratch door codes and never calls Twilio for a Court code text", async () => {

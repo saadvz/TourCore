@@ -70,6 +70,8 @@ export interface ToolResult {
 export interface WiredApp {
   port: number;
   root: string;
+  /** The server's merged environment, including values saved in the secret store. */
+  env: () => NodeJS.ProcessEnv;
   tourSent: SentSms[];
   cleanerSent: SentSms[];
   close: () => Promise<void>;
@@ -104,8 +106,9 @@ export function fakeSms(decide: (body: string) => string = () => "queued"): Twil
   };
 }
 
-export async function startWiredApp(options: { live?: boolean; enabled?: boolean; scratchTools?: boolean; allowlist?: string; groupChat?: boolean } = {}): Promise<WiredApp> {
+export async function startWiredApp(options: { live?: boolean; enabled?: boolean; scratchTools?: boolean; allowlist?: string; groupChat?: boolean; now?: () => Date; calendar?: () => string } = {}): Promise<WiredApp> {
   const live = options.live !== false;
+  const now = options.now ?? (() => new Date(FROZEN));
   const enabled = options.enabled !== false;
   const root = mkdtempSync(join(tmpdir(), "cleaner-wiring-"));
   const ws = new PropertyWorkspace(root);
@@ -130,7 +133,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
   };
   const runtime = new FileRuntimeStore(join(root, "runtime"));
-  const installation = new Installation({ root, runtime, env: () => env, now: () => Date.parse(FROZEN) });
+  const installation = new Installation({ root, runtime, env: () => env, now: () => now().getTime() });
   installation.files.ensure({ deploymentMode: "LOCAL_DEVELOPER" });
   installation.files.setPublicBaseUrl(PUBLIC, "MANUAL");
   installation.files.writeState({ ...installation.files.state(), messagingProviderChoice: "twilio" });
@@ -147,7 +150,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     status: url === CALENDAR_URL ? 200 : 404,
     url,
     async text() {
-      return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      return url === CALENDAR_URL ? (options.calendar?.() ?? CALENDAR_ICS) : "";
     },
   }));
   const logs: string[] = [];
@@ -156,7 +159,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     workspace: ws,
     installation,
     operatorToken: () => TOUR_TOKEN,
-    now: () => new Date(FROZEN),
+    now,
     log: (line) => {
       logs.push(line);
     },
@@ -219,7 +222,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers, body: rawBody });
     return { status: res.status, raw: await res.text() };
   };
-  return { port, root, tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
+  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

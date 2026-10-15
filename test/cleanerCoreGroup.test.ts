@@ -38,9 +38,13 @@ const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so th
 const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
-const AFTER_CHECKS = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+/** With no alert routine saved, the step after the checks asks Grok to create the routines first. */
+const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
 const PRACTICE_HOLD = holdNote(PRACTICE);
 const PRACTICE_SETUP = [PRACTICE_HOLD];
+const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;
+/** After the cleaner's YES, LiveDesk keeps one host note for the newly confirmed job. */
+const PRACTICE_CONFIRMED = [PRACTICE_HOLD, PRACTICE_YES];
 const PRACTICE_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
 const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const PRACTICE_PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
@@ -884,30 +888,30 @@ describe("live group membership", () => {
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
     const quiet = desk.getState();
     expect(quiet.ok).toBe(true);
-    if (quiet.ok) expect(quiet.result.notes).toEqual(PRACTICE_SETUP);
+    if (quiet.ok) expect(quiet.result.notes).toEqual(PRACTICE_CONFIRMED);
     fetchBox.blockMembership();
     await desk.inbound({ id: "time-dropped", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     await desk.inbound({ id: "time-dropped-2", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
     const read = desk.getState();
     expect(read.ok).toBe(true);
-    if (read.ok) expect(read.result.notes).toEqual([...PRACTICE_SETUP, line]);
+    if (read.ok) expect(read.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
     expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
     expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
     const reread = desk.getState();
     expect(reread.ok).toBe(true);
-    if (reread.ok) expect(reread.result.notes).toEqual([...PRACTICE_SETUP, line]);
+    if (reread.ok) expect(reread.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
 
     resetLiveDesks();
     const restarted = boot();
     expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
     const afterRestart = restarted.getState();
     expect(afterRestart.ok).toBe(true);
-    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([...PRACTICE_SETUP, line]);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     await restarted.inbound({ id: "time-dropped-3", from: LIVE_CLEANER, text: "Can we do 4:00 PM?", channel: "group" });
     const still = restarted.getState();
     expect(still.ok).toBe(true);
-    if (still.ok) expect(still.result.notes).toEqual([...PRACTICE_SETUP, line]);
+    if (still.ok) expect(still.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_OFFER]);
     expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
   });
@@ -966,18 +970,18 @@ describe("live group membership", () => {
     expect(waiting.ok).toBe(true);
     if (waiting.ok) {
       expect(waiting.result.next).toBe(AFTER_CHECKS);
-      expect(waiting.result.notes).toEqual(PRACTICE_SETUP);
+      expect(waiting.result.notes).toEqual(PRACTICE_CONFIRMED);
     }
     const pinText = sms.sent.find((text) => text.body === privatePin);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
     const pendingNote = desk.getState();
     expect(pendingNote.ok).toBe(true);
-    if (pendingNote.ok) expect(pendingNote.result.notes).toEqual(PRACTICE_SETUP);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
+    if (pendingNote.ok) expect(pendingNote.result.notes).toEqual(PRACTICE_CONFIRMED);
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
     const read = desk.getState();
     expect(read.ok).toBe(true);
     if (read.ok) {
-      expect(read.result.notes).toEqual([...PRACTICE_SETUP, line]);
+      expect(read.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
       expect(read.result.next).toBe(AFTER_CHECKS);
       expect(JSON.stringify(read.result.notes).includes(DOOR_CODE)).toBe(false);
       expect(JSON.stringify(read.result.notes).includes(groupPin)).toBe(false);
@@ -987,7 +991,7 @@ describe("live group membership", () => {
     expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
     const afterRestart = restarted.getState();
     expect(afterRestart.ok).toBe(true);
-    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([...PRACTICE_SETUP, line]);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
 
     const heldRoot = mkdtempSync(join(tmpdir(), "cleaner-group-private-held-"));
@@ -1016,7 +1020,7 @@ describe("live group membership", () => {
     expect(heldSms.sent.filter((text) => text.body === privatePin || text.body === line || text.body === groupPin)).toEqual([]);
     const heldRead = held.getState();
     expect(heldRead.ok).toBe(true);
-    if (heldRead.ok) expect(heldRead.result.notes).toEqual([...PRACTICE_SETUP, PRACTICE_STOP, PRACTICE_PIN_HELD]);
+    if (heldRead.ok) expect(heldRead.result.notes).toEqual([...PRACTICE_CONFIRMED, PRACTICE_STOP, PRACTICE_PIN_HELD]);
     expect(heldSms.sent.filter((text) => text.to === LIVE_HOST).map((text) => text.body)).toEqual([PRACTICE_STOP]);
   });
 
@@ -1062,7 +1066,7 @@ describe("live group membership", () => {
     fetchBox.blockMembership();
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: failedAlert } });
-    desk.notePinDelivery({ sid: "SM-none", status: "sent" });
+    await desk.notePinDelivery({ sid: "SM-none", status: "sent" });
     const read = desk.getState();
     expect(read.ok).toBe(true);
     if (read.ok) {
@@ -1181,7 +1185,7 @@ describe("live group membership", () => {
     expect(state.ok).toBe(true);
     if (state.ok) {
       expect(state.result.next).toBe(AFTER_CHECKS);
-      expect(state.result.notes).toEqual(PRACTICE_SETUP);
+      expect(state.result.notes).toEqual(PRACTICE_CONFIRMED);
     }
   });
 
@@ -1198,7 +1202,7 @@ describe("live group membership", () => {
     expect(state.ok).toBe(true);
     if (state.ok) {
       expect(state.result.next).toBe(AFTER_CHECKS);
-      expect(state.result.notes).toEqual(PRACTICE_SETUP);
+      expect(state.result.notes).toEqual(PRACTICE_CONFIRMED);
     }
   });
 
@@ -1211,15 +1215,15 @@ describe("live group membership", () => {
     expect(pending.ok).toBe(true);
     if (pending.ok) {
       expect(pending.result.next).toBe(AFTER_CHECKS);
-      expect(pending.result.notes).toEqual(PRACTICE_SETUP);
+      expect(pending.result.notes).toEqual(PRACTICE_CONFIRMED);
     }
     const pinText = sms.sent.find((text) => text.body === privatePin);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "failed" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "failed" });
     const after = desk.getState();
     expect(after.ok).toBe(true);
     if (after.ok) {
       expect(after.result.next).toBe(PIN_FAILED);
-      expect(after.result.notes).toEqual(PRACTICE_SETUP);
+      expect(after.result.notes).toEqual(PRACTICE_CONFIRMED);
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
@@ -1232,22 +1236,22 @@ describe("live group membership", () => {
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     const pinText = sms.sent.find((text) => text.body === privatePin);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
     const pendingNote = desk.getState();
     expect(pendingNote.ok).toBe(true);
-    if (pendingNote.ok) expect(pendingNote.result.notes).toEqual(PRACTICE_SETUP);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
+    if (pendingNote.ok) expect(pendingNote.result.notes).toEqual(PRACTICE_CONFIRMED);
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
     const shown = desk.getState();
     expect(shown.ok).toBe(true);
     if (shown.ok) {
-      expect(shown.result.notes).toEqual([...PRACTICE_SETUP, line]);
+      expect(shown.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
       expect(shown.result.next).toBe(AFTER_CHECKS);
     }
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
     const hidden = desk.getState();
     expect(hidden.ok).toBe(true);
     if (hidden.ok) {
-      expect(hidden.result.notes).toEqual(PRACTICE_SETUP);
+      expect(hidden.result.notes).toEqual(PRACTICE_CONFIRMED);
       expect(hidden.result.next).toBe(PIN_FAILED);
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
@@ -1349,7 +1353,7 @@ describe("live group membership", () => {
     const grouped = await readyPractice(true);
     await grouped.desk.inbound({ id: "group-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "group-yes-schedule", from: LIVE_CLEANER, text: "YES" });
-    expect(notesOf(grouped.desk.getState())).toEqual([hold]);
+    expect(notesOf(grouped.desk.getState())).toEqual([hold, PRACTICE_YES]);
     await grouped.desk.inbound({ id: "group-problem", from: LIVE_CLEANER, text: "The lock is broken", channel: "group" });
     expect(notesOf(grouped.desk.getState())).toContain(hold);
     expect(grouped.posts.filter((text) => text.body === hold || text.body === resume || text.body === stopHold || text.body === pinHeld)).toEqual([]);
@@ -1381,15 +1385,15 @@ describe("live group membership", () => {
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(posts.map((text) => text.body).filter((body) => body === line)).toEqual([]);
     expect(hostBodies(sms.sent)).toEqual([]);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
     expect(notesOf(desk.getState())).toEqual(before);
     const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(sms.sent.filter((text) => text.body === privatePin)).toHaveLength(1);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
     expect(notesOf(desk.getState())).toEqual([...before, line]);
     expect(posts.map((text) => text.body).filter((body) => body === line || body.includes("Door code:"))).toEqual([]);
-    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
+    await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
     const hidden = desk.getState();
     expect(hidden.ok).toBe(true);
     if (hidden.ok) {
@@ -1602,11 +1606,11 @@ describe("live group membership", () => {
     expect(hostBodies(pending.sms.sent)).toEqual([]);
     const pendingSid = pending.sms.sent.find((text) => text.body === privatePin)?.sid ?? "";
     const before = notesOf(pending.desk.getState());
-    pending.desk.notePinDelivery({ sid: pendingSid, status: "sent" });
+    await pending.desk.notePinDelivery({ sid: pendingSid, status: "sent" });
     expect(notesOf(pending.desk.getState())).toEqual(before);
-    pending.desk.notePinDelivery({ sid: pendingSid, status: "delivered" });
+    await pending.desk.notePinDelivery({ sid: pendingSid, status: "delivered" });
     expect(notesOf(pending.desk.getState())).toEqual([...before, line]);
-    pending.desk.notePinDelivery({ sid: pendingSid, status: "failed" });
+    await pending.desk.notePinDelivery({ sid: pendingSid, status: "failed" });
     const failedNote = pending.desk.getState();
     expect(failedNote).toEqual({ ok: true, result: expect.objectContaining({ next: PIN_FAILED }) });
     expect(notesOf(failedNote)).toEqual(before);
@@ -1625,9 +1629,9 @@ describe("live group membership", () => {
     expect(blockedFetch.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
     expect(blocked.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
     const blockedSid = blocked.sms.sent.find((text) => text.body === privatePin)?.sid ?? "";
-    blocked.desk.notePinDelivery({ sid: blockedSid, status: "sent" });
+    await blocked.desk.notePinDelivery({ sid: blockedSid, status: "sent" });
     expect(notesOf(blocked.desk.getState()).includes(line)).toBe(false);
-    blocked.desk.notePinDelivery({ sid: blockedSid, status: "undelivered" });
+    await blocked.desk.notePinDelivery({ sid: blockedSid, status: "undelivered" });
     const undelivered = blocked.desk.getState();
     expect(undelivered).toEqual({ ok: true, result: expect.objectContaining({ next: PIN_FAILED }) });
     expect(notesOf(undelivered).includes(line)).toBe(false);
@@ -1647,9 +1651,9 @@ describe("live group membership", () => {
     expect(hostOut.sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(hostOut.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
     const hostSid = hostOut.sms.sent.find((text) => text.body === privatePin)?.sid ?? "";
-    hostOut.desk.notePinDelivery({ sid: hostSid, status: "sent" });
+    await hostOut.desk.notePinDelivery({ sid: hostSid, status: "sent" });
     expect(notesOf(hostOut.desk.getState()).includes(line)).toBe(false);
-    hostOut.desk.notePinDelivery({ sid: hostSid, status: "delivered" });
+    await hostOut.desk.notePinDelivery({ sid: hostSid, status: "delivered" });
     expect(notesOf(hostOut.desk.getState())).toContain(line);
     expect(hostBodies(hostOut.sms.sent)).toEqual([
       `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`,
@@ -1723,13 +1727,13 @@ describe("live group membership", () => {
     expect(view().includes(DOOR_CODE)).toBe(false);
     expect(view().includes("got the door code")).toBe(false);
     const sid = sms.sent.find((text) => text.body.includes("Door code:") && text.status !== "failed")?.sid ?? "";
-    desk.notePinDelivery({ sid, status: "sent" });
+    await desk.notePinDelivery({ sid, status: "sent" });
     expect(view().includes("got the door code")).toBe(false);
     expect(view().includes(DOOR_CODE)).toBe(false);
     const pending = desk.getState();
     expect(pending.ok).toBe(true);
     if (pending.ok) expect(pending.result.next).not.toBe(got);
-    desk.notePinDelivery({ sid, status: "delivered" });
+    await desk.notePinDelivery({ sid, status: "delivered" });
     const shown = desk.getState();
     expect(shown.ok).toBe(true);
     if (shown.ok) {

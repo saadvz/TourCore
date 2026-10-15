@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { SettingName } from "../install/secretStore";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
+import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
 
 export const CLEANER_MCP_PATH = "/mcp/cleaner-core";
@@ -28,8 +30,8 @@ const TOOLS = [
   {
     name: "save_calendar_link",
     title: "Save the calendar link",
-    description: "Saves the public calendar link. The first job is read from that link.",
-    input: z.object({ url: z.string() }),
+    description: "Saves where the bookings come from. Pass the Guesty Lite link as url, or google true when the host uses Google Calendar, or both. The first job is read from those.",
+    input: z.object({ url: z.string().optional(), google: z.boolean().optional() }),
   },
   {
     name: "save_door_code",
@@ -64,8 +66,20 @@ const TOOLS = [
   {
     name: "run_checks",
     title: "Run the checks",
-    description: "Reads the calendar and checks the setup. It does not send a live text.",
-    input: z.object({}),
+    description: "Reads the calendar and checks the setup. It does not send a live text. When the host uses Google Calendar, read its events with your own connector and pass them as googleEvents, the events.list result.",
+    input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
+  },
+  {
+    name: "check_now",
+    title: "Check the calendars now",
+    description: "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar.",
+    input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
+  },
+  {
+    name: "save_alert_routine",
+    title: "Connect alerts",
+    description: "Saves the alert routine's webhook address and token from the secure card. The reply never repeats them.",
+    input: z.object({ url: z.string().optional(), token: z.string().optional() }),
   },
   {
     name: "resume_job",
@@ -133,7 +147,15 @@ const Request = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, pinKey?: Buffer, scratchTools = false): Promise<{ status: number; body?: unknown }> {
+export type SaveSecrets = (values: Partial<Record<SettingName, string>>) => void;
+
+export async function handleCleanerMcpMessage(
+  desk: LiveDesk,
+  message: unknown,
+  pinKey?: Buffer,
+  scratchTools = false,
+  saveSecrets?: SaveSecrets,
+): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
   if (!parsed.success) return rpcError(null, -32600, "That isn't a valid request.");
@@ -144,7 +166,12 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, 
       protocolVersion: "2025-03-26",
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
-      instructions: "Call get_state first and follow its next step. Ask one plain question, then call get_state again. Do not skip ahead. Do not read out a door code.",
+      instructions: [
+        "Call get_state first and follow its next step. Ask one plain question, then call get_state again. Do not skip ahead. Do not read out a door code.",
+        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it. Post each alert in your own short words. Collect secrets only with your secure card.",
+        "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
+        "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
+      ].join(" "),
     });
   }
   if (method === "ping") return rpcResult(id, {});
@@ -167,7 +194,7 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, 
     }
     let reply: ToolReply;
     try {
-      reply = await callTool(desk, tool.name, args.data, pinKey);
+      reply = await callTool(desk, tool.name, args.data, pinKey, saveSecrets);
     } catch {
       reply = { ok: false, error: "That didn't work. Try again." };
     }
@@ -190,7 +217,7 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
   return false;
 }
 
-async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined): Promise<ToolReply> {
+async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined, saveSecrets: SaveSecrets | undefined): Promise<ToolReply> {
   switch (name) {
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
@@ -199,7 +226,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_people":
       return desk.savePeople(args as { host: string; cleaner: string; observer?: string });
     case "save_calendar_link":
-      return desk.saveCalendarLink(args as { url: string });
+      return desk.saveCalendarLink(args as { url?: string; google?: boolean });
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string }, pinKey);
     case "set_up_texting":
@@ -211,7 +238,12 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "mark_guests_left":
       return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":
-      return desk.runChecks();
+      return desk.runChecks(args as { googleEvents?: GoogleEventList });
+    case "check_now":
+      return desk.checkNow(args as { googleEvents?: GoogleEventList });
+    case "save_alert_routine":
+      if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
+      return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":

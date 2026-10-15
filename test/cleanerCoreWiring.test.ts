@@ -64,6 +64,8 @@ const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
 const PIN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+/** Grok's own step after the checks. It names the alert routine's key, and is for Grok, not the host. */
+const ROUTINE_STEP = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
 const HOST_LEAK = /\b(webhook|key|request|queued)\b/i;
 const FALSE_RETRY = /try again in a few minutes|we'll try again/i;
 
@@ -71,10 +73,13 @@ describe("Cleaner Core live wiring", () => {
   it("sets up from an empty install and runs the five cleaning steps through the webhook", async () => {
     const wired = await app();
     const tools: string[] = [];
+    /** Tool replies as they came over HTTP. */
+    const toolRaw: string[] = [];
+    /** Webhook replies. */
     const http: string[] = [];
     const remember = (result: { text: string; raw: string }) => {
       tools.push(result.text);
-      http.push(result.raw);
+      toolRaw.push(result.raw);
     };
 
     const first = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
@@ -234,15 +239,17 @@ describe("Cleaner Core live wiring", () => {
     expect(unsigned.status).toBe(403);
     http.push(await unsigned.text());
 
-    for (const text of [...tools, ...http, ...bodies(wired.cleanerSent.filter((item) => !item.body.includes(DOOR_CODE)))]) {
+    // Only a tool reply may hold Grok's routine step. A webhook reply or an SMS body is scanned in full.
+    const scanned = [...[...tools, ...toolRaw].map((raw) => raw.split(ROUTINE_STEP).join("")), ...http, ...bodies(wired.cleanerSent.filter((item) => !item.body.includes(DOOR_CODE)))];
+    for (const text of scanned) {
       expect(text).not.toMatch(BANNED);
       expect(text).not.toMatch(/\b(911|injury|blood)\b/i);
       expect(text).not.toMatch(FALSE_RETRY);
       expect(text).not.toMatch(HOST_LEAK);
     }
-    expect(http.join("\n")).not.toContain(DOOR_CODE);
+    expect([...toolRaw, ...http].join("\n")).not.toContain(DOOR_CODE);
     expect(tools.join("\n")).not.toContain(DOOR_CODE);
-    const captured = [...tools, ...http, ...bodies(wired.cleanerSent), ...wired.logs].join("\n");
+    const captured = [...tools, ...toolRaw, ...http, ...bodies(wired.cleanerSent), ...wired.logs].join("\n");
     expect(wired.cleanerSent.filter((item) => item.to === HOST).some((item) => /send the new time/i.test(item.body))).toBe(false);
     expect(captured).not.toContain(TEST_PIN_KEY);
     const store = readFileSync(join(wired.root, "cleaner-live.json"), "utf8");

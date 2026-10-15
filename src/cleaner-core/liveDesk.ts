@@ -1,20 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
+import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
+import { FileRuntimeStore } from "../storage/runtimeStore";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
-import { interpretFeed } from "./calendar";
+import { formatWhen, interpretFeed, zonedInstant } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
-import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
+import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 import { isScratchTestNumber } from "./scratch";
+import { googleCalendarSource, normalizeSnapshots, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
@@ -40,6 +44,8 @@ export const FIRST_QUESTION =
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
 const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
+const CALENDAR_ASK = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
+const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
 const PEOPLE_ASK = "Who is the host and the cleaner? Send each phone number. An observer is optional.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
@@ -51,6 +57,9 @@ const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
 export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
+const ROUTINE_NEEDED = "Send the routine's https address and its key.";
+const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
 
 interface PinSend {
   sid: string;
@@ -81,17 +90,30 @@ interface LiveFile {
   cleaner?: string;
   observer?: string;
   calendarLink?: string;
+  google?: boolean;
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
   checked?: boolean;
+  /** Ids of the host notes `check_now` has already returned, or that the host saw before it. */
+  alertsShown?: string[];
+  /** Ids of the host notes that already woke the cleaning routine. */
+  alertsQueued?: string[];
   released?: boolean;
+  /** Ids of the jobs the host gave both times for through confirm_times. */
+  timedJobs?: string[];
   cleanerOut?: boolean;
   hostOut?: boolean;
   seenInbound?: string[];
   conversationSid?: string;
   deliveries?: { id: string; status: DeliveryReport }[];
-  localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport }[];
+  localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport; body?: string }[];
+}
+
+interface CalendarRead {
+  guestyFailed: boolean;
+  reason?: string;
+  googleUnread: boolean;
 }
 
 interface OutboxRow {
@@ -100,6 +122,8 @@ interface OutboxRow {
   local: boolean;
   label: string;
   line: string;
+  status: string;
+  body: string;
 }
 
 let calendarFetch: CalendarFetch | undefined;
@@ -109,14 +133,32 @@ export function setCleanerCalendarFetch(fetchImpl: CalendarFetch | undefined): v
   calendarFetch = fetchImpl;
 }
 
+type AlertFetch = NonNullable<NonNullable<ConstructorParameters<typeof GrokRoutineWebhookSink>[1]>["fetch"]>;
+
+let alertFetch: AlertFetch | undefined;
+
+/** Tests stub the routine webhook. Unset uses the platform fetch. */
+export function setCleanerAlertFetch(fetchImpl: AlertFetch | undefined): void {
+  alertFetch = fetchImpl;
+}
+
 const desks = new Map<string, LiveDesk>();
 
+/**
+ * One desk per state folder. The first caller's env getter is kept, so the server passes a live
+ * one (`() => installation.env()`) and a secret saved later is seen at once.
+ */
 export function liveDeskFor(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): LiveDesk {
   const existing = desks.get(root);
   if (existing) return existing;
   const desk = new LiveDesk(root, env, now);
   desks.set(root, desk);
   return desk;
+}
+
+/** Delivers the cleaning routine's pending wake-ups. The server's retry timer calls this. */
+export async function drainCleanerAlerts(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): Promise<void> {
+  await liveDeskFor(root, env, now).drainAlerts();
 }
 
 export function resetLiveDesks(): void {
@@ -141,13 +183,32 @@ function propertyIdFor(business: string): string {
   return `live-${slug}`;
 }
 
+type JobView = ReturnType<CleanerCore["jobs"]>[number];
+
+/** A job has its times when it has a checkout time, and a next check-in time if a next stay is booked. */
+function hasTimes(job: JobView): boolean {
+  return Boolean(job.checkoutTime && (job.nextCheckInTime || !job.nextCheckInDate));
+}
+
+/**
+ * The job confirm_times would time: the first one that is not called off, declined, started, or done.
+ * A finished cleaning is never timed again, so a later booking is the one asked about.
+ */
+function timesTarget(engine: CleanerCore): JobView | undefined {
+  const closed = new Set(["canceled", "declined", "in_progress", "done"]);
+  return engine.jobs().find((job) => !closed.has(job.status));
+}
+
 export class LiveDesk {
   private file: LiveFile = {};
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
   private checking = false;
+  private queue: Promise<void> = Promise.resolve();
+  private inFlight = 0;
   private held = false;
   private readonly path: string;
+  private readonly alerts: OperatorEventOutbox;
 
   constructor(
     private readonly root: string,
@@ -156,6 +217,71 @@ export class LiveDesk {
   ) {
     this.path = join(root, "cleaner-live.json");
     this.load();
+    // The routine's address and key are read from the env on every delivery, never saved here.
+    this.alerts = new OperatorEventOutbox(
+      new FileRuntimeStore(join(root, "cleaner-alerts")),
+      () =>
+        new GrokRoutineWebhookSink(
+          { url: () => this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined, key: () => this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined },
+          alertFetch ? { fetch: alertFetch } : {},
+        ),
+      { now: () => this.now().getTime() },
+    );
+  }
+
+  /**
+   * Saves the cleaning routine's webhook address and token through `save` (the secret store) and
+   * queues a test wake-up. Neither value is kept in this desk's file or repeated in the reply.
+   * The door-code key is never accepted as the token.
+   */
+  saveAlertRoutine(
+    input: { url?: string; token?: string },
+    save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
+    pinKey?: Buffer,
+  ): ToolReply {
+    const url = input.url?.trim() ?? "";
+    const token = input.token?.trim() ?? "";
+    if (!calendarUrlAllowed(url) || token.length < 8) return this.fail(ROUTINE_NEEDED);
+    if (pinKey && token === pinKey.toString("base64")) return this.fail(ROUTINE_NEEDED);
+    save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
+    this.alerts.enqueue(testEvent(this.now()));
+    this.startDrain();
+    return this.reply({ next: ROUTINE_SAVED });
+  }
+
+  /** Delivers every pending wake-up that is due. A routine that is down or not saved leaves them pending. */
+  async drainAlerts(): Promise<void> {
+    await this.alerts.drain();
+  }
+
+  private startDrain(): void {
+    void this.drainAlerts().catch(() => undefined);
+  }
+
+  /** Ids of the host notes visible now. Taken before a path Grok doesn't see, so only that path's notes wake the routine. */
+  private visibleNoteIds(): Set<string> {
+    this.resume();
+    return new Set(this.engine ? this.visibleNotes(this.engine).map((note) => note.id) : []);
+  }
+
+  /**
+   * Wakes the cleaning routine once when a host note became visible since `before` and the host
+   * has not seen it yet. The event carries no content: Grok reads the notes with `check_now`.
+   */
+  private queueNewAlerts(before: Set<string>): void {
+    const engine = this.engine;
+    if (!engine) return;
+    const queued = new Set(this.file.alertsQueued ?? []);
+    const shown = new Set(this.file.alertsShown ?? []);
+    const fresh = this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id));
+    if (fresh.length === 0) return;
+    // One waiting wake-up is enough: check_now returns every note that is new by then. Without a
+    // routine saved, a wake-up per note would arrive later as a backlog of identical wake-ups.
+    const waiting = this.alerts.records().some((record) => record.event.eventType === "cleaning.update" && record.status === "pending");
+    if (!waiting) this.alerts.enqueue(cleaningUpdateEvent(this.now()));
+    this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
+    this.persist();
+    this.startDrain();
   }
 
   /** True when `text` contains the saved door code. */
@@ -220,21 +346,23 @@ export class LiveDesk {
     else delete this.file.observer;
     this.persist();
     this.engine = undefined;
-    return this.reply({ next: "What's the calendar link for this property?" });
+    return this.reply({ next: CALENDAR_ASK });
   }
 
-  saveCalendarLink(input: { url?: string }): ToolReply {
+  saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
     const url = input.url?.trim() ?? "";
-    if (!url.startsWith("https://")) return this.fail("Send a public https calendar link.");
-    this.file.calendarLink = url;
+    if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
+    if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
+    if (url) this.file.calendarLink = url;
+    if (input.google) this.file.google = true;
     this.persist();
     return this.reply({ next: "What's the door code? I'll save it and I won't repeat it." });
   }
 
   saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
-    if (!this.file.calendarLink && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
+    if (!this.file.calendarLink && !this.file.google && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
     if (!pinKey) return this.fail(PIN_KEY_MISSING);
@@ -264,30 +392,173 @@ export class LiveDesk {
     });
   }
 
-  async runChecks(): Promise<ToolReply> {
-    if (!this.file.texting || !this.file.calendarLink || !this.pin) return this.fail("Set up texting first.");
+  /**
+   * Runs `work` after every earlier serial job has settled, so a check never overlaps a text or a
+   * tool step that is still sending. Work already inside the queue calls the inner steps, never a
+   * serial entry point, or it would wait on itself. With nothing in flight, `work` starts at once.
+   */
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const now = (): Promise<T> => {
+      try {
+        return work();
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    };
+    const idle = this.inFlight === 0;
+    this.inFlight += 1;
+    const run = idle ? now() : this.queue.then(now, now);
+    this.queue = run.then(
+      () => {
+        this.inFlight -= 1;
+      },
+      () => {
+        this.inFlight -= 1;
+      },
+    );
+    return run;
+  }
+
+  runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    return this.serial(() => this.runChecksNow(input));
+  }
+
+  /**
+   * Re-reads the saved calendars, sends reminders that are due, and returns the host alerts
+   * that are new since the last call. Google events are applied only when Grok passes them.
+   */
+  checkNow(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    return this.serial(() => this.checkNowSerial(input));
+  }
+
+  private async checkNowSerial(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
+    this.resume();
+    const engine = this.engine;
+    if (!this.file.checked || !engine) return this.fail("Run the checks first.");
+    const read = await this.readCalendars(input.googleEvents);
+    await engine.runReminders();
+    this.syncHold();
+    const shown = new Set(this.file.alertsShown ?? []);
+    const fresh = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].filter((note) => !shown.has(note.id));
+    this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
+    this.persist();
+    return this.reply({
+      alerts: fresh.map((note) => note.body),
+      turns: this.turns(),
+      ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
+      ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
+      ...(read.googleUnread ? { googleUnread: true as const } : {}),
+    });
+  }
+
+  private async runChecksNow(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
+    if (!this.file.texting || !(this.file.calendarLink || this.file.google) || !this.pin) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
     }
-    const fetchImpl = calendarFetch ?? fetch;
-    const read = await readPublicCalendar(this.file.calendarLink, fetchImpl);
-    if (!read.ok) return this.fail(read.reason);
-    const feed = interpretFeed(read.body);
-    if (feed.turnovers.length === 0) return this.fail("That calendar has no guest stay yet.");
+    if (this.file.google && !input.googleEvents) return this.fail("Read Google Calendar and pass its events.");
+    const before = this.engine;
     this.engine = this.openEngine();
     this.checking = true;
+    let read: CalendarRead;
     try {
-      await this.engine.pollFeed(read.body);
+      read = await this.readCalendars(input.googleEvents, { skipGoogleOnGuestyFailure: true });
+    } catch (err) {
+      this.engine = before;
+      throw err;
     } finally {
       this.checking = false;
     }
+    if (read.guestyFailed) {
+      this.engine = before;
+      return this.fail(read.reason ?? "I couldn't read that calendar.");
+    }
+    if (read.googleUnread) {
+      this.engine = before;
+      return this.fail(GOOGLE_UNREAD);
+    }
     this.file.checked = true;
+    // run_checks' own reply already asks for the times, so its new-booking alert counts as shown too.
+    const seen = [...this.visibleNotes(this.engine), ...this.newBookingAlert(this.engine)].map((note) => note.id);
+    this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
     return this.reply({
-      next: "I read the calendar. Tell me the checkout time and the next check-in time before I text the cleaner.",
+      next:
+        turns.length === 0
+          ? "I read the calendar. There's no guest stay yet. I'll tell you when one shows up."
+          : "I read the calendar. Tell me the checkout time and the next check-in time before I text the cleaner.",
       turns,
     });
+  }
+
+  /**
+   * Reads every saved booking source into the engine. Guesty Lite first, then Google. A failed
+   * Guesty read does not stop Google, unless the caller says so. An unread Google source is reported.
+   *
+   * Each read is a full snapshot of its source, and the engine calls off a job that no loaded source
+   * lists. Its loaded sources live in memory only, so after a restart a read of one source alone would
+   * call off the other source's jobs. So with both sources saved, a source is applied alone only when
+   * the engine already holds the other one, and the first read of both is applied as one.
+   */
+  private async readCalendars(googleEvents?: GoogleEventList, options: { skipGoogleOnGuestyFailure?: boolean } = {}): Promise<CalendarRead> {
+    const engine = this.engine;
+    const file = this.file;
+    if (!engine) throw new Error("Setup is incomplete.");
+    const loaded = new Set(engine.lastSync().sources);
+    let googleUnread = false;
+    let google: SourceSnapshot | undefined;
+    // Google events count only when the host saved Google as a source.
+    if (googleEvents && file.google && file.propertyId) {
+      google = await googleCalendarSource(googleEvents, file.propertyId).read();
+      // Events that are there but none of which reads as a stay or a block are a shape this reader
+      // doesn't know. Applying them would remove every Google stay, so the read counts as unread.
+      if (googleEvents.items.length > 0 && google.turnovers.length === 0 && google.blocks.length === 0) {
+        google = undefined;
+        googleUnread = true;
+      }
+    }
+    let guestyFailed = false;
+    let reason: string | undefined;
+    let guesty: string | undefined;
+    const googleMissing = Boolean(file.google) && !google && !loaded.has("google-calendar");
+    if (file.calendarLink && !googleMissing) {
+      const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
+      if (read.ok) guesty = read.body;
+      else {
+        guestyFailed = true;
+        reason = read.reason;
+      }
+    }
+    const guestyMissing = Boolean(file.calendarLink) && guesty === undefined && !loaded.has("guesty-lite");
+    if (guesty !== undefined && google && (!loaded.has("guesty-lite") || !loaded.has("google-calendar"))) {
+      // The first read of both sources: apply them together once, so neither one's jobs look removed.
+      const feed = interpretFeed(guesty);
+      const both = normalizeSnapshots([{ kind: "guesty-lite", tenantId: google.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, google]).feed;
+      const merged: SourceSnapshot = { kind: "google-calendar", tenantId: google.tenantId, turnovers: both.turnovers, blocks: both.blocks };
+      await engine.readSource({ kind: "google-calendar", read: async () => merged });
+    }
+    if (guesty !== undefined) await engine.pollFeed(guesty);
+    if (google && !(guestyFailed && (options.skipGoogleOnGuestyFailure || guestyMissing))) {
+      const snapshot = google;
+      const applied = await engine.readSource({ kind: "google-calendar", read: async () => snapshot });
+      googleUnread = !applied.polled;
+    }
+    return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
+  }
+
+  /**
+   * With group chat on, the engine asks the host nothing about a new booking, because Grok collects
+   * the times with confirm_times. This alert names the job confirm_times would time, so check_now
+   * reports the booking once. It is not a host note, so get_state is unchanged. A job the host
+   * already timed is left to needsTimes.
+   */
+  private newBookingAlert(engine: CleanerCore): { id: string; body: string }[] {
+    if (!groupChatEnabled(this.env()) || !this.file.address || !this.file.timeZone) return [];
+    const job = timesTarget(engine);
+    if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
+    const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
+    return [{ id: `new-booking:${job.id}`, body: `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?` }];
   }
 
   getTurns(): ToolReply {
@@ -295,7 +566,11 @@ export class LiveDesk {
     return this.reply({ turns: this.turns(), ...(this.held ? { held: true } : {}) });
   }
 
-  async confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+  confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+    return this.serial(() => this.confirmTimesNow(input));
+  }
+
+  private async confirmTimesNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     this.resume();
     if (!this.file.checked || !this.engine || !this.file.host) return this.fail("Run the checks first.");
     const checkout = input.checkout?.trim() ?? "";
@@ -303,29 +578,49 @@ export class LiveDesk {
     if (!statedClock(checkout) || !statedClock(checkIn)) {
       return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
     }
+    const engine = this.engine;
+    const target = timesTarget(engine);
+    const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
     if (groupChatEnabled(this.env())) {
-      await this.engine.confirmHostTimes({ checkout, checkIn });
+      await engine.confirmHostTimes({ checkout, checkIn });
     } else {
-      await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
-      await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+      await engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
+      // The engine reads a lone time as the checkout while the job is still open. A stay with no
+      // next stay has no check-in to ask about, and when the next check-in is already stored (a
+      // moved stay keeps it), a second text would overwrite the checkout.
+      const after = engine.jobs().find((item) => item.id === target?.id);
+      if (after?.nextCheckInDate && !after.nextCheckInTime) {
+        await engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+      }
     }
-    const job = this.engine.jobs().find((item) => item.checkoutTime && item.nextCheckInTime);
-    if (!job) {
+    const job = engine.jobs().find((item) => item.id === target?.id);
+    if (!job || !hasTimes(job)) {
       return this.fail("I only save a time you stated. Say the checkout and the next check-in, like 10:30 AM and 3:00 PM.");
     }
     this.file.released = true;
+    this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
     this.persist();
-    await this.engine.releaseCleanerTexts();
-    const sentOptIn = this.engine.outbox().some((item) => item.kind === "opt-in" && item.status === "sent");
+    await engine.releaseCleanerTexts();
+    // Only the texts this call sent, so an opt-in from an earlier job is not reported again.
+    const sentNow = engine.outbox().filter((item) => item.status === "sent" && !sentBefore.has(item.id) && item.to === this.file.cleaner);
+    const sent = (kind: TextKind) => sentNow.some((item) => item.kind === kind);
     return this.reply({
-      next: sentOptIn
+      next: sent("opt-in")
         ? "Times saved. The cleaner got one text asking them to reply YES. Nothing else goes to them until they do."
-        : "Times saved. Nothing was sent.",
+        : sent("offer")
+          ? "Times saved. I sent the cleaner the cleaning offer. They reply YES to take it."
+          : sent("corrected")
+            ? "Times saved. I sent the cleaner the new time."
+            : "Times saved. Nothing was sent.",
       turns: this.turns(),
     });
   }
 
-  async markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+  markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    return this.serial(() => this.markGuestsLeftNow(input, pinKey));
+  }
+
+  private async markGuestsLeftNow(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
     if (!this.file.host || !this.file.checked) return this.fail("Run the checks first.");
     const said = input.said?.trim() ?? "";
     const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
@@ -363,7 +658,11 @@ export class LiveDesk {
     return this.reply({ next: PIN_FAILED });
   }
 
-  async resumeCleaning(): Promise<ToolReply> {
+  resumeCleaning(): Promise<ToolReply> {
+    return this.serial(() => this.resumeCleaningNow());
+  }
+
+  private async resumeCleaningNow(): Promise<ToolReply> {
     this.resume();
     if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
     await this.engine.resumeJob();
@@ -372,7 +671,11 @@ export class LiveDesk {
     return this.reply({ next: resumeNote(this.file.address) });
   }
 
-  resetScratch(): ToolReply {
+  resetScratch(): Promise<ToolReply> {
+    return this.serial(async () => this.resetScratchNow());
+  }
+
+  private resetScratchNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.engine = undefined;
@@ -385,6 +688,9 @@ export class LiveDesk {
     delete this.file.conversationSid;
     delete this.file.deliveries;
     delete this.file.localSends;
+    delete this.file.alertsShown;
+    delete this.file.alertsQueued;
+    delete this.file.timedJobs;
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
@@ -405,19 +711,32 @@ export class LiveDesk {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
-    return this.reply({ lines: this.outboxRows().map((row) => row.line) });
+    const rows = this.outboxRows();
+    return this.reply({
+      lines: rows.map((row) => row.line),
+      texts: rows.map((row) => ({ label: row.label, status: row.status, body: this.hideCode(row.body) })),
+    });
   }
 
-  async sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
+  sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
+    return this.serial(() => this.sendTestTextNow(input));
+  }
+
+  private async sendTestTextNow(input: { from?: string; text?: string }): Promise<ToolReply> {
     const guard = this.scratchGuard(input.from ?? "");
     if (guard) return this.fail(guard);
     const text = input.text?.trim() ?? "";
     if (!text) return this.fail(SCRATCH_TEXT_NEEDED);
-    await this.inbound({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
+    // Already inside the serial queue, so this calls the inner step, not `inbound`.
+    await this.inboundSerial({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
     return this.reply({ next: SCRATCH_TEST_WENT_THROUGH });
   }
 
-  async addTestTurn(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+  addTestTurn(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+    return this.serial(() => this.addTestTurnNow(input));
+  }
+
+  private async addTestTurnNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     const guard = this.testTurnGuard();
     if (guard) return this.fail(guard);
     if (!this.file.texting || !this.pin || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
@@ -445,7 +764,11 @@ export class LiveDesk {
     });
   }
 
-  async reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
+  reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
+    return this.serial(() => this.reportDeliveryNow(input));
+  }
+
+  private async reportDeliveryNow(input: { which?: string; status?: string }): Promise<ToolReply> {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     const status = input.status?.trim().toLowerCase() ?? "";
@@ -467,7 +790,15 @@ export class LiveDesk {
   }
 
   /** Records a Twilio delivery status. Does not unseal the door code. A failure tells the host once. */
-  async notePinDelivery(input: { sid: string; status: string }): Promise<void> {
+  notePinDelivery(input: { sid: string; status: string }): Promise<void> {
+    return this.serial(async () => {
+      const before = this.visibleNoteIds();
+      await this.pinDeliveryNow(input);
+      this.queueNewAlerts(before);
+    });
+  }
+
+  private async pinDeliveryNow(input: { sid: string; status: string }): Promise<void> {
     const tracked = this.file.pinSend;
     if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
     this.resume();
@@ -476,7 +807,20 @@ export class LiveDesk {
     await this.applyPinReport(pinId, input.status.toLowerCase());
   }
 
-  async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  /** A text from the host, the cleaner, or the group. Grok does not see it, so a new host note wakes the routine. */
+  inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+    return this.serial(() => this.inboundSerial(input));
+  }
+
+  /** The body of `inbound`, for a caller already inside the serial queue. */
+  private async inboundSerial(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+    const before = this.visibleNoteIds();
+    const result = await this.inboundNow(input);
+    this.queueNewAlerts(before);
+    return result;
+  }
+
+  private async inboundNow(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -490,7 +834,9 @@ export class LiveDesk {
       this.resume();
       const keyword = messagingKeyword(input.text);
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
+      const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
       const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
+      this.noteCleanerYes(offered);
       this.noteSeen(input.id);
       this.syncHold();
       return { sent: result.sent };
@@ -500,6 +846,16 @@ export class LiveDesk {
   }
 
   private readonly claiming = new Set<string>();
+
+  /** The engine tells the host nothing when the cleaner accepts. One note per job, the first time it is confirmed. */
+  private noteCleanerYes(offered: Set<string>): void {
+    const engine = this.engine;
+    if (!engine) return;
+    for (const job of engine.jobs()) {
+      if (!offered.has(job.id) || job.status !== "confirmed") continue;
+      engine.keepHostNote(`cleaner-yes:${job.id}`, `The cleaner said YES to the turnover at ${this.file.address ?? "the property"}.`);
+    }
+  }
 
   private async inboundBeforeJob(id: string, from: string, keyword: ReturnType<typeof messagingKeyword>): Promise<CleanerText[]> {
     if (keyword !== "stop" && keyword !== "start") return [];
@@ -524,7 +880,7 @@ export class LiveDesk {
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
     if (this.scratchCapture()) {
-      this.noteLocal(from, keyword);
+      this.noteLocal(from, keyword, body);
       return [{ to: from, body, kind: keyword }];
     }
     if (!liveSmsOn(this.env())) return [];
@@ -541,23 +897,44 @@ export class LiveDesk {
     if (this.file.address) done.push("Property saved.");
     if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
     if (this.file.calendarLink) done.push("Calendar link saved.");
+    if (this.file.google) done.push("Google Calendar saved.");
     if (this.pin) done.push("Door code saved.");
     if (this.file.texting) done.push("Texting saved.");
+    if (this.file.texting && groupChatEnabled(this.env())) {
+      done.push(this.file.observer ? "Group chat set up with you, the cleaner, and the observer." : "Group chat set up with you and the cleaner.");
+    }
     if (this.file.checked) done.push("Checks finished.");
     let next = "What's the property address, and what should I call the business?";
     if (!this.file.address) next = "What's the property address, and what should I call the business?";
     else if (!this.file.cleaner) next = PEOPLE_ASK;
-    else if (!this.file.calendarLink) next = "What's the calendar link for this property?";
+    else if (!this.file.calendarLink && !this.file.google) next = CALENDAR_ASK;
     else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
+    else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
     if (this.held) next = this.holdLine();
-    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
-    let notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
-    if (this.engine && !this.engine.pinAccepted()) notes = notes.filter((line) => line !== PIN_SENT);
+    const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
     return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
+  }
+
+  /**
+   * True when a job the host already timed has lost a time. With group chat on, a moved stay clears
+   * the checkout time without a host note, so check_now flags it for Grok to ask. A job the host
+   * never timed (the next stay on the calendar) is not asked about here.
+   */
+  private needsTimes(engine: CleanerCore): boolean {
+    const timed = new Set(this.file.timedJobs ?? []);
+    return engine.jobs().some((job) => timed.has(job.id) && job.status !== "canceled" && job.status !== "done" && !hasTimes(job));
+  }
+
+  /** The host notes the host may see now. A private-code line waits for delivery, and PIN_SENT for the accepted text. */
+  private visibleNotes(engine: CleanerCore): { id: string; body: string }[] {
+    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
+    return engine
+      .hostNoteEntries()
+      .filter((note) => (delivered || !isPrivateCodeLine(note.body)) && (note.body !== PIN_SENT || engine.pinAccepted()));
   }
 
   private turns(): Record<string, unknown>[] {
@@ -596,7 +973,7 @@ export class LiveDesk {
     if (!file.host || !file.cleaner || !file.address || !file.timeZone || !file.propertyId || !file.business) {
       throw new Error("Setup is incomplete.");
     }
-    const env = this.env;
+    const env = () => this.env();
     const dataDir = join(this.root, "cleaner-job");
     const observer = parsePhone(file.observer ?? "");
     mkdirSync(dataDir, { recursive: true });
@@ -709,11 +1086,11 @@ export class LiveDesk {
       const stored = item.status === "uncertain" ? "waiting" : item.status;
       const status = shown ?? saved ?? stored;
       const role = whoTheyAre(item.to, people);
-      return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status) };
+      return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status), status, body: item.body };
     });
     const localRows = (this.file.localSends ?? []).map((item) => {
       const role = whoTheyAre(item.to, people);
-      return { id: item.id, kind: item.kind, local: true, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, item.status) };
+      return { id: item.id, kind: item.kind, local: true, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, item.status), status: item.status, body: item.body ?? "" };
     });
     return [...engineRows, ...localRows];
   }
@@ -730,9 +1107,9 @@ export class LiveDesk {
     this.persist();
   }
 
-  private noteLocal(to: string, kind: TextKind): void {
+  private noteLocal(to: string, kind: TextKind, body = ""): void {
     const sends = this.file.localSends ?? [];
-    sends.push({ id: `local-${randomUUID()}`, to, kind, status: "sent" });
+    sends.push({ id: `local-${randomUUID()}`, to, kind, status: "sent", body });
     this.file.localSends = sends;
     this.persist();
   }

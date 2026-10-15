@@ -68,6 +68,17 @@ export function guestyLiteSource(ical: string, tenantId: string): BookingSource 
   };
 }
 
+/** The part of a Calendar API `events.list` response that Grok's own connector hands over. */
+export interface GoogleEventList {
+  timeZone?: string;
+  items: unknown[];
+}
+
+/** One read of events Grok already fetched. The property id is the tenant, so the engine accepts it. */
+export function googleCalendarSource(list: GoogleEventList, tenantId: string): BookingSource {
+  return googleCalendarFixtureSource(JSON.stringify({ ...list, tenantId }));
+}
+
 /**
  * Reads a saved Calendar API `events.list` document. No network and no credentials.
  * A cancelled event is omitted, which is how a removed event leaves the snapshot.

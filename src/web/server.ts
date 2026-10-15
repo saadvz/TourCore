@@ -19,6 +19,7 @@ import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
 import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
+import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
@@ -660,21 +661,21 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           pinKeyHeader: req.headers["x-cleaner-core-pin-key"],
           contentType: String(req.headers["content-type"] ?? ""),
           readBody: () => readRaw(req),
-          env: installation.env(),
+          env: () => installation.env(),
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
+          saveSecrets: (values) => installation.secrets.set(values),
         });
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
       }
       if (method === "POST" && url.pathname === CLEANER_TWILIO_STATUS_PATH) {
         const rawBody = await readRaw(req);
-        const env = installation.env();
         const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
         const result = await handleCleanerTwilioStatus({
           rawBody,
           headers: req.headers,
           url: signedUrl,
-          env,
+          env: () => installation.env(),
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
         });
@@ -703,7 +704,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           rawBody,
           headers: req.headers,
           url: signedUrl,
-          env,
+          env: () => installation.env(),
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
         });
@@ -724,7 +725,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
               rawBody,
               headers: req.headers,
               url: signedUrl,
-              env,
+              env: () => installation.env(),
               root: installation.root,
               now: () => options.now?.() ?? new Date(),
             });
@@ -794,6 +795,11 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       .then(() => conversations.releaseUnconfirmed())
       .then(() => conversations.tickOverstay())
       .then(() => installation.outbox.drain().then(() => undefined))
+      .catch(() => undefined);
+    // Off Tour Core's chain, so a slow cleaning routine never delays the landlord's alerts.
+    // The cleaner outbox's own guard keeps two drains from overlapping. A throw stays inside the promise.
+    void Promise.resolve()
+      .then(() => (cleanerCoreEnabled(installation.env()) ? drainCleanerAlerts(installation.root, () => installation.env(), () => options.now?.() ?? new Date()) : undefined))
       .catch(() => undefined);
   }, options.alertRetryMs ?? 15_000);
   retry.unref();

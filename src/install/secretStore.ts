@@ -30,6 +30,9 @@ export const SETTINGS = {
   /** Grok Routine webhook address. Treated as a secret: it's a capability to wake the routine. */
   TOURCORE_GROK_ROUTINE_URL: { secret: true },
   TOURCORE_GROK_ROUTINE_KEY: { secret: true },
+  /** The cleaning Grok Bot's own routine webhook. A different routine from Tour Core's. */
+  CLEANER_CORE_ROUTINE_URL: { secret: true },
+  CLEANER_CORE_ROUTINE_KEY: { secret: true },
   /** Tour Core's own Google OAuth client secret. Never a landlord's Google password. */
   GOOGLE_OAUTH_CLIENT_SECRET: { secret: true },
   GOOGLE_OAUTH_REFRESH_TOKEN: { secret: true },
