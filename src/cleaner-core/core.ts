@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -56,7 +56,9 @@ export type TextKind =
   | "review"
   | "resume"
   /** The host's own message, sent only after the host approved its exact text. */
-  | "host-message";
+  | "host-message"
+  /** The host's saved checklist, to the cleaner after the private code. */
+  | "checklist";
 
 export interface CleanerText {
   to: string;
@@ -101,6 +103,16 @@ export interface JobView {
   asking: "checkout" | "checkin" | null;
   /** The cleaner's arrival time Grok saved, like 11:30 AM. Absent until one is saved. */
   arrivalTime?: string;
+  /** When the cleaning started (START or the cleaner's first message after the code), as an instant. */
+  startedAt?: string;
+  /** When the cleaner's DONE was taken, as an instant. */
+  doneAt?: string;
+  /** Photos saved during the cleaning. */
+  photos?: number;
+  /** The cleaner's notes during the cleaning, redacted. */
+  notes?: string[];
+  /** The checklist items the cleaner was sent. */
+  checklist?: string[];
 }
 
 export interface OutboxView {
@@ -340,12 +352,32 @@ export interface CleanerCoreOptions {
    * Unset keeps the guide reply for the Scratch CLI and the smoke runs.
    */
   grokReadsMessages?: boolean;
+  /** The host's checklist, sent to the cleaner once per job right after the private code. */
+  checklist?: { name: string; items: string[] };
+  /** DONE waits until the cleaner has sent a photo. */
+  photosRequired?: boolean;
+  /** The cleaner's other texts during the cleaning are kept as job notes. */
+  supplyNotes?: boolean;
+  /**
+   * The host's other instructions, added to the end of the first offer. LiveDesk sets it only when
+   * instructions are saved, so the Scratch CLI and smoke engines keep their offer copy.
+   */
+  offerNote?: string;
   /** Cory reads the thread with the cleaner. Absent keeps one-to-one texts. */
   groupChat?: {
     hostName: string;
     cleanerName: string;
     extra?: { phone: string; name: string }[];
   };
+}
+
+export interface InboundText {
+  id: string;
+  from: string;
+  text: string;
+  channel?: "group";
+  media?: number;
+  photos?: number;
 }
 
 export interface CleanerCore {
@@ -356,7 +388,13 @@ export interface CleanerCore {
    * removed another's stays. When any one is refused, none is applied.
    */
   readSources(sources: readonly BookingSource[], options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
-  receive(input: { id: string; from: string; text: string; channel?: "group" }): Promise<ReceiveResult>;
+  /**
+   * `media` is how many attachments an MMS carried, and `photos` how many of them were saved for the
+   * cleaning in progress. A text with media never gets the generic guide reply.
+   */
+  receive(input: InboundText): Promise<ReceiveResult>;
+  /** The cleaning in progress an MMS from `from` would add photos to. Undefined when there is none or the text was seen. */
+  photoJobFor(input: { id: string; from: string }): string | undefined;
   confirmHostTimes(input: { checkout: string; checkIn: string }): Promise<CleanerText[]>;
   resumeJob(): Promise<CleanerText | null>;
   groupPinSettled(): boolean;
@@ -453,7 +491,10 @@ export function joinSplitDigits(text: string): string {
   return text.replace(/(\d)[\s.\-_/\u2010-\u2015]+(?=\d)/g, "$1");
 }
 
-const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
+const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done", "checklist"]);
+/** Job notes kept during a cleaning, newest last, and the length of each. */
+const MAX_NOTES = 5;
+const MAX_NOTE = 200;
 const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
@@ -504,6 +545,16 @@ interface Job {
   aliases?: string[];
   /** The cleaner's arrival instant on the checkout day, saved by Grok. */
   arrivalAt?: string;
+  /** When the cleaning started: START, or the cleaner's first other message after the code. */
+  startedAt?: string;
+  /** When DONE was taken. */
+  doneAt?: string;
+  /** Photos saved during the cleaning. */
+  photos?: number;
+  /** The cleaner's notes during the cleaning, redacted, at most 5. */
+  notes?: string[];
+  /** The checklist items sent to the cleaner. */
+  checklist?: string[];
 }
 
 interface Clearance {
@@ -685,6 +736,8 @@ class Engine implements CleanerCore {
   private hadStoredConsent = false;
   private storeLoaded = false;
   private readonly inflight = new Set<string>();
+  /** Inbound ids being handled that carried media. They never get the generic guide reply. */
+  private readonly withMedia = new Set<string>();
   private sourceRecords: SourceRecord[] = [];
   private reviewItems: ReviewItem[] = [];
   private auditLog: AuditEvent[] = [];
@@ -781,28 +834,39 @@ class Engine implements CleanerCore {
     return undefined;
   }
 
-  async receive(input: { id: string; from: string; text: string; channel?: "group" }): Promise<ReceiveResult> {
+  async receive(input: InboundText): Promise<ReceiveResult> {
     if (!this.enabled) return { handled: false, reason: "disabled", sent: [] };
     const from = parsePhone(input.from);
     if (!from || !this.numberAllowed(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.inflight.add(input.id);
+    if ((input.media ?? 0) > 0) this.withMedia.add(input.id);
     try {
       const { label, ...result } = await this.receiveClaimed(input, from);
       return this.options.grokReadsMessages ? { ...result, outcome: label ?? outcomeOf(result) } : result;
     } finally {
       this.inflight.delete(input.id);
+      this.withMedia.delete(input.id);
     }
   }
 
+  photoJobFor(input: { id: string; from: string }): string | undefined {
+    const from = parsePhone(input.from);
+    if (!this.enabled || !from || from !== this.cleanerPhone || this.cleanerConsent !== "in") return undefined;
+    if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return undefined;
+    return this.progressJob()?.id;
+  }
+
   /** `label`, when set, is what Grok reads beside the message instead of the label from the reason. */
-  private async receiveClaimed(input: { id: string; from: string; text: string; channel?: "group" }, from: string): Promise<ReceiveResult & { label?: MessageHandled }> {
+  private async receiveClaimed(input: InboundText, from: string): Promise<ReceiveResult & { label?: MessageHandled }> {
     this.transcriptState.push(`${from}: ${this.redactInbound(input.text.trim())}`);
     if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
       this.save();
       return { handled: true, reason: "wrong-tenant", sent: [] };
     }
+    const progress = from === this.cleanerPhone && this.cleanerConsent === "in" ? this.progressJob() : undefined;
+    if (progress) this.noteProgress(progress, input);
 
     const keyword = keywordOf(input.text);
     const grouped = Boolean(this.groupChat && input.channel === "group");
@@ -1528,24 +1592,67 @@ class Engine implements CleanerCore {
   private async finish(from: string, id: string): Promise<ReceiveResult & { label?: MessageHandled }> {
     if (this.cleanerConsent !== "in") return this.markIgnored(id);
     if (this.problemHold) return this.guide(from, id);
-    const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
+    const job = this.progressJob();
     if (!job) {
       for (const finished of this.ordered()) {
         if (finished.done && this.pinDelivered(finished)) await this.tellHostDone(finished);
       }
       return this.guide(from, id);
     }
+    if (this.options.photosRequired && (job.photos ?? 0) === 0) {
+      // The cleaning stays open until a photo arrives.
+      const asked = await this.reply(from, PHOTO_FIRST, "next", "ignored", id, job.id);
+      if ((asked.sent.length > 0 || this.delivery(`next:${id}`) === "sent") && !this.inboundIds.includes(id)) this.inboundIds.push(id);
+      this.save();
+      return { ...asked, label: "none" };
+    }
     const result = await this.reply(from, "Thanks, cleaning marked done.", "done", "done", id, job.id);
     const acked = result.sent.length > 0 || this.delivery(`done:${id}`) === "sent";
     if (acked) {
       job.started = true;
       job.done = true;
+      job.doneAt = this.now().toISOString();
       if (!this.inboundIds.includes(id)) this.inboundIds.push(id);
       await this.tellHostDone(job);
     }
     this.save();
     // The job is done only once the cleaner's acknowledgement went out.
     return acked ? result : { ...result, label: "none" };
+  }
+
+  /** The cleaning in progress: the code went to the cleaner and it isn't done, called off, or declined. */
+  private progressJob(): Job | undefined {
+    return this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
+  }
+
+  /**
+   * Records a cleaner text during the cleaning: its saved photos, the start time on the first photo
+   * or other message, and, with supply notes on, that message as a redacted note. A keyword (YES, NO,
+   * DONE, STOP, START, HELP) or an injury report is not a message here and changes nothing.
+   */
+  private noteProgress(job: Job, input: InboundText): void {
+    const text = input.text.trim();
+    const words = text.length > 0 && !isCleanerKeyword(text) && !isInjuryReport(text) && !isPlainLanguageStop(text);
+    let changed = false;
+    if ((input.photos ?? 0) > 0) {
+      job.photos = (job.photos ?? 0) + (input.photos ?? 0);
+      changed = true;
+    }
+    if (!job.startedAt && (words || (input.media ?? 0) > 0)) {
+      job.startedAt = this.now().toISOString();
+      changed = true;
+    }
+    if (this.options.supplyNotes && words) {
+      job.notes = [...(job.notes ?? []), this.noteText(text)].slice(-MAX_NOTES);
+      changed = true;
+    }
+    if (changed) this.save();
+  }
+
+  /** A job note: the door code and every run of 4 or more digits, even split by spaces or dashes, redacted. */
+  private noteText(text: string): string {
+    const redacted = this.redact(text).replace(/\d(?:[\s.\-_/\u2010-\u2015]*\d){3,}/g, "[redacted]");
+    return redacted.trim().slice(0, MAX_NOTE);
   }
 
   private cleanerStep(): CleanerStep {
@@ -1572,6 +1679,8 @@ class Engine implements CleanerCore {
 
   private async quietOrGuide(from: string, id: string, text: string): Promise<ReceiveResult> {
     if (from === this.cleanerPhone && this.cleanerConsent === "in" && keywordOf(text) !== "help") {
+      // A photo, with or without words, never gets the guide. Grok reads it as a message.
+      if (this.withMedia.has(id) && !isCleanerKeyword(text)) return this.markIgnored(id);
       // Grok reads a text that isn't a keyword and decides what happens next. Only the cleaner can
       // take an offer or finish a cleaning, so the guide to YES or DONE still goes in those steps.
       if (this.options.grokReadsMessages && !isCleanerKeyword(text)) {
@@ -1664,6 +1773,7 @@ class Engine implements CleanerCore {
         body: addressed.body,
       });
       if (text) sent.push(text);
+      if (this.delivery(key) === "sent") sent.push(...(await this.sendChecklist(job)));
     }
     if (this.groupChat && this.groupPinTerminal && this.delivery(key) !== "sent") return sent;
     if (this.delivery(key) === "failed" && this.owner && !this.groupPhones.includes(this.owner)) {
@@ -1687,6 +1797,27 @@ class Engine implements CleanerCore {
       if (notice) sent.push(notice);
     }
     return sent;
+  }
+
+  /** The saved checklist, privately to the cleaner, once per job, right after the door code went. */
+  private async sendChecklist(job: Job): Promise<CleanerText[]> {
+    const checklist = this.options.checklist;
+    const to = this.cleanerRecord()?.phone;
+    if (!checklist || checklist.items.length === 0 || !to) return [];
+    const id = `checklist:${job.id}`;
+    if (this.delivery(id) === "sent") return [];
+    const items = [...checklist.items];
+    const text = await this.emit({
+      id,
+      jobId: job.id,
+      to,
+      kind: "checklist",
+      body: checklistBody(checklist.name, items),
+      afterSend: () => {
+        job.checklist = items;
+      },
+    });
+    return text ? [text] : [];
   }
 
   /**
@@ -1891,7 +2022,7 @@ class Engine implements CleanerCore {
       const nextWhen = job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null;
       const addressed = addressCleaner(this.cleanerRecord(), {
         kind: "offer",
-        body: offerBody(this.options.property.address, checkoutWhen, nextWhen, job.sameDay),
+        body: withHostNote(offerBody(this.options.property.address, checkoutWhen, nextWhen, job.sameDay), this.options.offerNote),
       });
       if (!addressed) {
         if (!this.owner) return null;
@@ -2091,8 +2222,10 @@ class Engine implements CleanerCore {
       if (this.options.allowlist) return null;
       throw new Error("Cleaner Core only texts Scratch test numbers.");
     }
-    // The host's own approved words may say "ready". They never mark a job ready.
-    if (draft.kind !== "host-message" && /\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
+    // The host's own words (an approved message, the checklist, or the note on an offer) may say
+    // "ready" or "door code". They never mark a job ready, and Cleaner Core's own words are still checked.
+    const ownWords = this.ownWords(draft);
+    if (/\bready\b/i.test(ownWords)) throw new Error("A calendar time cannot mark the job ready.");
     if (this.groupChat && draft.channel === "group") {
       const allowed = new Set(this.groupAudience());
       const audience = draft.audience ?? [];
@@ -2111,7 +2244,7 @@ class Engine implements CleanerCore {
       throw new Error("The door code leaked into a schedule text.");
     } else if (draft.kind === "host-message" && this.pin && joinSplitDigits(draft.body).includes(this.pin)) {
       throw new Error("The door code leaked into a host message.");
-    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review" && draft.kind !== "host-message") {
+    } else if (!this.pin && /\bdoor code\b/i.test(ownWords) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
     if (this.optedOut && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
@@ -2165,6 +2298,14 @@ class Engine implements CleanerCore {
     this.logSend(draft.kind, "sent", draft.to);
     this.save();
     return text;
+  }
+
+  /** The part of a text Cleaner Core wrote itself. The host's own words are left out. */
+  private ownWords(draft: Draft): string {
+    if (draft.kind === "host-message" || draft.kind === "checklist") return "";
+    if (draft.kind !== "offer") return draft.body;
+    const note = hostNoteOf(draft.body);
+    return draft.body.slice(0, draft.body.length - note.length);
   }
 
   private upsert(draft: Draft, status: "sent" | "failed" | "uncertain" | "canceled" | "unsent"): void {
@@ -2469,7 +2610,10 @@ class Engine implements CleanerCore {
         return { handled: true, reason: "ignored", sent: [], seen: true };
       }
       const result = await this.reply(from, "Got it, cleaning started.", "started", "start", inboundId, job.id);
-      if (result.sent.length > 0) job.started = true;
+      if (result.sent.length > 0) {
+        job.started = true;
+        job.startedAt ??= this.now().toISOString();
+      }
       return { ...result, seen: result.sent.length > 0 };
     }
     if (!this.everConsented) return { handled: true, reason: "ignored", sent: [], seen: true };
@@ -2543,6 +2687,11 @@ class Engine implements CleanerCore {
       hostCheckInVersion: checkin?.version ?? 0,
       asking: status === "discovered" && this.delivery(`host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`) === "sent" ? "checkout" : status === "awaiting_checkin" ? "checkin" : null,
       ...(job.arrivalAt ? { arrivalTime: formatWhen(job.arrivalAt, this.options.property.timeZone).time } : {}),
+      ...(job.startedAt ? { startedAt: job.startedAt } : {}),
+      ...(job.doneAt ? { doneAt: job.doneAt } : {}),
+      ...(job.photos ? { photos: job.photos } : {}),
+      ...(job.notes ? { notes: [...job.notes] } : {}),
+      ...(job.checklist ? { checklist: [...job.checklist] } : {}),
     };
   }
 

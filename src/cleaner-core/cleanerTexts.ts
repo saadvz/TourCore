@@ -50,10 +50,37 @@ export function offerBody(
   return `Turnover at ${address} on ${checkout.day}. Checkout ${checkout.time}${guest}. ${OFFER_ASK}`;
 }
 
-/** Offer copies drop the YES ask. The cleaner is the only person who can confirm. */
-export function offerForOthers(body: string): string {
-  return body.endsWith(OFFER_ASK) ? `${body.slice(0, -OFFER_ASK.length)}${OFFER_WAIT}` : body;
+const HOST_NOTE = " Note from the host: ";
+
+/** The first offer with the host's saved other instructions at the end. Without any, the offer is unchanged. */
+export function withHostNote(body: string, instructions: string | undefined): string {
+  const note = instructions?.trim();
+  return note ? `${body}${HOST_NOTE}${note}` : body;
 }
+
+/** The text an offer adds after Cleaner Core's own words: the host's note, or nothing. */
+export function hostNoteOf(body: string): string {
+  const index = body.indexOf(HOST_NOTE);
+  return index < 0 ? "" : body.slice(index);
+}
+
+/**
+ * Offer copies drop the YES ask. The cleaner is the only person who can confirm. The host's note,
+ * when there is one, stays after it.
+ */
+export function offerForOthers(body: string): string {
+  const note = hostNoteOf(body);
+  const own = body.slice(0, body.length - note.length);
+  return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${OFFER_WAIT}${note}` : body;
+}
+
+/** The checklist, after the private code. Each item loses a trailing period or semicolon. */
+export function checklistBody(name: string, items: readonly string[]): string {
+  const list = items.map((item) => item.trim().replace(/[.;]+$/, "")).join("; ");
+  return `Checklist for ${name}: ${list}. Send photos, then reply DONE when finished.`;
+}
+
+export const PHOTO_FIRST = "Please send a photo of the finished rooms, then reply DONE.";
 
 export function reminderBody(address: string, when: { day: string; time: string }, privateTurn: boolean): string {
   return privateTurn

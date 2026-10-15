@@ -147,6 +147,12 @@ const TOOLS = [
     input: z.object({ time: z.string() }),
   },
   {
+    name: "get_job_photos",
+    title: "See the cleaner's photos",
+    description: "Gets expiring links to the cleaner's photos for a job. Look at them, compare with the checklist, and show them to the host.",
+    input: z.object({ job: z.string().optional() }),
+  },
+  {
     name: "save_alert_routine",
     title: "Connect alerts",
     description: "Saves the alert routine's webhook address and token from the secure card. The reply never repeats them.",
@@ -251,6 +257,7 @@ export async function handleCleanerMcpMessage(
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
         "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
+        "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.",
       ].join(" "),
     });
   }
@@ -346,6 +353,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.checkNow(args as { googleEvents?: GoogleEventList });
     case "save_arrival":
       return desk.saveArrival(args as { time?: string });
+    case "get_job_photos":
+      return desk.getJobPhotos(args as { job?: string }, saveSecrets);
     case "save_alert_routine":
       if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
       return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);

@@ -20,6 +20,7 @@ import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
 import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
+import { CLEANER_PHOTO_PREFIX, photoKey, servePhoto } from "../cleaner-core/photos";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
@@ -164,6 +165,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
   if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || path === "/api/connect/deny" || isInstallApiPath(path))) return true;
   if (method === "GET" && AuditExportLinks.parsePath(path)) return true;
+  if (method === "GET" && path.startsWith(CLEANER_PHOTO_PREFIX)) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -688,6 +690,15 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         });
         if ("answered" in result) return;
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
+      }
+      if (method === "GET" && url.pathname.startsWith(CLEANER_PHOTO_PREFIX)) {
+        // A cleaner photo for Grok. Public, but only with a signed token that hasn't expired.
+        const env = installation.env();
+        if (!cleanerCoreEnabled(env)) return send(404, "text/plain", "Not found");
+        const photo = servePhoto(installation.root, url.pathname.slice(CLEANER_PHOTO_PREFIX.length), photoKey(env), options.now?.() ?? new Date());
+        if (photo.status !== 200) return send(404, "text/plain", "Not found", { "Cache-Control": "no-store" });
+        res.writeHead(200, { ...photo.headers, "Content-Length": String(photo.body.length) });
+        return res.end(photo.body);
       }
       if (method === "POST" && url.pathname === CLEANER_TWILIO_STATUS_PATH) {
         const rawBody = await readRaw(req);
