@@ -73,6 +73,18 @@ export function jobHoldLine(address: string): string {
   return `The cleaning at ${address} is on hold.`;
 }
 
+export function cleanerOptOutHold(address: string): string {
+  return `The cleaner opted out of cleaning texts for ${address}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
+}
+
+export function injuryHoldLine(address: string): string {
+  return `The cleaning at ${address} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+}
+
+export function ownerOptOutHoldNote(address: string): string {
+  return `The cleaning at ${address} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
+}
+
 export function optedOutCodeLine(): string {
   return "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 }

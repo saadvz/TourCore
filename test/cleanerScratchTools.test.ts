@@ -226,13 +226,13 @@ describe("Scratch test tools", () => {
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "someone is hurt" })))).toBe(WENT_THROUGH);
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE_OBSERVER, text: "I'm bleeding" })))).toBe(WENT_THROUGH);
     const injury = linesOf(await remember(call(wired, "read_outbox")));
-    expect(injury.filter((line) => line === "Injury alert to the host: sent.")).toHaveLength(2);
+    expect(injury.filter((line) => line === "Injury alert to the host: sent.")).toHaveLength(4);
     expect(injury).toContain("Injury reply to the cleaner: sent.");
     expect(injury).toContain("Injury reply to the observer: sent.");
 
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" })))).toBe(WENT_THROUGH);
     const stopped = await remember(call(wired, "get_state"));
-    expect(stopped.text).toContain("The cleaner opted out of cleaning texts, so the job is on hold.");
+    expect(stopped.text).toContain(`The cleaner opted out of cleaning texts for ${LANE.property.address}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`);
     expect(linesOf(await remember(call(wired, "read_outbox")))).toContain("Opt-out text to the cleaner: sent.");
     expect(linesOf(await remember(call(wired, "read_outbox")))).toContain("Hold note to the host: sent.");
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" })))).toBe(WENT_THROUGH);

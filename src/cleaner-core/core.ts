@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -341,6 +341,7 @@ export interface CleanerCore {
   pullPinFailure(): boolean;
   hostNotes(): string[];
   keepHostNote(id: string, body: string): void;
+  holdNotice(): string | undefined;
   notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
@@ -465,6 +466,7 @@ interface Stored {
   hostGroup?: "pending" | "in" | "out";
   problemHold?: boolean;
   ownerOptedOut?: boolean;
+  holdCause?: "cleaner" | "owner" | "injury";
   pinFailurePending?: boolean;
   pinPhase?: { id: string; phase: "accepted" | "delivered" | "failed" | "undelivered" }[];
   groupPinTerminal?: boolean;
@@ -552,6 +554,7 @@ class Engine implements CleanerCore {
   private hostGroup: "pending" | "in" | "out" = "pending";
   private problemHold = false;
   private ownerOptedOut = false;
+  private holdCause: "cleaner" | "owner" | "injury" | undefined;
   private pinFailurePending = false;
   private pinPhase = new Map<string, "accepted" | "delivered" | "failed" | "undelivered">();
   private groupPinTerminal = false;
@@ -903,9 +906,19 @@ class Engine implements CleanerCore {
     return sent;
   }
 
+  holdNotice(): string | undefined {
+    const address = this.options.property.address;
+    if (this.holdCause === "cleaner") return cleanerOptOutHold(address);
+    if (this.holdCause === "owner") return ownerOptOutHoldNote(address);
+    if (this.holdCause === "injury") return injuryHoldLine(address);
+    if (this.cleanerConsent === "out") return cleanerOptOutHold(address);
+    return undefined;
+  }
+
   async resumeJob(): Promise<CleanerText | null> {
     const held = this.problemHold;
     this.problemHold = false;
+    this.holdCause = undefined;
     if (!this.groupChat && !held) return null;
     const text = await this.emit({
       id: `resume:${this.options.property.id}`,
@@ -1691,7 +1704,7 @@ class Engine implements CleanerCore {
   private ownerDeclined(draft: Draft): boolean {
     if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind)) return false;
     if (this.groupChat && this.hostGroup === "out") return true;
-    return this.ownerOptedOut && HOST_DIRECT.has(draft.kind);
+    return this.ownerOptedOut;
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
@@ -1812,6 +1825,7 @@ class Engine implements CleanerCore {
 
   private async emergency(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
     this.problemHold = true;
+    if (!this.holdCause) this.holdCause = "injury";
     const job = this.conversationJob() ?? this.ordered()[0];
     const key = `${from}|${job?.id ?? "none"}|${job?.version ?? 0}`;
     if (this.injurySent.includes(key)) return { handled: true, reason: "emergency", sent: [], seen: true };
@@ -1841,6 +1855,15 @@ class Engine implements CleanerCore {
           body: this.injuryAlert(from),
         })
       : null;
+    const hold = !reporterIsHost && this.owner
+      ? await this.emitOne({
+          id: `injury-hold:${key}`,
+          ...(jobId ? { jobId } : {}),
+          to: this.owner,
+          kind: "emergency",
+          body: injuryHoldLine(this.options.property.address),
+        })
+      : null;
     const hostReached = !reporterIsHost && this.delivery(hostId) === "sent";
     const ack = await this.emitOne({
       id: `emergency:${inboundId}`,
@@ -1850,7 +1873,7 @@ class Engine implements CleanerCore {
       body: reporterIsHost ? HOST_INJURY : hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED,
     });
     if (ack) this.injurySent.push(key);
-    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...(ack ? [ack] : [])], seen: Boolean(ack) };
+    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...(hold ? [hold] : []), ...(ack ? [ack] : [])], seen: Boolean(ack) };
   }
 
   private async stopMember(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
@@ -1868,10 +1891,12 @@ class Engine implements CleanerCore {
       this.hostGroup = "out";
       this.ownerOptedOut = true;
       this.problemHold = true;
+      this.rememberOwnerHold();
     }
     if (from === this.cleanerPhone) {
       this.cleanerConsent = "out";
       this.problemHold = true;
+      this.holdCause = "cleaner";
     }
     this.participantConsent.set(from, "out");
     const result = await this.reply(from, ack, "stop", "stop", inboundId);
@@ -1880,8 +1905,8 @@ class Engine implements CleanerCore {
       const held = await this.emit({
         id: `stop-host:${inboundId}`,
         to: this.owner,
-        kind: "stop",
-        body: `The cleaner opted out of cleaning texts for ${this.options.property.address}, so the job is on hold.`,
+        kind: "held",
+        body: cleanerOptOutHold(this.options.property.address),
       });
       if (held) note.push(held);
     }
@@ -1991,6 +2016,7 @@ class Engine implements CleanerCore {
     if (this.pin && from === this.cleanerPhone) {
       this.cleanerConsent = "out";
       this.problemHold = true;
+      this.holdCause = "cleaner";
       const result = await this.reply(from, ack, "stop", "stop", inboundId);
       const note = await this.hostStopNote(from, inboundId);
       return { handled: true, reason: "stop", sent: [...result.sent, ...note], seen: this.replySeen("stop", inboundId, result.sent.length) };
@@ -1999,6 +2025,7 @@ class Engine implements CleanerCore {
       this.ownerOptedOut = true;
       if (this.pin) this.problemHold = true;
       else this.optedOut = true;
+      this.rememberOwnerHold();
       const result = await this.reply(from, ack, "stop", "stop", inboundId);
       return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
@@ -2012,23 +2039,30 @@ class Engine implements CleanerCore {
     return sentNow > 0 || this.delivery(`${kind}:${inboundId}`) === "sent";
   }
 
+  private rememberOwnerHold(): void {
+    if (this.holdCause !== "cleaner") this.holdCause = "owner";
+    this.keepHostNote(`owner-hold:${this.options.property.id}`, ownerOptOutHoldNote(this.options.property.address));
+  }
+
   private async hostStopNote(from: string, inboundId: string): Promise<CleanerText[]> {
     if (!this.options.noteHostOnStop || !this.owner || from === this.owner) return [];
     const text = await this.emit({
       id: `stop-host:${inboundId}`,
       to: this.owner,
-      kind: "stop",
-      body: `The cleaner opted out of cleaning texts for ${this.options.property.address}, so the job is on hold.`,
+      kind: "held",
+      body: cleanerOptOutHold(this.options.property.address),
     });
     return text ? [text] : [];
   }
 
   private async start(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
     if (from === this.owner) {
+      if (this.delivery(`start:${inboundId}`) === "sent") return { handled: true, reason: "start", sent: [], seen: true };
+      const stillOut = this.ownerOptedOut || (this.groupChat && this.hostGroup === "out") || (!this.pin && this.optedOut);
+      if (!stillOut) return { handled: true, reason: "start", sent: [], seen: true };
       this.ownerOptedOut = false;
       if (!this.pin) this.optedOut = false;
       if (this.groupChat && this.hostGroup === "out") this.hostGroup = "in";
-      if (this.delivery(`start:${inboundId}`) === "sent") return { handled: true, reason: "start", sent: [], seen: true };
       const result = await this.reply(from, START_ACK, "start", "start", inboundId);
       return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
     }
@@ -2398,6 +2432,7 @@ class Engine implements CleanerCore {
     if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
     if (record.problemHold === true) this.problemHold = true;
     if (record.ownerOptedOut === true) this.ownerOptedOut = true;
+    if (record.holdCause === "cleaner" || record.holdCause === "owner" || record.holdCause === "injury") this.holdCause = record.holdCause;
     if (record.pinFailurePending === true) this.pinFailurePending = true;
     for (const pin of record.pinPhase ?? []) {
       if (pin.phase === "accepted" || pin.phase === "delivered" || pin.phase === "failed" || pin.phase === "undelivered") {
@@ -2447,6 +2482,7 @@ class Engine implements CleanerCore {
       ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal } : {}),
       ...(this.problemHold ? { problemHold: true } : {}),
       ...(this.ownerOptedOut ? { ownerOptedOut: true } : {}),
+      ...(this.holdCause ? { holdCause: this.holdCause } : {}),
       ...(this.pinFailurePending ? { pinFailurePending: true } : {}),
       ...(this.pinPhase.size > 0 ? { pinPhase: [...this.pinPhase].map(([id, phase]) => ({ id, phase })) } : {}),
       ...(this.hostNoteState.length > 0 ? { hostNotes: this.hostNoteState } : {}),

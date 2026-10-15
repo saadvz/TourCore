@@ -8,7 +8,7 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
+import { cleanerOptOutHold, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
@@ -511,11 +511,7 @@ export class LiveDesk {
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
-    if (this.held) {
-      next = this.engine?.cleanerHasOptedOut() || this.file.cleanerOut
-        ? "The cleaner opted out of cleaning texts, so the job is on hold."
-        : jobHoldLine(this.file.address ?? "the property");
-    }
+    if (this.held) next = this.holdLine();
     const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
     let notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
     if (this.engine && !this.engine.pinAccepted()) notes = notes.filter((line) => line !== PIN_SENT);
@@ -593,7 +589,9 @@ export class LiveDesk {
             if (text.kind === "pin") this.noteAccepted("scratch-pin");
             return;
           }
-          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind)) return;
+          const address = file.address;
+          const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "");
+          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
@@ -738,9 +736,19 @@ export class LiveDesk {
     return this.reply({ ...reply.result, next: failure });
   }
 
+  async runReminders(): Promise<void> {
+    this.resume();
+    await this.engine?.runReminders();
+  }
+
+  private holdLine(): string {
+    const address = this.file.address ?? "the property";
+    return this.engine?.holdNotice() ?? (this.engine?.cleanerHasOptedOut() || this.file.cleanerOut ? cleanerOptOutHold(address) : jobHoldLine(address));
+  }
+
   private heldDepartureLine(): string {
     if (this.engine?.cleanerHasOptedOut()) return optedOutCodeLine();
-    return jobHoldLine(this.file.address ?? "the property");
+    return this.engine?.holdNotice() ?? jobHoldLine(this.file.address ?? "the property");
   }
 
   private syncHold(): void {

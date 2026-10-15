@@ -33,7 +33,7 @@ const HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
 const HOST_HURT_SELF = "If someone is hurt, call 911 now.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
+const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
@@ -41,7 +41,7 @@ const AFTER_CHECKS = "Tell me the checkout time and the next check-in time befor
 const PRACTICE_INVITE = groupOptInBody("Cory", "Maria", PRACTICE);
 const PRACTICE_HOLD = holdNote(PRACTICE);
 const PRACTICE_SETUP = [PRACTICE_INVITE, PRACTICE_HOLD];
-const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the job is on hold.`;
+const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const PRACTICE_PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const PIN_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const FAILED_ONCE = "A text failed to send. I saved it for your review and did not count it as delivered.";
@@ -172,7 +172,7 @@ describe("group thread", () => {
     const stopped = await job.receive({ id: "stop-cleaner", from: CLEANER, text: "STOP", channel: "group" });
     expect(stopped.sent).toEqual([
       { to: CLEANER, body: STOP_ACK, kind: "stop" },
-      { to: OWNER, body: STOP_HOLD, kind: "stop" },
+      { to: OWNER, body: STOP_HOLD, kind: "held" },
     ]);
     expect(job.jobOnHold()).toBe(true);
     const left = await job.receive({ id: "left-out", from: OWNER, text: "guests have left" });
@@ -192,9 +192,10 @@ describe("group thread", () => {
     const left = await job.receive({ id: "left-cory-out", from: OWNER, text: "guests have left" });
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
     expect(left.sent.filter((text) => text.body === PRIVATE_LINE || text.channel === "group")).toEqual([]);
-    expect(job.hostNotes()).toEqual([RESUME]);
+    const ownerHold = `The cleaning at ${ADDRESS} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
+    expect(job.hostNotes()).toEqual([ownerHold, RESUME]);
     job.notePrivateCodeDelivered();
-    expect(job.hostNotes()).toEqual([RESUME, PRIVATE_LINE]);
+    expect(job.hostNotes()).toEqual([ownerHold, RESUME, PRIVATE_LINE]);
   });
 
   it("files the private line for Cory only after a delivery report, and the group never gets it", async () => {
@@ -341,6 +342,7 @@ describe("group thread", () => {
     const hurt = await job.receive({ id: "fell", from: CLEANER, text: "I fell at 2:00 PM and I'm hurt", channel: "group" });
     expect(hurt.sent).toEqual([
       { to: OWNER, body: HOST_HURT, kind: "emergency" },
+      { to: OWNER, body: `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`, kind: "emergency" },
       { to: CLEANER, body: HURT, kind: "emergency" },
     ]);
     expect(sent.sent.slice(before).some((text) => text.channel === "group" || text.body === TIME_LINE || text.body === HOLD)).toBe(false);
@@ -981,7 +983,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     };
-    const hold = "The cleaner opted out of cleaning texts, so the job is on hold.";
+    const hold = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
     const line = "Maria got the door code privately.";
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
@@ -1196,7 +1198,7 @@ describe("live group membership", () => {
 
   it("texts the injury alert and the cleaner opt-out note, and keeps every other host line off SMS", async () => {
     const pinHeld = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
-    const stopHold = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the job is on hold.`;
+    const stopHold = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
     const hostHurt = `The cleaner at ${PRACTICE} says someone is hurt. They've been told to call 911.`;
     const cleanerHurt = "If someone is hurt, call 911 now. I've let the host know.";
     const direct = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
@@ -1223,7 +1225,8 @@ describe("live group membership", () => {
     expect(solo.sms.sent.filter((text) => text.body.includes("Door code:"))).toEqual([]);
     await solo.desk.inbound({ id: "solo-direct", from: LIVE_HOST, text: "guests left" });
     expect(notesOf(solo.desk.getState())).toContain(direct);
-    expect(hostBodies(solo.sms.sent)).toEqual([hostHurt, stopHold]);
+    const injuryHold = `The cleaning at ${PRACTICE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+    expect(hostBodies(solo.sms.sent)).toEqual([hostHurt, injuryHold, stopHold]);
     expect(solo.sms.sent.filter((text) => text.body === pinHeld || text.body === direct || text.body === hold || text.body === resume)).toEqual([]);
     expect(solo.posts.map((text) => text.body)).toEqual([]);
 
@@ -1259,7 +1262,7 @@ describe("live group membership", () => {
     const groupHeld = await grouped.desk.markGuestsLeft({ said: "The guests have left" }, grouped.pinKey);
     expect(groupHeld).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(grouped.desk.getState())).toContain(pinHeld);
-    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, stopHold]);
+    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, injuryHold, stopHold]);
     expect(grouped.posts.filter((text) => text.body.includes("Door code:") || text.body === PRIVATE_LINE)).toEqual([]);
     expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && (text.body.includes("Door code:") || text.body === pinHeld || text.body === resume || text.body === hold || text.body === invite))).toEqual([]);
   });
@@ -1347,13 +1350,14 @@ describe("live group membership", () => {
     await grouped.desk.inbound({ id: "safety-drop", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     expect(notesOf(grouped.desk.getState())).toContain(dropped);
     const hurt = await grouped.desk.inbound({ id: "safety-hurt", from: LIVE_CLEANER, text: "I fell at 2:00 PM and I'm hurt", channel: "group" });
-    expect(hurt.sent.filter((text) => text.to === LIVE_HOST).map((text) => text.body)).toEqual([hostHurt]);
+    const injuryHold = `The cleaning at ${PRACTICE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+    expect(hurt.sent.filter((text) => text.to === LIVE_HOST).map((text) => text.body)).toEqual([hostHurt, injuryHold]);
     const repeat = await grouped.desk.inbound({ id: "safety-hurt-again", from: LIVE_CLEANER, text: "I fell at 2:00 PM and I'm hurt", channel: "group" });
     expect(repeat.sent).toEqual([]);
     await grouped.desk.inbound({ id: "safety-stop", from: LIVE_HOST, text: "STOP" });
     const started = await grouped.desk.inbound({ id: "safety-start", from: LIVE_HOST, text: "START" });
     expect(started.sent.map((text) => text.body)).toEqual([hostStart]);
-    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, hostStop, hostStart]);
+    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, injuryHold, hostStop, hostStart]);
     await grouped.desk.inbound({ id: "safety-cleaner-stop", from: LIVE_CLEANER, text: "STOP" });
     expect(grouped.desk.getTurns()).toEqual({ ok: true, result: expect.objectContaining({ held: true }) });
     const ignored = await grouped.desk.inbound({ id: "safety-cleaner-start", from: LIVE_CLEANER, text: "START" });
@@ -1416,7 +1420,8 @@ describe("live group membership", () => {
     expect(solo.sms.sent.filter((text) => text.body.includes("Door code:"))).toEqual([]);
     await solo.desk.inbound({ id: "kinds-solo-direct", from: LIVE_HOST, text: "guests left" });
     expect(notesOf(solo.desk.getState())).toContain(direct);
-    expect(hostBodies(solo.sms.sent)).toEqual([hostHurt, PRACTICE_STOP]);
+    const injuryHold = `The cleaning at ${PRACTICE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+    expect(hostBodies(solo.sms.sent)).toEqual([hostHurt, injuryHold, PRACTICE_STOP]);
     expect(solo.sms.sent.filter((text) => text.body === checkin || text.body === pinHeld || text.body === direct || text.body === hold)).toEqual([]);
 
     const failed = await readyPractice(false, (body) => (body.includes("Door code:") ? "failed" : "queued"));
@@ -1472,7 +1477,7 @@ describe("live group membership", () => {
     expect(notesOf(grouped.desk.getState())).toContain(hostStop);
     expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && text.body === hostHurt)).toHaveLength(1);
     expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && text.body === hostStop)).toHaveLength(1);
-    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, PRACTICE_STOP, hostStop]);
+    expect(hostBodies(grouped.sms.sent)).toEqual([hostHurt, injuryHold, PRACTICE_STOP, hostStop]);
     expect(grouped.posts.filter((text) => text.body === hostHurt || text.body === hold || text.body === resume || text.body === pinHeld || text.body === review || text.body === hostStop || text.body === PRIVATE_LINE || text.body.includes("Door code:"))).toEqual([]);
     expect(grouped.sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === checkin || text.body === resume || text.body === pinHeld || text.body === PIN_FAILED || text.body === hold || text.body === review || text.body.includes("Door code:")))).toEqual([]);
   });
@@ -1530,7 +1535,7 @@ describe("live group membership", () => {
     await hostOut.desk.inbound({ id: "route-out-schedule", from: LIVE_CLEANER, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-stop", from: LIVE_HOST, text: "STOP" });
     const hostHeld = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
-    expect(hostHeld).toEqual({ ok: true, result: { next: `The cleaning at ${PRACTICE} is on hold.` } });
+    expect(hostHeld).toEqual({ ok: true, result: { next: `The cleaning at ${PRACTICE} is on hold because you opted out of texts. Tell your Grok Bot to restart it.` } });
     expect(hostOut.sms.sent.filter((text) => text.body === privatePin)).toEqual([]);
     await hostOut.desk.resumeCleaning();
     const hostLeft = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
@@ -1577,7 +1582,9 @@ describe("live group membership", () => {
     expect(notes.filter((line) => line === pinHeld || line === resume).join("\n").includes("SMS")).toBe(false);
     expect(notes.filter((line) => line === pinHeld || line === resume).join("\n").includes("texted you")).toBe(false);
     expect(notes.filter((line) => line === pinHeld || line === resume).join("\n").includes("routing")).toBe(false);
-    expect(hostBodies(grouped.sms.sent)).toEqual([hostStop, PRACTICE_STOP, hostHurt]);
+    const injuryHold = `The cleaning at ${PRACTICE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+    expect(notesOf(grouped.desk.getState())).toContain(PRACTICE_STOP);
+    expect(hostBodies(grouped.sms.sent)).toEqual([hostStop, hostHurt, injuryHold]);
     expect(grouped.sms.sent.filter((text) => text.body === pinHeld || text.body === resume || text.body === review || text.body.includes("Door code:"))).toEqual([]);
     expect(grouped.posts.filter((text) => text.body === pinHeld || text.body === resume || text.body === review || text.body === hostHurt)).toEqual([]);
   });

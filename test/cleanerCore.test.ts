@@ -28,6 +28,7 @@ const START_ACK = "You're opted back in. Reply YES if you still want this turnov
 const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
+const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const NOW = "2026-10-14T15:00:00.000Z";
@@ -408,6 +409,7 @@ describe("one Scratch turnover", () => {
       reason: "emergency",
       sent: [
         { to: OWNER, body: HOST_HURT, kind: "emergency" },
+        { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
         { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
       ],
     });
@@ -425,6 +427,7 @@ describe("one Scratch turnover", () => {
     expect(box.sent.filter((text) => text.kind === "emergency")).toEqual([
       { to: OWNER, body: EMERGENCY, kind: "emergency" },
       { to: OWNER, body: HOST_HURT, kind: "emergency" },
+      { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
       { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
       { to: OWNER, body: EMERGENCY, kind: "emergency" },
     ]);
@@ -570,12 +573,14 @@ describe("one Scratch turnover", () => {
       said(OWNER, hurt),
       said(CLEANER, hurt),
       HOST_HURT,
+      INJURY_HOLD,
       CLEANER_HURT,
       said(CLEANER, hurt),
     ]);
     expect(JSON.parse(injury.stdout).sent.filter((text: CleanerText) => text.kind === "emergency")).toEqual([
       { to: OWNER, body: EMERGENCY, kind: "emergency" },
       { to: OWNER, body: HOST_HURT, kind: "emergency" },
+      { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
       { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
     ]);
 
@@ -918,6 +923,7 @@ describe("step D private door code", () => {
         reason: "emergency",
         sent: [
           { to: OWNER, body: HOST_HURT, kind: "emergency" },
+          { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
           { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
         ],
       });
@@ -929,6 +935,7 @@ describe("step D private door code", () => {
       expect(box.sent.slice(before)).toEqual([
         { to: OWNER, body: EMERGENCY, kind: "emergency" },
         { to: OWNER, body: HOST_HURT, kind: "emergency" },
+        { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
         { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
       ]);
       expect(box.sent.slice(before).map((text) => text.body).join("\n").includes(PIN)).toBe(false);
@@ -1149,6 +1156,7 @@ describe("step D private door code", () => {
     await questions.receive({ id: "questions-yes", from: OWNER, text: "YES" });
     expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([STOP_ACK]);
     expect(questions.hostNotes()).toEqual([
+      "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because you opted out of texts. Tell your Grok Bot to restart it.",
       "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.",
       CHECKOUT_Q,
       CHECKIN_Q,
@@ -1183,6 +1191,7 @@ describe("step D private door code", () => {
     expect(held.sent.slice(marked).filter((text) => text.to === OWNER)).toEqual([]);
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([]);
     expect(heldJob.hostNotes()).toEqual([
+      "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because you opted out of texts. Tell your Grok Bot to restart it.",
       "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.",
       PIN_HELD,
     ]);
@@ -1244,6 +1253,7 @@ describe("step D private door code", () => {
       outbox: { to: string; body: string; kind: string; status: string }[];
     };
     expect(report.sent.filter((text) => text.kind === "emergency")).toEqual([
+      { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
       { to: CLEANER, body: CLEANER_HURT_MISSED, kind: "emergency" },
     ]);
     expect(report.outbox.find((item) => item.body === HOST_HURT)).toEqual(expect.objectContaining({
@@ -2202,6 +2212,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
             reason: "emergency",
             sent: [
               { to: OWNER, body: alertFor(person.role), kind: "emergency" },
+              { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
               { to: person.phone, body: TOLD, kind: "emergency" },
             ],
           });
@@ -2233,7 +2244,10 @@ describe("step F Notion, onboarding, and group delivery", () => {
     expect(failed).toEqual({
       handled: true,
       reason: "emergency",
-      sent: [{ to: OBSERVER, body: MISSED, kind: "emergency" }],
+      sent: [
+        { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
+        { to: OBSERVER, body: MISSED, kind: "emergency" },
+      ],
     });
     expect(missed.outbox().filter((item) => item.kind === "emergency").map((item) => ({
       to: item.to,
@@ -2247,6 +2261,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
         kind: "emergency",
         status: "failed",
       },
+      { to: OWNER, body: INJURY_HOLD, kind: "emergency", status: "sent" },
       { to: OBSERVER, body: MISSED, kind: "emergency", status: "sent" },
     ]);
   });
@@ -2301,6 +2316,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
             reason: "emergency",
             sent: [
               { to: OWNER, body: sender.alert, kind: "emergency" },
+              { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
               { to: sender.phone, body: told, kind: "emergency" },
             ],
           });
@@ -2311,6 +2327,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
           });
           expect(box.sent.filter((text) => text.kind === "emergency"), `${sender.name} ${mode} outbox: ${phrase}`).toEqual([
             { to: OWNER, body: sender.alert, kind: "emergency" },
+            { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
             { to: sender.phone, body: told, kind: "emergency" },
           ]);
         }
