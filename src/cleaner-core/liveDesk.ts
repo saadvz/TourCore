@@ -49,6 +49,8 @@ const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routi
 const PROPERTY_ASK = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
 const PEOPLE_ASK =
   "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
+const SCHEDULE_ASK =
+  "When should the cleaner get texts? The first cleaning text goes when you confirm the times, or a set number of days after check-in. The reminder goes the morning of checkout, or a set number of days before at a set time. Any quiet hours, and who should hear about problems? If the defaults are fine, save an empty schedule.";
 const PREFERENCES_ASK =
   "Any cleaning preferences? A checklist, whether photos are required, whether the cleaner may send supply notes, and other instructions. If there are none, save empty preferences.";
 const REVIEW_ASK = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
@@ -73,6 +75,13 @@ const MAX_LOCK_LOCATION = 80;
 const MAX_CHECKLIST = 12;
 const MAX_CHECKLIST_ITEM = 80;
 const MAX_INSTRUCTIONS = 300;
+const MIN_SCHEDULE_DAYS = 1;
+const MAX_SCHEDULE_DAYS = 14;
+/** A timed first cleaning text goes at this local time on its day. */
+const FIRST_TEXT_TIME = "09:00";
+const FIRST_TEXTS = ["when-confirmed", "days-after-check-in"] as const;
+const REMINDERS = ["morning-of", "days-before-checkout"] as const;
+const DEFAULT_SCHEDULE: Schedule = { firstText: "when-confirmed", reminder: "morning-of", reminderTime: "08:00" };
 const CONTACT_ROLES = ["co-host", "assistant", "observer"] as const;
 const GROUP_CHOICES = ["cleaner-only", "cleaner-and-host", "everyone"] as const;
 
@@ -83,6 +92,21 @@ interface Contact {
   name: string;
   role: ContactRole;
   phone: string;
+}
+
+/** The messaging schedule. Times are "HH:MM". */
+interface Schedule {
+  firstText: (typeof FIRST_TEXTS)[number];
+  /** Days after check-in, for days-after-check-in. */
+  firstTextDays?: number;
+  reminder: (typeof REMINDERS)[number];
+  /** Days before checkout, for days-before-checkout. */
+  reminderDays?: number;
+  reminderTime: string;
+  quietFrom?: string;
+  quietUntil?: string;
+  /** Who should hear about problems. Recorded for the review; problems still go to the host. */
+  escalateTo?: string;
 }
 
 interface Preferences {
@@ -136,6 +160,8 @@ interface LiveFile {
   groupChat?: GroupChoice;
   /** Where the lock is. Never digits that could be a code. */
   lockLocation?: string;
+  /** Set once the host saved a messaging schedule, or kept the defaults. */
+  schedule?: Schedule;
   /** Set once the host saved cleaning preferences or said there are none. */
   preferences?: Preferences;
   /** Legacy single link from save_calendar_link. It reads as one calendar named Guesty Lite. */
@@ -536,6 +562,66 @@ export class LiveDesk {
     return this.reply({ next: this.setupNext() });
   }
 
+  /**
+   * Saves the messaging schedule: when the first cleaning text goes, when the reminder goes, quiet
+   * hours, and who should hear about problems. A field left out keeps what was saved, and `{}` the
+   * first time keeps the defaults. Days run 1 to 14 and times are clock times like 8:00 AM. Empty
+   * quiet hours clear them. The schedule can only hold a text back. The first cleaning text still
+   * waits for the host's confirmed times, and the door code still waits for "guests have left".
+   */
+  saveSchedule(input: {
+    firstText?: "when-confirmed" | "days-after-check-in";
+    firstTextDays?: number;
+    reminder?: "morning-of" | "days-before-checkout";
+    reminderDays?: number;
+    reminderTime?: string;
+    quietFrom?: string;
+    quietUntil?: string;
+    escalateTo?: string;
+  }): ToolReply {
+    if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    const saved = this.file.schedule ?? DEFAULT_SCHEDULE;
+    const firstText = input.firstText ?? saved.firstText;
+    const reminder = input.reminder ?? saved.reminder;
+    if (!(FIRST_TEXTS as readonly string[]).includes(firstText)) return this.fail("Send the first cleaning text when the times are confirmed, or a number of days after check-in.");
+    if (!(REMINDERS as readonly string[]).includes(reminder)) return this.fail("Send the reminder the morning of checkout, or a number of days before checkout.");
+    const days = (value: number | undefined) => (value !== undefined && Number.isInteger(value) && value >= MIN_SCHEDULE_DAYS && value <= MAX_SCHEDULE_DAYS ? value : undefined);
+    const dayRange = `${MIN_SCHEDULE_DAYS} to ${MAX_SCHEDULE_DAYS} days`;
+    const firstTextDays = firstText === "days-after-check-in" ? days(input.firstTextDays ?? saved.firstTextDays) : undefined;
+    if (firstText === "days-after-check-in" && firstTextDays === undefined) return this.fail(`Say how many days after check-in the first text goes, ${dayRange}.`);
+    const reminderDays = reminder === "days-before-checkout" ? days(input.reminderDays ?? saved.reminderDays) : undefined;
+    if (reminder === "days-before-checkout" && reminderDays === undefined) return this.fail(`Say how many days before checkout the reminder goes, ${dayRange}.`);
+    const reminderText = input.reminderTime?.trim();
+    const reminderTime = reminderText === undefined ? saved.reminderTime : usualTime(reminderText);
+    if (!reminderTime) return this.fail("Send the reminder time like 8:00 AM.");
+    let quiet = saved.quietFrom && saved.quietUntil ? { from: saved.quietFrom, until: saved.quietUntil } : undefined;
+    if (input.quietFrom !== undefined || input.quietUntil !== undefined) {
+      const fromText = input.quietFrom?.trim() ?? "";
+      const untilText = input.quietUntil?.trim() ?? "";
+      const from = fromText ? usualTime(fromText) : undefined;
+      const until = untilText ? usualTime(untilText) : undefined;
+      if (!fromText && !untilText) quiet = undefined;
+      else if (!from || !until || from === until) return this.fail("Send both quiet-hours times, like 9:00 PM and 8:00 AM.");
+      else quiet = { from, until };
+    }
+    const escalateTo = input.escalateTo === undefined ? saved.escalateTo : input.escalateTo.trim() || undefined;
+    if (escalateTo && escalateTo.length > MAX_NAME) return this.fail(`Keep who hears about problems under ${MAX_NAME} characters.`);
+    if (escalateTo && this.chatCarriesDoorCode(escalateTo)) return this.fail(DOOR_CODE_IN_CHAT);
+    this.file.schedule = {
+      firstText,
+      ...(firstTextDays !== undefined ? { firstTextDays } : {}),
+      reminder,
+      ...(reminderDays !== undefined ? { reminderDays } : {}),
+      reminderTime,
+      ...(quiet ? { quietFrom: quiet.from, quietUntil: quiet.until } : {}),
+      ...(escalateTo ? { escalateTo } : {}),
+    };
+    this.persist();
+    // The engine reads the schedule when it opens.
+    this.engine = undefined;
+    return this.reply({ next: this.setupNext() });
+  }
+
   saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
@@ -709,6 +795,7 @@ export class LiveDesk {
     const read = await this.readCalendars(input.googleEvents);
     await engine.runReminders();
     this.syncHold();
+    this.nudgeCheckout(engine);
     const shown = new Set(this.file.alertsShown ?? []);
     const fresh = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].filter((note) => !shown.has(note.id));
     this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
@@ -836,7 +923,24 @@ export class LiveDesk {
     const job = timesTarget(engine);
     if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
     const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
-    return [{ id: `new-booking:${job.id}`, body: `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?` }];
+    const body = engine.newBookingAsk(job.id) ?? `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?`;
+    return [{ id: `new-booking:${job.id}`, body }];
+  }
+
+  /**
+   * At a confirmed cleaning's checkout time, with no departure recorded yet, keeps one host note
+   * asking whether the guests have left. It sends nothing: the door code still waits for the host.
+   */
+  private nudgeCheckout(engine: CleanerCore): void {
+    // A cleaning on hold won't get the code, so the host is not asked.
+    if (this.held) return;
+    const now = this.now().getTime();
+    const name = this.file.nickname ?? this.file.address ?? "the property";
+    for (const job of engine.jobs()) {
+      if (job.status !== "confirmed" && job.status !== "awaiting_departure") continue;
+      if (!job.checkoutAt || Date.parse(job.checkoutAt) > now) continue;
+      engine.keepHostNote(`nudge:${job.id}`, `Checkout time at ${name}. Have the guests left?`);
+    }
   }
 
   getTurns(): ToolReply {
@@ -1178,6 +1282,7 @@ export class LiveDesk {
     const done: string[] = [];
     if (this.file.address) done.push("Property saved.");
     if (this.file.cleaner) done.push(this.peopleLine());
+    if (this.file.schedule) done.push("Schedule saved.");
     const calendars = calendarsOf(this.file).length;
     if (calendars === 1) done.push("Calendar link saved.");
     if (calendars > 1) done.push(`${calendars} calendar links saved.`);
@@ -1195,6 +1300,8 @@ export class LiveDesk {
     if (!this.file.address) next = PROPERTY_ASK;
     else if (!hasSources(this.file)) next = CALENDAR_ASK;
     else if (!this.file.cleaner) next = PEOPLE_ASK;
+    // Setups that saved texting before the schedule step existed skip it.
+    else if (!this.file.schedule && !this.file.texting) next = SCHEDULE_ASK;
     else if (!this.pin) next = DOOR_CODE_ASK;
     else if (!this.file.texting) next = preferences ? REVIEW_ASK : PREFERENCES_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
@@ -1260,8 +1367,37 @@ export class LiveDesk {
         groupChat: file.groupChat ?? "everyone",
         groupThread: this.groupOn(),
       },
+      ...(file.schedule ? { schedule: this.reviewSchedule(file.schedule) } : {}),
       access: file.lockLocation ? { lockLocation: file.lockLocation } : {},
       preferences: file.preferences,
+    };
+  }
+
+  /** The saved schedule with clock times like 8:00 AM. Problems go to the host unless someone else was named. */
+  private reviewSchedule(schedule: Schedule): Record<string, unknown> {
+    return {
+      firstText: schedule.firstText,
+      ...(schedule.firstTextDays !== undefined ? { firstTextDays: schedule.firstTextDays } : {}),
+      reminder: schedule.reminder,
+      ...(schedule.reminderDays !== undefined ? { reminderDays: schedule.reminderDays } : {}),
+      reminderTime: clockText(schedule.reminderTime),
+      ...(schedule.quietFrom && schedule.quietUntil ? { quietFrom: clockText(schedule.quietFrom), quietUntil: clockText(schedule.quietUntil) } : {}),
+      escalateTo: schedule.escalateTo ?? "host",
+    };
+  }
+
+  /** The engine options for the saved schedule. Without one, the engine keeps its defaults. */
+  private scheduleOptions(): Partial<Parameters<typeof openCleanerCore>[0]> {
+    const schedule = this.file.schedule;
+    if (!schedule) return {};
+    const reminderDays = schedule.reminder === "days-before-checkout" ? schedule.reminderDays : undefined;
+    return {
+      offerTrigger:
+        schedule.firstText === "days-after-check-in" && schedule.firstTextDays !== undefined
+          ? { kind: "days-after-check-in", days: schedule.firstTextDays, localTime: FIRST_TEXT_TIME }
+          : { kind: "when-confirmed" },
+      triggers: [{ id: schedule.reminder, kind: schedule.reminder, localTime: schedule.reminderTime, ...(reminderDays !== undefined ? { days: reminderDays } : {}) }],
+      ...(schedule.quietFrom && schedule.quietUntil ? { quietHours: { from: schedule.quietFrom, until: schedule.quietUntil } } : {}),
     };
   }
 
@@ -1349,6 +1485,9 @@ export class LiveDesk {
         ...(file.checkoutTime ? { defaultCheckout: file.checkoutTime } : {}),
         ...(file.checkInTime ? { defaultCheckIn: file.checkInTime } : {}),
       },
+      ...(file.checkoutTime && file.checkInTime ? { usualTimesName: file.nickname ?? file.address } : {}),
+      ...this.scheduleOptions(),
+      reminderAsksArrival: true,
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),

@@ -24,7 +24,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -233,6 +233,12 @@ export interface ReminderTrigger {
   days?: number;
 }
 
+/**
+ * When a job's first offer may go to the cleaner. It only ever holds the offer: the offer still
+ * waits for the host's confirmed times, the opt-in, and every other gate.
+ */
+export type OfferTrigger = { kind: "when-confirmed" } | { kind: "days-after-check-in"; days: number; localTime: string };
+
 export interface CleanerCoreOptions {
   enabled: boolean;
   property: { id: string; address: string; timeZone: string; defaultCheckout?: string; defaultCheckIn?: string };
@@ -253,6 +259,18 @@ export interface CleanerCoreOptions {
   sink: CleanerSink;
   now?: () => Date;
   triggers?: ReminderTrigger[];
+  /**
+   * When set, the first offer waits for this trigger and for the end of quiet hours, and
+   * runReminders sends it once it is due. Unset keeps the offer right after the times are confirmed.
+   */
+  offerTrigger?: OfferTrigger;
+  /** The reminder names the checkout and asks the cleaner for an arrival time. */
+  reminderAsksArrival?: boolean;
+  /**
+   * The property's name in the new-booking question. When set, the question names the stay and
+   * offers the usual checkout and check-in times. Set it only when both usual times are saved.
+   */
+  usualTimesName?: string;
   /** When set, jobs and the outbox reload after a process restart. */
   dataDir?: string;
   /** Scratch tenant id. Other Scratch tenants' phones are ignored and never texted. */
@@ -375,6 +393,8 @@ export interface CleanerCore {
   /** The same notes with the id each one is kept under, so a caller can tell which it has already shown. */
   hostNoteEntries(): { id: string; body: string }[];
   keepHostNote(id: string, body: string): void;
+  /** The new-booking question that offers the usual times, when usualTimesName is set and the stay's check-in is known. */
+  newBookingAsk(jobId: string): string | undefined;
   holdNotice(): string | undefined;
   notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
@@ -421,6 +441,8 @@ interface Job {
   id: string;
   departingUid: string;
   arrivingUid: string | null;
+  /** Check-in date of the departing stay. Absent on a job saved before it was kept. */
+  checkInDate?: string;
   checkoutDate: string;
   nextCheckInDate: string | null;
   sameDay: boolean;
@@ -789,6 +811,8 @@ class Engine implements CleanerCore {
     if (!this.enabled || this.optedOut || this.problemHold || !this.scratchReady()) return { sent: [], failed: [] };
     const sent: CleanerText[] = await this.settleUncertain();
     const failed: string[] = [];
+    // An offer held by the offer trigger or quiet hours goes out on the first check after it is due.
+    if (this.options.offerTrigger) sent.push(...(await this.drainOne()));
     if (!this.inQuietHours()) for (const job of this.ordered()) {
       if (!this.canRemind(job)) continue;
       const fact = this.latestFact(job.id, "checkout");
@@ -802,7 +826,9 @@ class Engine implements CleanerCore {
         const when = this.clock(job.checkoutDate, fact.minutes);
         const addressed = addressCleaner(this.cleanerRecord(), {
           kind: "reminder",
-          body: reminderBody(this.options.property.address, when, Boolean(this.pin)),
+          body: this.options.reminderAsksArrival
+            ? arrivalReminderBody(this.options.property.address, when)
+            : reminderBody(this.options.property.address, when, Boolean(this.pin)),
         });
         if (!addressed) continue;
         const text = await this.emit({
@@ -1666,6 +1692,7 @@ class Engine implements CleanerCore {
           id: turnover.id,
           departingUid: turnover.departingUid,
           arrivingUid: turnover.arrivingUid,
+          ...(turnover.checkInDate ? { checkInDate: turnover.checkInDate } : {}),
           checkoutDate: turnover.checkoutDate,
           nextCheckInDate: turnover.nextCheckInDate,
           sameDay: turnover.sameDay,
@@ -1683,6 +1710,8 @@ class Engine implements CleanerCore {
       if (existing.canceled && turnover.contentHash === existing.contentHash) continue;
       // Sequence numbers from different sources don't compare, so a stay taken over from another UID skips this.
       if (!moved.has(existing.id) && turnover.sequence < existing.sourceSequence) continue;
+      // The stay's check-in is not part of the content hash, so it is kept up to date here.
+      if (turnover.checkInDate) existing.checkInDate = turnover.checkInDate;
       if (preserveHostClock && this.latestFact(existing.id, "checkout")) {
         existing.sourceSequence = Math.max(existing.sourceSequence, turnover.sequence);
         continue;
@@ -1777,7 +1806,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "host-checkout",
-        body: `Is checkout at ${this.options.property.address} on ${when.day} still ${when.time}? Reply YES or send the new time.`,
+        body: this.newBookingAsk(job.id) ?? `Is checkout at ${this.options.property.address} on ${when.day} still ${when.time}? Reply YES or send the new time.`,
       };
     }
     if (job.nextCheckInDate && !checkin) {
@@ -1795,6 +1824,7 @@ class Engine implements CleanerCore {
     }
     if (!job.announced) {
       if (this.deferCleaner) return null;
+      if (!this.offerDue(job)) return null;
       const checkMinutes = checkin?.minutes ?? null;
       const checkoutWhen = this.clock(job.checkoutDate, checkout.minutes);
       const nextWhen = job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null;
@@ -1955,6 +1985,15 @@ class Engine implements CleanerCore {
 
   hostNotes(): string[] {
     return this.hostNoteState.map((note) => note.body);
+  }
+
+  newBookingAsk(jobId: string): string | undefined {
+    const name = this.options.usualTimesName;
+    const job = this.jobsState.find((item) => item.id === jobId);
+    if (!name || !job?.checkInDate) return undefined;
+    const zone = this.options.property.timeZone;
+    const day = (ymd: string) => formatWhen(zonedInstant(ymd, "12:00", zone), zone).day;
+    return usualTimesAsk(name, day(job.checkInDate), day(job.checkoutDate), clockLabel(this.defaultCheckout), clockLabel(this.defaultCheckIn));
   }
 
   hostNoteEntries(): { id: string; body: string }[] {
@@ -2484,6 +2523,21 @@ class Engine implements CleanerCore {
     return status === "offered" || status === "confirmed";
   }
 
+  /**
+   * True when the offer trigger lets a job's first offer go now. A timed offer goes on the trigger
+   * day, but no later than the day before checkout. A job with no known check-in is not held.
+   */
+  private offerDue(job: Job): boolean {
+    const trigger = this.options.offerTrigger;
+    if (!trigger) return true;
+    if (this.inQuietHours()) return false;
+    if (trigger.kind === "when-confirmed" || !job.checkInDate) return true;
+    const wanted = addCalendarDays(job.checkInDate, trigger.days);
+    const latest = addCalendarDays(job.checkoutDate, -1);
+    const day = wanted < latest ? wanted : latest;
+    return this.now().getTime() >= Date.parse(zonedInstant(day, trigger.localTime, this.options.property.timeZone));
+  }
+
   private triggerDue(trigger: ReminderTrigger, checkoutDate: string): boolean {
     const day = trigger.kind === "days-before-checkout" ? addCalendarDays(checkoutDate, -(trigger.days ?? 0)) : checkoutDate;
     return this.now().getTime() >= Date.parse(zonedInstant(day, trigger.localTime, this.options.property.timeZone));
@@ -2699,7 +2753,10 @@ class Engine implements CleanerCore {
     if (!mine) return;
     const record = JSON.parse(JSON.stringify(mine)) as Stored & { pin?: unknown };
     delete record.pin;
-    this.jobsState = record.jobs.map((job) => ({ ...job, started: job.started === true, done: job.done === true }));
+    this.jobsState = record.jobs.map((job) => {
+      const { checkInDate, ...rest } = job;
+      return { ...rest, ...(typeof checkInDate === "string" ? { checkInDate } : {}), started: job.started === true, done: job.done === true };
+    });
     this.hostFacts = record.hostFacts;
     this.tombstones = record.tombstones;
     this.outboxState = record.outbox;
@@ -2715,7 +2772,8 @@ class Engine implements CleanerCore {
     if (record.origin === "onboarding") this.origin = "onboarding";
     if (record.activated === true) this.activated = true;
     if (record.isolate === true) this.isolate = true;
-    if (record.quietFrom && record.quietUntil) this.quiet = { from: record.quietFrom, until: record.quietUntil };
+    // Quiet hours passed in by the caller are the saved setting. A stored window counts only when none are.
+    if (record.quietFrom && record.quietUntil && !this.options.quietHours) this.quiet = { from: record.quietFrom, until: record.quietUntil };
     for (const person of record.participantConsent ?? []) this.participantConsent.set(person.phone, person.consent);
     if (this.origin === "onboarding" && !this.activated) this.everConsented = false;
     this.sourceRecords = record.sourceRecords ?? [];
@@ -3056,6 +3114,12 @@ function minutesOf(hmText: string): number {
 
 function hm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Minutes after midnight as "10:30 AM", with a plain space. */
+function clockLabel(minutes: number): string {
+  const hour = Math.floor(minutes / 60);
+  return `${hour % 12 || 12}:${String(minutes % 60).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
 }
 
 function localDate(instant: Date, timeZone: string): string {

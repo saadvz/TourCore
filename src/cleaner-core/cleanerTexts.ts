@@ -61,6 +61,16 @@ export function reminderBody(address: string, when: { day: string; time: string 
     : `Reminder: checkout at ${address} is ${when.day} at ${when.time}. Reply STOP to opt out.`;
 }
 
+/** The scheduled reminder. It names the checkout and asks the cleaner when they plan to arrive. */
+export function arrivalReminderBody(address: string, when: { day: string; time: string }): string {
+  return `Reminder: cleaning at ${address} on ${when.day}. Checkout is ${when.time}. What time do you plan to arrive?`;
+}
+
+/** The new-booking question for the host when the property's usual times are saved. */
+export function usualTimesAsk(name: string, checkInDay: string, checkoutDay: string, checkout: string, checkIn: string): string {
+  return `New booking at ${name}: check-in ${checkInDay}, checkout ${checkoutDay}. Use the usual ${checkout} checkout and ${checkIn} check-in?`;
+}
+
 export function doorCodeBody(address: string, code: string, lockLocation?: string): string {
   const label = lockLocation ? `Door code for the ${lockLocation}` : "Door code";
   return `Guests have left ${address}. ${label}: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
