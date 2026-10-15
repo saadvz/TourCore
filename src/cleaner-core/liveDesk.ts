@@ -418,7 +418,7 @@ export class LiveDesk {
   }
 
   async addTestTurn(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
-    const guard = this.scratchGuard();
+    const guard = this.testTurnGuard();
     if (guard) return this.fail(guard);
     if (!this.file.texting || !this.pin || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
     const checkout = input.checkout?.trim() ?? "";
@@ -664,6 +664,13 @@ export class LiveDesk {
       now: this.now,
       dataDir,
     });
+  }
+
+  /** Scratch only. The host and cleaner saved with save_people are allowed even when they are not 555 numbers. */
+  private testTurnGuard(): string | undefined {
+    if (!scratchToolsOn(this.env())) return SCRATCH_PROPERTY_REFUSAL;
+    if (!isScratchPropertyAddress(this.file.address)) return SCRATCH_PROPERTY_REFUSAL;
+    return undefined;
   }
 
   private scratchGuard(from?: string): string | undefined {

@@ -9,7 +9,7 @@ import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-cor
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { SCRATCH_TENANTS, type ScratchTenant } from "../src/cleaner-core/tenants";
 import type { TwilioClient } from "../src/messaging/twilio/client";
-import { ADDRESS, CLEANER_TOKEN, DOOR_CODE, type ToolResult, type WiredApp, startWiredApp } from "./wiringProof";
+import { ADDRESS, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, type ToolResult, type WiredApp, startWiredApp } from "./wiringProof";
 
 const laneTenant = SCRATCH_TENANTS[0];
 const courtTenant = SCRATCH_TENANTS[1];
@@ -31,8 +31,12 @@ const HOST_OPT = groupOptInBody("Cory", "Maria", LANE.property.address);
 const CLEANER_OPT = groupOptInBody("Maria", "Cory", LANE.property.address);
 const READY = hostDoneLine(LANE.property.address);
 const HOST_STOP = hostStopReply(LANE.property.address, true);
+const HOST_STOP_OPEN = hostStopReply(LANE.property.address, false);
 const CLEANER_STOP = `You're opted out of cleaning texts for ${LANE.property.address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
 const REAL_NUMBER = ["+1", "212", "555", "1234"].join("");
+/** Fixture phones just outside the scratch 555-0100–0199 block. Joined so they are not a real person's number. */
+const SAVED_HOST = ["+1", "201", "555", "0200"].join("");
+const SAVED_CLEANER = ["+1", "201", "555", "0201"].join("");
 
 const open: WiredApp[] = [];
 const engineRoots: string[] = [];
@@ -151,8 +155,23 @@ async function saveLane(wired: WiredApp, people?: { host?: string; cleaner?: str
   await call(wired, "set_up_texting");
 }
 
+let inboundSid = 0;
+
+async function textIn(wired: WiredApp, from: string, body: string): Promise<void> {
+  inboundSid += 1;
+  const result = await wired.postTwilio("/webhooks/twilio/cleaner-core", {
+    from,
+    to: CLEANER_LINE,
+    body,
+    sid: `SM-saved-${inboundSid}`,
+    token: CLEANER_AUTH,
+  });
+  expect(result.status).toBe(200);
+  expect(containsCode(result.raw)).toBe(false);
+}
+
 describe("Scratch test turnover", () => {
-  it("refuses any property that is not Scratch, and a number that is not a 555 test number", async () => {
+  it("refuses any property that is not Scratch", async () => {
     const practice = await scratchApp({
       blockSms: true,
       groupChat: true,
@@ -169,23 +188,137 @@ describe("Scratch test turnover", () => {
     expect(refused.text).toBe(PROPERTY_REFUSAL);
     expect(containsCode(refused.text)).toBe(false);
     expect(containsCode(refused.raw)).toBe(false);
+    const savedOffScratch = await scratchApp({
+      blockSms: true,
+      groupChat: true,
+      allowlist: `${SAVED_HOST},${SAVED_CLEANER}`,
+    });
+    await call(savedOffScratch, "get_state", { said: "2" });
+    await call(savedOffScratch, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
+    await call(savedOffScratch, "save_people", { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    await call(savedOffScratch, "save_calendar_link", { url: "https://calendar.example/harbor.ics" });
+    await call(savedOffScratch, "save_door_code", { code: DOOR_CODE });
+    await call(savedOffScratch, "set_up_texting");
+    const refusedSaved = await call(savedOffScratch, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN });
+    expect(refusedSaved.isError).toBe(true);
+    expect(refusedSaved.text).toBe(PROPERTY_REFUSAL);
+    expect(containsCode(refusedSaved.text)).toBe(false);
+    expect(savedOffScratch.cleanerSent).toEqual([]);
     expect(calendarReads).toBe(0);
     expect(groupCalls).toBe(0);
     expect(twilioCalls).toBe(0);
-
-    const mixed = await scratchApp({ blockSms: true, groupChat: true, allowlist: `${HOST},${REAL_NUMBER}` });
-    await call(mixed, "get_state", { said: "2" });
-    await call(mixed, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: "America/New_York" });
-    await call(mixed, "save_people", { host: HOST, cleaner: REAL_NUMBER });
-    await call(mixed, "save_door_code", { code: LANE.pin });
-    await call(mixed, "set_up_texting");
-    const number = await call(mixed, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN });
-    expect(number.isError).toBe(true);
-    expect(number.text).toBe(NUMBER_REFUSAL);
-    expect(calendarReads).toBe(0);
-    expect(twilioCalls).toBe(0);
-    expect(mixed.cleanerSent).toEqual([]);
   });
+
+  it("on Scratch, creates one turnover for the saved host and cleaner when they are not 555 numbers", async () => {
+    expect(isScratchTestNumber(SAVED_HOST)).toBe(false);
+    expect(isScratchTestNumber(SAVED_CLEANER)).toBe(false);
+    expect(SAVED_HOST).not.toBe(REAL_NUMBER);
+    expect(SAVED_CLEANER).not.toBe(REAL_NUMBER);
+
+    const waiting = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(waiting, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    const created = await call(waiting, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN });
+    expect(created.isError).toBe(false);
+    expect(nextOf(created)).toBe(SAVED);
+    expect(turnsOf(created)).toEqual([
+      expect.objectContaining({
+        checkoutDate: "2026-10-14",
+        nextCheckInDate: "2026-10-14",
+        checkoutTime: "9:00 AM",
+        nextCheckInTime: "4:00 PM",
+        status: "host_confirmed",
+      }),
+    ]);
+    expect(shown(waiting.cleanerSent)).toEqual([
+      { to: SAVED_HOST, body: HOST_OPT },
+      { to: SAVED_CLEANER, body: CLEANER_OPT },
+    ]);
+    expect(waiting.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
+    const again = await call(waiting, "add_test_turn", { checkout: "10:00 AM", checkIn: "5:00 PM" });
+    expect(nextOf(again)).toBe(ALREADY);
+    expect(turnsOf(again)).toHaveLength(1);
+    expect(turnsOf(again)[0]).toMatchObject({ checkoutTime: "9:00 AM", nextCheckInTime: "4:00 PM" });
+    expect(shown(waiting.cleanerSent)).toEqual([
+      { to: SAVED_HOST, body: HOST_OPT },
+      { to: SAVED_CLEANER, body: CLEANER_OPT },
+    ]);
+    const injected = await call(waiting, "send_test_text", { from: SAVED_CLEANER, text: "YES" });
+    expect(injected.isError).toBe(true);
+    expect(injected.text).toBe(NUMBER_REFUSAL);
+    expect(waiting.cleanerSent.filter((item) => item.body.startsWith("Turnover at"))).toEqual([]);
+
+    const cleanerOut = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(cleanerOut, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    expect(nextOf(await call(cleanerOut, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    const cleanerStopAt = cleanerOut.cleanerSent.length;
+    await textIn(cleanerOut, SAVED_CLEANER, "STOP");
+    expect(shown(cleanerOut.cleanerSent.slice(cleanerStopAt)).filter((item) => item.to === SAVED_CLEANER)).toEqual([
+      { to: SAVED_CLEANER, body: CLEANER_STOP },
+    ]);
+    const cleanerAfterStop = cleanerOut.cleanerSent.length;
+    await textIn(cleanerOut, SAVED_CLEANER, "YES");
+    expect(nextOf(await call(cleanerOut, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(ALREADY);
+    expect(cleanerOut.cleanerSent.slice(cleanerAfterStop).filter((item) => item.to === SAVED_CLEANER)).toEqual([]);
+    expect(turnsOf(await call(cleanerOut, "get_turns"))).toHaveLength(1);
+    expect(cleanerOut.cleanerSent.some((item) => item.body.startsWith("Turnover at") || item.body.includes("Door code:"))).toBe(false);
+
+    const hostOut = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(hostOut, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    expect(nextOf(await call(hostOut, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    const hostStopAt = hostOut.cleanerSent.length;
+    await textIn(hostOut, SAVED_HOST, "STOP");
+    expect(shown(hostOut.cleanerSent.slice(hostStopAt)).filter((item) => item.to === SAVED_HOST)).toEqual([
+      { to: SAVED_HOST, body: HOST_STOP },
+    ]);
+    const hostAfterStop = hostOut.cleanerSent.length;
+    await textIn(hostOut, SAVED_CLEANER, "YES");
+    expect(nextOf(await call(hostOut, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(ALREADY);
+    expect(hostOut.cleanerSent.slice(hostAfterStop).filter((item) => item.to === SAVED_HOST)).toEqual([]);
+    expect(turnsOf(await call(hostOut, "get_turns"))).toHaveLength(1);
+    expect(hostOut.cleanerSent.some((item) => item.body.startsWith("Turnover at") || item.body.includes("Door code:"))).toBe(false);
+
+    const cleanerNever = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(cleanerNever, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    await textIn(cleanerNever, SAVED_CLEANER, "STOP");
+    expect(nextOf(await call(cleanerNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    expect(shown(cleanerNever.cleanerSent)).toEqual([
+      { to: SAVED_CLEANER, body: CLEANER_STOP },
+      { to: SAVED_HOST, body: HOST_OPT },
+    ]);
+    expect(cleanerNever.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
+
+    const hostNever = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(hostNever, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    await textIn(hostNever, SAVED_HOST, "STOP");
+    expect(nextOf(await call(hostNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    expect(shown(hostNever.cleanerSent)).toEqual([
+      { to: SAVED_HOST, body: HOST_STOP_OPEN },
+      { to: SAVED_CLEANER, body: CLEANER_OPT },
+    ]);
+    expect(hostNever.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
+
+    const bothOut = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
+    await saveLane(bothOut, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
+    await textIn(bothOut, SAVED_CLEANER, "STOP");
+    await textIn(bothOut, SAVED_HOST, "STOP");
+    expect(nextOf(await call(bothOut, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(NOTHING);
+    expect(shown(bothOut.cleanerSent)).toEqual([
+      { to: SAVED_CLEANER, body: CLEANER_STOP },
+      { to: SAVED_HOST, body: HOST_STOP },
+    ]);
+    expect(turnsOf(await call(bothOut, "get_turns"))).toHaveLength(1);
+    expect(bothOut.cleanerSent.some((item) => item.body.startsWith("Turnover at") || item.body.includes("you're invited"))).toBe(false);
+
+    for (const app of [waiting, cleanerOut, hostOut, cleanerNever, hostNever, bothOut]) {
+      expect(app.cleanerSent.every((item) => item.to === SAVED_HOST || item.to === SAVED_CLEANER)).toBe(true);
+      expect(app.cleanerSent.every((item) => !containsCode(item.body))).toBe(true);
+      expect(app.logs.some(containsCode)).toBe(false);
+      expect(treeContainsCode(app.root)).toBe(false);
+    }
+    expect(calendarReads).toBe(0);
+    expect(groupCalls).toBe(0);
+    expect(twilioCalls).toBe(0);
+  }, 40_000);
 
   it("hides the tool unless scratch tools are on", async () => {
     const wired = await scratchApp({ scratchTools: false, groupChat: true });
