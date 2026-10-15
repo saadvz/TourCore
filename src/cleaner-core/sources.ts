@@ -8,6 +8,8 @@ export interface SourceSnapshot {
   kind: BookingSourceKind;
   /** `guesty-lite`, `google-calendar`, `notion`, or `ical:<slug>` for one of several saved calendar links. */
   sourceId: string;
+  /** A hash of the calendar link this was read from, never the link. Ties the snapshot to the link, not the name. */
+  origin?: string;
   tenantId: string;
   turnovers: Turnover[];
   blocks: FeedBlock[];
