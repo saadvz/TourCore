@@ -1646,4 +1646,80 @@ describe("live group membership", () => {
     expect(posts.filter((text) => text.body.includes(DOOR_CODE) || text.body.includes("got the door code"))).toEqual([]);
     expect(blocked.posts.filter((text) => text.body.includes(DOOR_CODE))).toEqual([]);
   });
+
+  it("seats the host from the texting setup step and not from the calendar or the contacts", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-texting-seat-"));
+    roots.push(root);
+    const sms = fakeSms();
+    const fetchBox = groupFetch();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const invite = groupOptInBody("Maria", "Cory", PRACTICE);
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(await desk.runChecks()).toEqual({ ok: false, error: "Set up texting first." });
+    expect(sms.sent).toEqual([]);
+    expect(fetchBox.posts).toEqual([]);
+
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
+    await desk.inbound({ id: "texting-seat-yes", from: LIVE_CLEANER, text: "YES" });
+    const sid = fetchBox.posts[0]?.conversationSid;
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === invite)).toEqual([
+      expect.objectContaining({ to: LIVE_CLEANER, body: invite }),
+    ]);
+    expect(fetchBox.posts).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_OFFER }]);
+
+    forgetHostSeat(root);
+    resetLiveDesks();
+    const stillSeated = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    await stillSeated.inbound({ id: "texting-seat-kept", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    expect(fetchBox.posts.slice(1)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: TIME_LINE }]);
+
+    forgetHostSeat(root);
+    setSavedTexting(root, false);
+    resetLiveDesks();
+    const unseated = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    await unseated.inbound({ id: "texting-seat-off", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
+    expect(fetchBox.posts.slice(2)).toEqual([{ conversationSid: sid, to: [LIVE_CLEANER], body: TIME_LINE }]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST)).toEqual([]);
+  });
 });
+
+function forgetHostSeat(root: string): void {
+  const file = join(root, "cleaner-job", "cleaner-core.json");
+  const saved = JSON.parse(readFileSync(file, "utf8")) as { hostGroup?: string; tenants?: Record<string, { hostGroup?: string }> };
+  delete saved.hostGroup;
+  for (const slice of Object.values(saved.tenants ?? {})) delete slice.hostGroup;
+  writeFileSync(file, `${JSON.stringify(saved)}\n`);
+}
+
+function setSavedTexting(root: string, on: boolean): void {
+  const file = join(root, "cleaner-live.json");
+  const saved = JSON.parse(readFileSync(file, "utf8")) as { texting?: boolean };
+  saved.texting = on;
+  writeFileSync(file, `${JSON.stringify(saved)}\n`);
+}
