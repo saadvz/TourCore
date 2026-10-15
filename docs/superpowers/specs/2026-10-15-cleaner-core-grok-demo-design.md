@@ -24,6 +24,30 @@ The demo is rehearsed on Scratch numbers first. Then it runs once on real phones
 - Host alerts are instant. A cleaner's reply wakes Grok within seconds.
 - Use Grok's own tools as much as possible. Keep the Cleaner Core tools thin.
 
+## Rule: the user never leaves the Grok Bot chat
+
+All of setup happens inside the Grok Bot chat. The user never opens another page, app, or terminal.
+
+| Setup step | How it stays in the chat |
+| --- | --- |
+| Property, host, cleaner, observer | The user answers in chat. |
+| Group chat | The Grok Bot confirms it in chat. There is nothing to create. |
+| Guesty Lite link | The user pastes the link in chat. |
+| Google Calendar | The Grok Bot's own Google Calendar connector. Any approval prompt is the Grok Bot's own, shown in the chat. |
+| Door code | The Grok Bot's secure card. |
+| Texting | The user answers in chat. |
+| Check routine and Alerts routine | The Grok Bot creates both routines itself. |
+| Alerts routine address and key | The Grok Bot's secure card, passed to `save_alert_routine`. |
+
+The user needs the Guesty Lite link, which comes from Guesty. When the user doesn't have it to hand, the Grok Bot tells them where to find it in one line. When the user has no Guesty Lite listing, Google Calendar alone is enough.
+
+### Admin prep, not part of the user's flow
+
+Saad does these once on the server, before a demo. The user never sees them:
+
+- `CLEANER_CORE_ENABLED` on, and the cleaning Grok Bot connected.
+- For the real-phone run: the two phones on `CLEANER_CORE_SMS_ALLOWLIST`, plus the verify-cleanercore preflight. The preflight covers the Railway connector, the Twilio inbound webhook, and the carrier STOP block.
+
 ## What is not in scope
 
 - A server timer for polls or reminders. That work is parked. The note is in the session notes folder.
@@ -109,5 +133,7 @@ Proof: run the verify-cleanercore skill's `prove-step-g.sh`, which reruns steps 
 
 ## Open items to settle in the plan
 
-- Confirm that the Grok Bot's secure card hands its value to the tool call without putting it in the chat or the model's context. If the value would show up there, it breaks the AGENTS.md secrets rule. The fallback is Railway environment variables that Saad sets.
+- Confirm that the Grok Bot's secure card hands its value to the tool call without putting it in the chat or the model's context. If the value would show up there, it breaks the AGENTS.md secrets rule. The fallback is Railway environment variables that Saad sets as admin prep, so the user still never leaves the chat.
+- Confirm that the Grok Bot can create a scheduled routine and a webhook routine from chat, and can read the webhook's address and key itself. If it can read them itself, the secure card step is skipped.
+- Confirm that `save_door_code` already gets its value from the Grok Bot's secure card. If it does not, move it to the card.
 - How Grok's Google Calendar connector shapes an event. The plan keeps a thin adapter if it differs from `events.list`.
