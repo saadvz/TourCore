@@ -1,0 +1,10 @@
+[
+  {
+    "id": "review:airbnb-exception:smoke-op-0",
+    "kind": "airbnb-exception",
+    "subject": "smoke-op-0",
+    "status": "open",
+    "at": "2026-10-14T15:00:00.000Z",
+    "version": 1
+  }
+]

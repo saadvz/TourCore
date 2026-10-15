@@ -24,6 +24,10 @@ const STARTED = "Got it, cleaning started.";
 const BEFORE_CODE = "I'll text you the door code after the guests leave. Reply DONE after that.";
 const ALREADY = "This cleaning is already marked done.";
 const NEXT_DONE = "Reply DONE when the cleaning is finished.";
+const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
+const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
+const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
+const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
 const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory and Maria. Reply YES to join that group, or STOP to opt out.";
 const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
@@ -83,6 +87,53 @@ describe("DONE after the door code", () => {
     expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
     expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
     expect(box.sent.filter((text) => text.to === OWNER).every((text) => !text.body.includes(PIN))).toBe(true);
+  });
+
+  it("leaves the job unfinished and sends the host no ready text when DONE follows an injury", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    expect(await job.receive({ id: "hurt", from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [
+        { to: OWNER, body: HOST_HURT, kind: "emergency" },
+        { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
+        { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
+      ],
+    });
+    expect(await job.receive({ id: "done-held", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(await job.receive({ id: "done-held-2", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    expect(hostReady(box.sent)).toEqual([]);
+  });
+
+  it("leaves the job unfinished and sends the host no ready text when START and DONE follow an injury", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    await job.receive({ id: "hurt", from: CLEANER, text: "I fell and I'm hurt" });
+    expect(await job.receive({ id: "start-held", from: CLEANER, text: "START" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(await job.receive({ id: "done-held", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    expect(hostReady(box.sent)).toEqual([]);
+    expect(box.sent.filter((text) => text.body === STARTED || text.body === DONE_ACK)).toEqual([]);
   });
 
   it("sends the host one ready text when DONE arrives twice", async () => {

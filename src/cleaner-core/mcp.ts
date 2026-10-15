@@ -40,7 +40,7 @@ const TOOLS = [
   {
     name: "set_up_texting",
     title: "Set up texting",
-    description: "Marks texting ready. It does not ask for account secrets.",
+    description: "Enables the host for texting. That consent seats him in the cleaning group, so he does not text YES. It does not ask for account secrets.",
     input: z.object({}),
   },
   {

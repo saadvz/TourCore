@@ -1,0 +1,9 @@
+Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.
++15555550101: I'm injured
+The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.
+The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.
+If someone is hurt, call 911 now. I've let the host know.
++15555550122: I'm injured
+An observer at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.
+The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.
+If someone is hurt, call 911 now. I've let the host know.

@@ -1,0 +1,1 @@
+smoke --group-chat --with-pin --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --confirm-times 11:00 AM|4:00 PM --reply +15555550100=YES --reply +15555550101=YES --reply +15555550101=YES --reply +15555550101=STOP --reply +15555550100=guests have left

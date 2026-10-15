@@ -1,0 +1,10 @@
+[
+  {
+    "id": "review:stale-source:guesty-lite:2026-10-14T15:00:00.000Z",
+    "kind": "stale-source",
+    "subject": "guesty-lite:2026-10-14T15:00:00.000Z",
+    "status": "resolved",
+    "at": "2026-10-14T18:00:00.001Z",
+    "version": 2
+  }
+]

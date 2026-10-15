@@ -1,0 +1,1 @@
+smoke --group-chat --with-pin --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --confirm-times 11:00 AM|4:00 PM --reply +15555550100=YES --reply +15555550101=YES --group-reply +15555550101=I fell at 2:00 PM and I'm hurt

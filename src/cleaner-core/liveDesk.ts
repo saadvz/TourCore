@@ -574,7 +574,7 @@ export class LiveDesk {
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),
       hostName: file.business,
-      consented: true,
+      consented: file.texting === true,
       allowlist: smsAllowlist(env()),
       holdSends: () => this.checking || (!liveSmsOn(env()) && !this.scratchCapture()),
       deferCleanerTexts: this.file.released !== true,
