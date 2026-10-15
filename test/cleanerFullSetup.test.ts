@@ -519,7 +519,8 @@ type ScheduleInput = Parameters<LiveDesk["saveSchedule"]>[0];
  * Sets up Lake House with a schedule and confirms the first stay's times. The calendar has a stay
  * from Wed Oct 14 to Sun Oct 18 and the next one from Oct 18. The clock starts Oct 14 at 11:00 AM.
  */
-async function withSchedule(schedule: ScheduleInput, groupChat: "0" | "1") {
+/** With no schedule, the engine keeps its defaults (the 8:00 AM morning-of reminder). */
+async function withSchedule(schedule: ScheduleInput | undefined, groupChat: "0" | "1") {
   const time = testClock(FROZEN);
   const opened = openDesk([HOST, CLEANER], groupChat, time.now);
   const { desk } = opened;
@@ -527,7 +528,7 @@ async function withSchedule(schedule: ScheduleInput, groupChat: "0" | "1") {
   ok(desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
   ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
   ok(desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana" }));
-  ok(desk.saveSchedule(schedule));
+  if (schedule) ok(desk.saveSchedule(schedule));
   ok(desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
   ok(desk.savePreferences({}));
   ok(await desk.activate());
@@ -643,6 +644,49 @@ describe("Cleaner Core schedule: the reminder", () => {
     await alertsAt(desk, time, "2026-10-18T13:59:00.000Z");
     expect(reminders(sms.sent)).toEqual([]);
     await alertsAt(desk, time, "2026-10-18T14:00:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+  });
+});
+
+describe("Cleaner Core schedule: changing the schedule", () => {
+  it("clearing quiet hours takes effect, so a reminder inside the old window is sent", async () => {
+    const { desk, sms, time } = await withSchedule(
+      { reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM", quietFrom: "5:00 PM", quietUntil: "10:00 AM" },
+      "0",
+    );
+    await optIn(desk, "0");
+    await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+    await alertsAt(desk, time, "2026-10-17T21:30:00.000Z");
+    expect(reminders(sms.sent)).toEqual([]);
+    ok(desk.saveSchedule({ quietFrom: "", quietUntil: "" }));
+    const reviewed = ok(desk.getState());
+    expect(JSON.stringify(reviewed).includes("quietFrom")).toBe(false);
+    await alertsAt(desk, time, "2026-10-17T22:00:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+  });
+
+  it("a reminder already sent is not sent again when the schedule is saved or its kind changes", async () => {
+    const { desk, sms, time } = await withSchedule(undefined, "0");
+    await optIn(desk, "0");
+    await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+    await alertsAt(desk, time, "2026-10-18T12:00:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+    ok(desk.saveSchedule({}));
+    await alertsAt(desk, time, "2026-10-18T12:10:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+    ok(desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" }));
+    await alertsAt(desk, time, "2026-10-18T12:20:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+  });
+
+  it("changing the saved reminder's kind after it went out does not send a second one", async () => {
+    const { desk, sms, time } = await withSchedule({ reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" }, "0");
+    await optIn(desk, "0");
+    await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+    await alertsAt(desk, time, "2026-10-17T22:00:00.000Z");
+    expect(reminders(sms.sent)).toHaveLength(1);
+    ok(desk.saveSchedule({ reminder: "morning-of", reminderTime: "8:00 AM" }));
+    await alertsAt(desk, time, "2026-10-18T12:00:00.000Z");
     expect(reminders(sms.sent)).toHaveLength(1);
   });
 });

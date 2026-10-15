@@ -81,6 +81,12 @@ const MAX_SCHEDULE_DAYS = 14;
 const FIRST_TEXT_TIME = "09:00";
 const FIRST_TEXTS = ["when-confirmed", "days-after-check-in"] as const;
 const REMINDERS = ["morning-of", "days-before-checkout"] as const;
+/**
+ * The saved reminder's trigger id. It stays the same when its kind changes, so a reminder already
+ * sent is not sent again. A reminder sent under the engine's default id counts too.
+ */
+const SCHEDULED_REMINDER = "scheduled";
+const DEFAULT_REMINDER = "morning-of";
 const DEFAULT_SCHEDULE: Schedule = { firstText: "when-confirmed", reminder: "morning-of", reminderTime: "08:00" };
 const CONTACT_ROLES = ["co-host", "assistant", "observer"] as const;
 const GROUP_CHOICES = ["cleaner-only", "cleaner-and-host", "everyone"] as const;
@@ -1396,8 +1402,17 @@ export class LiveDesk {
         schedule.firstText === "days-after-check-in" && schedule.firstTextDays !== undefined
           ? { kind: "days-after-check-in", days: schedule.firstTextDays, localTime: FIRST_TEXT_TIME }
           : { kind: "when-confirmed" },
-      triggers: [{ id: schedule.reminder, kind: schedule.reminder, localTime: schedule.reminderTime, ...(reminderDays !== undefined ? { days: reminderDays } : {}) }],
-      ...(schedule.quietFrom && schedule.quietUntil ? { quietHours: { from: schedule.quietFrom, until: schedule.quietUntil } } : {}),
+      triggers: [
+        {
+          id: SCHEDULED_REMINDER,
+          kind: schedule.reminder,
+          localTime: schedule.reminderTime,
+          replaces: [DEFAULT_REMINDER],
+          ...(reminderDays !== undefined ? { days: reminderDays } : {}),
+        },
+      ],
+      // The saved schedule is the only source of quiet hours, so clearing them takes effect.
+      quietHours: schedule.quietFrom && schedule.quietUntil ? { from: schedule.quietFrom, until: schedule.quietUntil } : null,
     };
   }
 
