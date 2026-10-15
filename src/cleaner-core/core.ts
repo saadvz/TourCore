@@ -1284,6 +1284,7 @@ class Engine implements CleanerCore {
 
   private async finish(from: string, id: string): Promise<ReceiveResult> {
     if (this.cleanerConsent !== "in") return this.markIgnored(id);
+    if (this.problemHold && this.holdCause === "injury") return this.guide(from, id);
     const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
     if (!job) {
       for (const finished of this.ordered()) {
