@@ -18,7 +18,8 @@ const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const STOP_ACK = "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.";
-const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
+const HOST_STOP = "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666, and the cleaning there is on hold. Reply START to get texts again.";
+const HOST_START = "You'll get cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666 again. The cleaning is still on hold. Tell your Grok Bot to restart it.";
 const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const OWNER_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because you opted out of texts. Tell your Grok Bot to restart it.";
 const CLEANER_HOLD = "The cleaner opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.";
@@ -184,7 +185,7 @@ describe("live Scratch failures from 19087415", () => {
     for (const text of spellings) {
       const sentBefore = wired.cleanerSent.length;
       expect(nextOf(await call(wired, "send_test_text", { from: HOST, text }))).toBe("The test text went through.");
-      expect(redact(wired.cleanerSent.slice(sentBefore), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+      expect(redact(wired.cleanerSent.slice(sentBefore), LANE.pin)).toEqual([{ to: HOST, body: HOST_STOP }]);
       const state = await call(wired, "get_state");
       expect(state.text).toContain(OWNER_HOLD);
       expect(state.text).toContain("\"held\":true");
@@ -205,11 +206,11 @@ describe("live Scratch failures from 19087415", () => {
 
     const startBefore = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "START" }))).toBe("The test text went through.");
-    expect(redact(wired.cleanerSent.slice(startBefore), LANE.pin)).toEqual([{ to: HOST, body: START_ACK }]);
+    expect(redact(wired.cleanerSent.slice(startBefore), LANE.pin)).toEqual([{ to: HOST, body: HOST_START }]);
     const afterStart = await call(wired, "get_state");
     expect(afterStart.text).toContain(OWNER_HOLD);
-    expect(afterStart.text).toContain(START_ACK);
-    expect(afterStart.text).toContain(STOP_ACK);
+    expect(afterStart.text).toContain(HOST_START);
+    expect(afterStart.text).toContain(HOST_STOP);
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(OWNER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect((await call(wired, "resume_job")).text).toContain("is back on");
@@ -272,7 +273,7 @@ describe("live Scratch failures from 19087415", () => {
     ]);
     const beforeStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
-    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: HOST_STOP }]);
     const afterStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "failed" }))).toBe("Door code text to the cleaner: failed.");
     expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
@@ -289,7 +290,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" }))).toBe("The test text went through.");
     const beforeStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
-    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: HOST_STOP }]);
     const afterStop = wired.cleanerSent.length;
     const resumed = await call(wired, "resume_job");
     const backOn = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.";
@@ -316,7 +317,7 @@ describe("live Scratch failures from 19087415", () => {
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
     const beforeStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
-    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: HOST_STOP }]);
     const afterStop = wired.cleanerSent.length;
     await liveDeskFor(wired.root, () => process.env, () => new Date()).runReminders();
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");

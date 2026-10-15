@@ -25,6 +25,10 @@ const CANCEL = "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Su
 const REMINDER = "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
+const HOST_STOP_OPEN = `You're opted out of cleaning texts for ${ADDRESS}. Reply START to get texts again.`;
+const HOST_STOP_HELD = `You're opted out of cleaning texts for ${ADDRESS}, and the cleaning there is on hold. Reply START to get texts again.`;
+const HOST_START_OPEN = `You'll get cleaning texts for ${ADDRESS} again.`;
+const HOST_DONE = `The cleaner marked the cleaning at ${ADDRESS} done.`;
 const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
@@ -328,7 +332,7 @@ describe("one Scratch turnover", () => {
     expect(await job.receive({ id: "stop-1", from: OWNER, text: "STOP" })).toEqual({
       handled: true,
       reason: "stop",
-      sent: [{ to: OWNER, body: STOP_ACK, kind: "stop" }],
+      sent: [{ to: OWNER, body: HOST_STOP_OPEN, kind: "stop" }],
     });
     const before = box.sent.length;
     await job.pollFeed(feed("guesty-lite-date-moved.ics"));
@@ -341,7 +345,7 @@ describe("one Scratch turnover", () => {
 
   it("answers STOP and an injury before step C in every new state", async () => {
     const phrases = [
-      { text: "STOP", body: STOP_ACK, kind: "stop" as const, reason: "stop" as const },
+      { text: "STOP", body: HOST_STOP_OPEN, kind: "stop" as const, reason: "stop" as const },
       { text: "I fell and I'm hurt", body: EMERGENCY, kind: "emergency" as const, reason: "emergency" as const },
     ];
     for (const phrase of phrases) {
@@ -441,7 +445,7 @@ describe("one Scratch turnover", () => {
     expect(await job.receive({ id: "start-1", from: OWNER, text: "START" })).toEqual({
       handled: true,
       reason: "start",
-      sent: [{ to: OWNER, body: START_ACK, kind: "start" }],
+      sent: [{ to: OWNER, body: HOST_START_OPEN, kind: "start" }],
     });
     const next = await job.receive({ id: "yes-3", from: OWNER, text: "Yes please" });
     expect(next.sent).toEqual([{ to: OWNER, body: CHECKIN_Q, kind: "host-checkin" }]);
@@ -549,7 +553,7 @@ describe("one Scratch turnover", () => {
     const stop = cleanerCli(["smoke", "--reply", `${OWNER}=STOP`, "--reply", `${OWNER}=YES`], "1");
     expect(stop.status).toBe(0);
     expect(JSON.parse(stop.stdout).transcript).toEqual([
-      CHECKOUT_Q, said(OWNER, "STOP"), STOP_ACK, said(OWNER, "YES"),
+      CHECKOUT_Q, said(OWNER, "STOP"), HOST_STOP_OPEN, said(OWNER, "YES"),
     ]);
 
     const help = cleanerCli(["smoke", "--reply", `${OWNER}=HELP`], "1");
@@ -824,6 +828,7 @@ describe("step D private door code", () => {
       { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
       { to: CLEANER, body: STARTED, kind: "started" },
       { to: CLEANER, body: DONE_ACK, kind: "done" },
+      { to: OWNER, body: HOST_DONE, kind: "done" },
     ]);
     expect(job.jobs().map((item) => item.status)).toEqual(["done", "discovered", "discovered"]);
     expect(job.transcript()).toEqual([
@@ -844,6 +849,7 @@ describe("step D private door code", () => {
       STARTED,
       said(CLEANER, "DONE"),
       DONE_ACK,
+      HOST_DONE,
     ]);
   });
 
@@ -1150,11 +1156,11 @@ describe("step D private door code", () => {
     const asked = sink();
     const questions = pinned(asked);
     await questions.receive({ id: "questions-stop", from: OWNER, text: "STOP" });
-    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([STOP_ACK]);
+    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([HOST_STOP_HELD]);
     await questions.resumeJob();
     await questions.pollFeed(feed("guesty-lite-scratch.ics"));
     await questions.receive({ id: "questions-yes", from: OWNER, text: "YES" });
-    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([STOP_ACK]);
+    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([HOST_STOP_HELD]);
     expect(questions.hostNotes()).toEqual([
       "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because you opted out of texts. Tell your Grok Bot to restart it.",
       "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.",

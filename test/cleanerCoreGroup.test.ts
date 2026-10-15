@@ -327,11 +327,11 @@ describe("group thread", () => {
     expect(sent).toEqual([]);
     expect(job.hostNotes()).toEqual([sentence]);
     expect(resumed?.body).toBe(sentence);
-    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "sent", body: sentence })]);
+    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "unsent", body: sentence })]);
     const again = await job.resumeJob();
     expect(again?.body).toBe(sentence);
     expect(job.hostNotes()).toEqual([sentence]);
-    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "sent", body: sentence })]);
+    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "unsent", body: sentence })]);
     expect(sent).toEqual([]);
   });
 
@@ -1332,8 +1332,8 @@ describe("live group membership", () => {
 
   it("texts Cory one injury alert and one STOP confirmation when he is opted in", async () => {
     const hostHurt = `The cleaner at ${PRACTICE} says someone is hurt. They've been told to call 911.`;
-    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
-    const hostStart = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
+    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`;
+    const hostStart = `You'll get cleaning texts for ${PRACTICE} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`;
     const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
     const checkin = `Is check-in at ${PRACTICE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
     const pinHeld = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
@@ -1397,7 +1397,7 @@ describe("live group membership", () => {
     const hold = holdNote(PRACTICE);
     const invite = groupOptInBody("Cory", "Maria", PRACTICE);
     const review = `I saved a manual Airbnb booking exception for ${PRACTICE}. I did not change the cleaning until you confirm it.`;
-    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
+    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`;
     const checkin = `Is check-in at ${PRACTICE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
 
     const solo = await readyPractice(false);
@@ -1548,7 +1548,7 @@ describe("live group membership", () => {
     hostOut.desk.notePinDelivery({ sid: hostSid, status: "delivered" });
     expect(notesOf(hostOut.desk.getState())).toContain(line);
     expect(hostBodies(hostOut.sms.sent)).toEqual([
-      `You're opted out of cleaning texts for ${PRACTICE}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
+      `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`,
     ]);
     expect(hostOut.posts.filter((text) => text.body === line)).toEqual([]);
   });
@@ -1558,7 +1558,7 @@ describe("live group membership", () => {
     const resume = `The cleaning at ${PRACTICE} is back on.`;
     const review = `I saved a manual Airbnb booking exception for ${PRACTICE}. I did not change the cleaning until you confirm it.`;
     const hostHurt = `The cleaner at ${PRACTICE} says someone is hurt. They've been told to call 911.`;
-    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
+    const hostStop = `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`;
     const grouped = await readyPractice(true);
     await grouped.desk.inbound({ id: "out-offer", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "out-host", from: LIVE_HOST, text: "YES" });

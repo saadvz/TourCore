@@ -10,7 +10,7 @@
     },
     {
       "to": "+15555550100",
-      "body": "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.",
+      "body": "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again.",
       "kind": "stop"
     }
   ],
@@ -67,7 +67,7 @@
     {
       "id": "stop:smoke-op-1",
       "to": "+15555550100",
-      "body": "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.",
+      "body": "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again.",
       "kind": "stop",
       "status": "sent"
     }
@@ -75,7 +75,7 @@
   "transcript": [
     "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
     "+15555550100: STOP",
-    "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.",
+    "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again.",
     "+15555550100: YES"
   ],
   "blocks": []
