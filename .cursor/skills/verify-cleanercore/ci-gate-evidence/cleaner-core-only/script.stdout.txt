@@ -1,0 +1,2 @@
+secret scan clean (3 configured values, 724 files)
+/workspace/.cursor/skills/verify-cleanercore/ci-gate-evidence/cleaner-core-only

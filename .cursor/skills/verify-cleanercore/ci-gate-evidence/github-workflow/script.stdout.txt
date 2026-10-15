@@ -1,0 +1,2 @@
+secret scan clean (3 configured values, 730 files)
+/workspace/.cursor/skills/verify-cleanercore/ci-gate-evidence/github-workflow
