@@ -135,21 +135,21 @@ export function setCleanerAlertFetch(fetchImpl: AlertFetch | undefined): void {
 
 const desks = new Map<string, LiveDesk>();
 
-/** One desk per state folder. Each lookup hands it the caller's env, so a secret saved later is seen. */
+/**
+ * One desk per state folder. The first caller's env getter is kept, so the server passes a live
+ * one (`() => installation.env()`) and a secret saved later is seen at once.
+ */
 export function liveDeskFor(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): LiveDesk {
   const existing = desks.get(root);
-  if (existing) {
-    existing.useEnv(env);
-    return existing;
-  }
+  if (existing) return existing;
   const desk = new LiveDesk(root, env, now);
   desks.set(root, desk);
   return desk;
 }
 
 /** Delivers the cleaning routine's pending wake-ups. The server's retry timer calls this. */
-export function drainCleanerAlerts(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): Promise<void> {
-  return liveDeskFor(root, env, now).drainAlerts();
+export async function drainCleanerAlerts(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): Promise<void> {
+  await liveDeskFor(root, env, now).drainAlerts();
 }
 
 export function resetLiveDesks(): void {
@@ -186,7 +186,7 @@ export class LiveDesk {
 
   constructor(
     private readonly root: string,
-    private env: () => NodeJS.ProcessEnv,
+    private readonly env: () => NodeJS.ProcessEnv,
     private readonly now: () => Date,
   ) {
     this.path = join(root, "cleaner-live.json");
@@ -203,19 +203,21 @@ export class LiveDesk {
     );
   }
 
-  useEnv(env: () => NodeJS.ProcessEnv): void {
-    this.env = env;
-  }
-
   /**
-   * Saves the cleaning routine's webhook address and key through `save` (the secret store) and
+   * Saves the cleaning routine's webhook address and token through `save` (the secret store) and
    * queues a test wake-up. Neither value is kept in this desk's file or repeated in the reply.
+   * The door-code key is never accepted as the token.
    */
-  saveAlertRoutine(input: { url?: string; key?: string }, save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void): ToolReply {
+  saveAlertRoutine(
+    input: { url?: string; token?: string },
+    save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
+    pinKey?: Buffer,
+  ): ToolReply {
     const url = input.url?.trim() ?? "";
-    const key = input.key?.trim() ?? "";
-    if (!calendarUrlAllowed(url) || key.length < 8) return this.fail(ROUTINE_NEEDED);
-    save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: key });
+    const token = input.token?.trim() ?? "";
+    if (!calendarUrlAllowed(url) || token.length < 8) return this.fail(ROUTINE_NEEDED);
+    if (pinKey && token === pinKey.toString("base64")) return this.fail(ROUTINE_NEEDED);
+    save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
     return this.reply({ next: ROUTINE_SAVED });

@@ -79,7 +79,7 @@ const TOOLS = [
     name: "save_alert_routine",
     title: "Connect alerts",
     description: "Saves the alert routine's webhook address and key from the secure card. The reply never repeats them.",
-    input: z.object({ url: z.string().optional(), key: z.string().optional() }),
+    input: z.object({ url: z.string().optional(), token: z.string().optional() }),
   },
   {
     name: "resume_job",
@@ -232,7 +232,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.checkNow(args as { googleEvents?: GoogleEventList });
     case "save_alert_routine":
       if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
-      return desk.saveAlertRoutine(args as { url?: string; key?: string }, saveSecrets);
+      return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":

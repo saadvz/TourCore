@@ -572,10 +572,7 @@ describe("Cleaner Core live wiring", () => {
     expect(listed.raw).not.toContain(TEST_PIN_KEY);
     expect(listed.raw).not.toContain(PIN_KEY_HEADER);
     for (const tool of tools.result?.tools ?? []) {
-      const fields = Object.keys(tool.inputSchema?.properties ?? {});
-      // The alert routine's own webhook key, entered from the secure card. Never the door-code key.
-      if (tool.name === "save_alert_routine") expect(fields).toEqual(["url", "key"]);
-      else expect(fields.join(" ")).not.toMatch(/key/i);
+      expect(Object.keys(tool.inputSchema?.properties ?? {}).join(" ")).not.toMatch(/key/i);
     }
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });

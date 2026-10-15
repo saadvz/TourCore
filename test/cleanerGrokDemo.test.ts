@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { zonedInstant } from "../src/cleaner-core/calendar";
@@ -603,7 +603,7 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     const wired = await app();
     const posts = alertStub(() => 200);
     await call(wired, "get_state", { said: "2" });
-    const saved = await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY });
+    const saved = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY });
     expect(saved.isError).toBe(false);
     expect(saved.structured?.next).toBe(CONNECTED);
     for (const secret of [ROUTINE_URL, ROUTINE_KEY]) {
@@ -623,10 +623,10 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
   it("refuses a non-https routine", async () => {
     const wired = await app();
     const posts = alertStub(() => 200);
-    const refused = await call(wired, "save_alert_routine", { url: "http://x", key: ROUTINE_KEY });
+    const refused = await call(wired, "save_alert_routine", { url: "http://x", token: ROUTINE_KEY });
     expect(refused.isError).toBe(true);
     expect(refused.text).toBe("Send the routine's https address and its key.");
-    const short = await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: "short" });
+    const short = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: "short" });
     expect(short.isError).toBe(true);
     expect(short.text).toBe("Send the routine's https address and its key.");
     await drain(wired);
@@ -634,10 +634,42 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
   });
 
+  it("re-saving sends the test alert to the new routine at once", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const secondUrl = "https://routine.example/second-hook";
+    const secondToken = "k-test-second-7890";
+    // No drain call here: the save itself sends the test alert, well before the retry timer.
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
+    await vi.waitFor(() => expect(posts).toHaveLength(1), { timeout: 2_000, interval: 10 });
+    expect(posts[0]?.url).toBe(ROUTINE_URL);
+    expect((await call(wired, "save_alert_routine", { url: secondUrl, token: secondToken })).isError).toBe(false);
+    await vi.waitFor(() => expect(posts).toHaveLength(2), { timeout: 2_000, interval: 10 });
+    expect(posts[1]?.url).toBe(secondUrl);
+    expect(posts[1]?.headers.Authorization).toBe(`Bearer ${secondToken}`);
+    expect(JSON.parse(posts[1]?.body ?? "{}").eventType).toBe("installation.test");
+    await drain(wired);
+    expect(posts.filter((post) => post.url === ROUTINE_URL)).toHaveLength(1);
+    expect(posts.filter((post) => post.url === secondUrl)).toHaveLength(1);
+  });
+
+  it("refuses the door-code key as the routine token", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const refused = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: TEST_PIN_KEY });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("Send the routine's https address and its key.");
+    expect(refused.raw).not.toContain(TEST_PIN_KEY);
+    await drain(wired);
+    expect(posts).toEqual([]);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
+  });
+
   it("cleaner YES wakes the routine", async () => {
     const wired = await app();
     const posts = alertStub(() => 200);
-    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY })).isError).toBe(false);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
     await drain(wired);
     expect(posts).toHaveLength(1);
     await readyForYes(wired);
@@ -671,7 +703,7 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     let status = 200;
     const wired = await app({ now: () => now });
     const posts = alertStub(() => status);
-    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY })).isError).toBe(false);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
     await drain(wired, () => now);
     expect(posts).toHaveLength(1);
     status = 503;
