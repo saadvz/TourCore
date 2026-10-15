@@ -8,6 +8,7 @@ import { FileRuntimeStore } from "../storage/runtimeStore";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
+import { formatWhen, zonedInstant } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
@@ -398,7 +399,7 @@ export class LiveDesk {
     await engine.runReminders();
     this.syncHold();
     const shown = new Set(this.file.alertsShown ?? []);
-    const fresh = this.visibleNotes(engine).filter((note) => !shown.has(note.id));
+    const fresh = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].filter((note) => !shown.has(note.id));
     this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
     this.persist();
     return this.reply({
@@ -433,7 +434,9 @@ export class LiveDesk {
       return this.fail(read.reason ?? "I couldn't read that calendar.");
     }
     this.file.checked = true;
-    this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...this.visibleNotes(this.engine).map((note) => note.id)])];
+    // run_checks' own reply already asks for the times, so its new-booking alert counts as shown too.
+    const seen = [...this.visibleNotes(this.engine), ...this.newBookingAlert(this.engine)].map((note) => note.id);
+    this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
     return this.reply({
@@ -469,6 +472,20 @@ export class LiveDesk {
       googleUnread = !google.polled;
     }
     return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
+  }
+
+  /**
+   * With group chat on, the engine asks the host nothing about a new booking, because Grok collects
+   * the times with confirm_times. This alert names the job confirm_times would time, so check_now
+   * reports the booking once. It is not a host note, so get_state is unchanged. A job the host
+   * already timed is left to needsTimes.
+   */
+  private newBookingAlert(engine: CleanerCore): { id: string; body: string }[] {
+    if (!groupChatEnabled(this.env()) || !this.file.address || !this.file.timeZone) return [];
+    const job = engine.jobs().find((item) => item.status !== "canceled" && item.status !== "declined");
+    if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
+    const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
+    return [{ id: `new-booking:${job.id}`, body: `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?` }];
   }
 
   getTurns(): ToolReply {

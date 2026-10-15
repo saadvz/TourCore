@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -875,6 +875,26 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(settled.structured?.needsTimes).toBeUndefined();
   });
 
+  it("with group chat on, a new booking alerts once and leaves get_state notes alone", async () => {
+    setCleanerGroupFetch(groupStub().impl);
+    const wired = await app({ groupChat: true });
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: googleList([]) })).isError).toBe(false);
+    const line = `New booking at ${ADDRESS}, checking out Thursday, Oct 15. What are the checkout time and the next check-in time?`;
+    const first = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    expect(alertsOf(first)).toEqual([line]);
+    expect(first.structured?.needsTimes).toBeUndefined();
+    expect(alertsOf(await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) }))).toEqual([]);
+    expect(((await call(wired, "get_state")).structured?.notes as string[] | undefined) ?? []).not.toContain(line);
+    expect(wired.cleanerSent).toEqual([]);
+
+    // A booking run_checks already reported is not announced again.
+    const seen = await app({ groupChat: true });
+    await setUpGoogle(seen);
+    expect((await call(seen, "run_checks", { googleEvents: withNext(WAKE_STAY) })).isError).toBe(false);
+    expect(alertsOf(await call(seen, "check_now", { googleEvents: withNext(WAKE_STAY) }))).not.toContain(line);
+  });
+
   it("is omitted when the open job's stay was removed", async () => {
     setCleanerGroupFetch(groupStub().impl);
     const wired = await app({ groupChat: true });
@@ -883,4 +903,182 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(turnsOf(removed).every((turn) => turn.status === "canceled")).toBe(true);
     expect(removed.structured?.needsTimes).toBeUndefined();
   });
+});
+
+const LANE = SCRATCH_TENANTS[0];
+const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+
+interface OutText {
+  label: string;
+  status: string;
+  body: string;
+}
+
+/**
+ * The plain door code as its own token. Saved files hold random hex ids (event ids, sids), and a bare
+ * substring check would fail now and then when one of them happens to contain the four digits.
+ */
+const PLAIN_CODE = new RegExp(`(?<![0-9A-Za-z])${DOOR_CODE}(?![0-9A-Za-z])`);
+
+/** Every saved file under `dir`, so a step can prove none of them holds the plain door code. */
+function savedFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...savedFiles(path));
+    else if (entry.isFile()) found.push(path);
+  }
+  return found;
+}
+
+describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
+  it("demo script", async () => {
+    if (!LANE) throw new Error("missing tenant");
+    const address = LANE.property.address;
+    const scratchNumbers = new Set([LANE.ownerPhone, LANE.cleanerPhone]);
+    const yesNote = `The cleaner said YES to the turnover at ${address}.`;
+    const readyNote = `The cleaner marked the cleaning at ${address} done.`;
+    const today = { id: "g1", start: "2026-10-10", end: "2026-10-14" };
+    const group = groupStub();
+    setCleanerGroupFetch(group.impl);
+    const routine = alertStub(() => 200);
+    let now = new Date(zonedInstant("2026-10-14", "06:00", ZONE));
+    const clock = () => now;
+    const wired = await app({ scratchTools: true, groupChat: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone}`, now: clock });
+    const replies: string[] = [];
+
+    const say = async (name: string, args: Record<string, unknown> = {}) => {
+      const reply = await call(wired, name, args);
+      replies.push(reply.raw);
+      expect(reply.isError, `${name}: ${reply.text}`).toBe(false);
+      return reply;
+    };
+    const texts = async (): Promise<OutText[]> => ((await say("read_outbox")).structured?.texts as OutText[] | undefined) ?? [];
+    const labelled = async (label: string) => (await texts()).filter((item) => item.label === label);
+    const fromCleaner = async (text: string) => {
+      expect((await say("send_test_text", { from: LANE.cleanerPhone, text })).structured?.next).toBe("The test text went through.");
+    };
+    const notesNow = async () => ((await say("get_state")).structured?.notes as string[] | undefined) ?? [];
+
+    /** The checks the rehearsal makes after every step. */
+    const safe = async (step: string) => {
+      await drain(wired, clock);
+      for (const sms of [...wired.cleanerSent, ...wired.tourSent]) expect(scratchNumbers.has(sms.to), `${step}: text to ${sms.to}`).toBe(true);
+      // The door code goes only in a private text to the cleaner, never to the group.
+      for (const sms of wired.cleanerSent) if (sms.body.includes(DOOR_CODE)) expect(sms.to, step).toBe(LANE.cleanerPhone);
+      for (const post of group.posts) {
+        for (const to of post.to) expect(scratchNumbers.has(to), `${step}: group post to ${to}`).toBe(true);
+        expect(post.body, step).not.toContain(DOOR_CODE);
+      }
+      for (const post of routine) {
+        expect(post.url, step).toBe(ROUTINE_URL);
+        expect(post.body, step).not.toContain("+1");
+        expect(post.body, step).not.toMatch(PLAIN_CODE);
+      }
+      const files = savedFiles(wired.root);
+      expect(files.some((path) => path.endsWith("cleaner-live.json")), step).toBe(true);
+      for (const path of files) expect(PLAIN_CODE.test(readFileSync(path, "utf8")), `${step}: ${path}`).toBe(false);
+      expect(replies.join("\n"), step).not.toMatch(PLAIN_CODE);
+      expect(wired.logs.join("\n"), step).not.toMatch(PLAIN_CODE);
+    };
+
+    /** Demo steps 1 to 4: setup, a stay that checks out today, the host's times, and the cleaner's YES. */
+    const happyStart = async (setup: () => Promise<void>) => {
+      await setup();
+      await safe("1 setup");
+
+      const booked = await say("check_now", { googleEvents: withNext(today) });
+      // With group chat on, Grok collects the times, so the alert names the booking and asks for both.
+      expect(alertsOf(booked)).toContain(`New booking at ${address}, checking out Wednesday, Oct 14. What are the checkout time and the next check-in time?`);
+      expect(await labelled("Cleaning offer to the cleaner")).toEqual([]);
+      await safe("2 new booking");
+
+      await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
+      const optIn = await labelled("Opt-in text to the cleaner");
+      expect(optIn).toHaveLength(1);
+      // With group chat on, the opt-in is the invitation to the cleaning group.
+      expect(optIn[0]?.body).toContain(`you're invited to the cleaning group for ${address}`);
+      expect(optIn[0]?.body).toContain("Reply YES");
+      await safe("3 times");
+
+      // The engine asks a new cleaner to opt in first. The first YES opts in and brings the offer.
+      await fromCleaner("YES");
+      // The cleaner gets the private offer, and the group gets a copy that says the cleaner will confirm.
+      const offers = await labelled("Cleaning offer to the cleaner");
+      expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true, true]);
+      expect(offers.filter((item) => item.body.endsWith("Reply YES to schedule it, or STOP to opt out."))).toHaveLength(1);
+      await fromCleaner("YES");
+      expect(await labelled("Confirmation to the cleaner")).toHaveLength(1);
+      const heard = alertsOf(await say("check_now", { googleEvents: withNext(today) }));
+      expect([...heard, ...(await notesNow())]).toContain(yesNote);
+      await safe("4 cleaner YES");
+    };
+
+    await happyStart(async () => {
+      await say("get_state", { said: "2" });
+      await say("save_property", { business: "Scratch", address, timeZone: ZONE });
+      await say("save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone });
+      await say("save_calendar_link", { google: true });
+      await say("save_door_code", { code: DOOR_CODE });
+      await say("set_up_texting");
+      await say("run_checks", { googleEvents: googleList([]) });
+      const lines = await done(wired);
+      expect(lines).toContain("Group chat set up with you and the cleaner.");
+      expect(lines).toContain("Checks finished.");
+      expect((await say("get_state")).structured?.next).toBe(ROUTINE_NEXT);
+      await say("save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY });
+      expect((await say("get_state")).structured?.next).toBe(TIMES_NEXT);
+    });
+    // The YES woke the routine with an event that carries no text, number, or code.
+    expect(routine.map((post) => JSON.parse(post.body).eventType)).toContain("cleaning.update");
+
+    // 5. The reminder goes out on the first check at or after 8 AM on the cleaning day.
+    expect(await labelled("Reminder to the cleaner")).toEqual([]);
+    now = new Date(zonedInstant("2026-10-14", "08:00", ZONE));
+    await say("check_now", { googleEvents: withNext(today) });
+    expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
+    await say("check_now", { googleEvents: withNext(today) });
+    expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
+    await safe("5 reminder");
+
+    // 6. The guests leave. The private code text goes to the cleaner, shown redacted.
+    expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT);
+    const door = await labelled("Door code text to the cleaner");
+    expect(door).toHaveLength(1);
+    expect(door[0]?.body).toContain("Door code: [redacted].");
+    expect(door[0]?.body).not.toContain(DOOR_CODE);
+    expect(wired.cleanerSent.filter((sms) => sms.body.includes(DOOR_CODE)).map((sms) => sms.to)).toEqual([LANE.cleanerPhone]);
+    await safe("6 guests left");
+
+    // 7. The cleaner says DONE. The host's ready note comes back to Grok.
+    await fromCleaner("DONE");
+    const ready = alertsOf(await say("check_now", { googleEvents: withNext(today) }));
+    expect([...ready, ...(await notesNow())]).toContain(readyNote);
+    expect(await labelled("Done note to the host")).toHaveLength(1);
+    await safe("7 done");
+
+    // 8. Reset Scratch, run steps 1 to 4 again, then move the stay and remove it.
+    expect((await say("reset_scratch")).structured?.next).toBe("Scratch is reset. No jobs, notes or test texts are left.");
+    expect(await texts()).toEqual([]);
+    await safe("8 reset");
+    await happyStart(async () => {
+      await say("run_checks", { googleEvents: googleList([]) });
+    });
+
+    const moved = { id: "g1", start: "2026-10-10", end: "2026-10-15" };
+    const movedCheck = await say("check_now", { googleEvents: withNext(moved) });
+    expect(movedCheck.structured?.needsTimes).toBe(true);
+    expect(await labelled("Time correction to the cleaner")).toEqual([]);
+    await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
+    const corrected = await labelled("Time correction to the cleaner");
+    expect(corrected).toHaveLength(1);
+    expect(corrected[0]?.body).toContain("Oct 15 at 10:00 AM");
+    await safe("8 moved");
+
+    await say("check_now", { googleEvents: googleList([NEXT_STAY]) });
+    const canceled = await labelled("Cancellation to the cleaner");
+    expect(canceled).toHaveLength(1);
+    expect(await labelled("Time correction to the cleaner")).toHaveLength(1);
+    await safe("8 removed");
+  }, 60_000);
 });
