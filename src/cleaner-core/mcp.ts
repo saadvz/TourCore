@@ -155,7 +155,8 @@ const TOOLS = [
   {
     name: "save_alert_routine",
     title: "Connect alerts",
-    description: "Saves the alert routine's webhook address and token from the secure card. The reply never repeats them.",
+    description:
+      "Connects the alert routine. Call it with no arguments to get a one-time upload link, then send the routine's webhook address and key to that link from your computer. Never put them in chat or in a tool argument. The reply never repeats them. A url and token passed here are still saved.",
     input: z.object({ url: z.string().optional(), token: z.string().optional() }),
   },
   {

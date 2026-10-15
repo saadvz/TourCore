@@ -13,11 +13,14 @@ webhook address, no key, and no secret.
 ## Instructions for the routine
 
 1. If the host uses Google Calendar, read it with your own Google Calendar
-   connector. Read from 7 days ago to 60 days ahead, with recurring events
-   expanded into single events. Starting 7 days back keeps a stay that ends
-   today in the read.
+   connector. Read only the calendar the host named at setup when you asked
+   which Google calendar holds the bookings. Never the primary calendar unless
+   the host says the bookings live there. Read from 7 days ago to 60 days
+   ahead, with recurring events expanded into single events. Starting 7 days
+   back keeps a stay that ends today in the read.
 2. Call `check_now` with `{ timeZone, items }` as `googleEvents`, exactly as
-   you read it. Don't edit, filter, or add to the events.
+   you read it from only that calendar. Don't edit, filter, or add to the
+   events.
 3. If the Google read failed, call `check_now` without `googleEvents`. Never
    send an empty list for a failed read. An empty list tells Cleaner Core
    every stay was removed.
@@ -54,8 +57,8 @@ so an all-day stay would read as checking out a day late.
 ## Connecting it
 
 Grok creates this routine itself after Activate, when `get_state` asks for
-the routines. It needs no secret. Secrets are entered only through the Grok
-Bot's secure card and never in chat.
+the routines. It needs no secret. The Alerts routine's address and key go to
+Cleaner Core only through its one-time upload link, never in chat.
 
 ## Allowed tools
 

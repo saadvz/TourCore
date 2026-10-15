@@ -39,7 +39,7 @@ const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 /** With no alert routine saved, the step after the checks asks Grok to create the routines first. */
-const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
+const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
 const PRACTICE_HOLD = holdNote(PRACTICE);
 const PRACTICE_SETUP = [PRACTICE_HOLD];
 const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;

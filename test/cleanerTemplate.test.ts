@@ -191,6 +191,25 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     expect(text).toContain("The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.");
   });
 
+  it("connects alerts with the one-time upload link, never the secure card or chat", () => {
+    const text = read(BOOTSTRAP);
+    for (const doc of [text, read(join(TEMPLATE, "routines", "cleaner-core-alerts.md"))]) {
+      expect(doc).toMatch(/`save_alert_routine` with no arguments/);
+      expect(doc).toMatch(/one-time upload link/);
+      expect(doc).toMatch(/from (your|Grok's) own cloud\s+computer/i);
+      expect(doc).toContain("Content-Type: application/json");
+      expect(doc).not.toMatch(/secure card into `save_alert_routine`|secure card, and pass them to `save_alert_routine`/);
+    }
+  });
+
+  it("asks which Google calendar holds the bookings and reads only that one", () => {
+    for (const doc of [read(BOOTSTRAP), read(join(TEMPLATE, "routines", "cleaner-core-check.md"))]) {
+      expect(doc).toMatch(/which\s+Google\s+calendar\s+holds\s+the\s+bookings/);
+      expect(doc).toMatch(/only\s+that\s+calendar/);
+      expect(doc).toMatch(/never\s+the\s+primary\s+calendar\s+unless\s+the\s+host\s+says/i);
+    }
+  });
+
   it("keeps the safety rules", () => {
     const text = read(BOOTSTRAP);
     for (const doc of [text, read(join(TEMPLATE, "bot-profile.md"))]) {

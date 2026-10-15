@@ -64,7 +64,7 @@ const PIN_REENTER = "Please enter the door code again in the private box. Don't 
 const PIN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
 /** Grok's own step after the checks. It names the alert routine's key, and is for Grok, not the host. */
-const ROUTINE_STEP = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
+const ROUTINE_STEP = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
 const HOST_LEAK = /\b(webhook|key|request|queued)\b/i;
 const FALSE_RETRY = /try again in a few minutes|we'll try again/i;
 

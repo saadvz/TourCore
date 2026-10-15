@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,7 @@ import {
   type SentSms,
   type WiredApp,
 } from "./wiringProof";
+import { PUBLIC } from "./fakeSendblue";
 
 const PATH = "/mcp/cleaner-core";
 const open: WiredApp[] = [];
@@ -645,10 +647,10 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     const posts = alertStub(() => 200);
     const refused = await call(wired, "save_alert_routine", { url: "http://x", token: ROUTINE_KEY });
     expect(refused.isError).toBe(true);
-    expect(refused.text).toBe("Send the routine's https address and its key.");
+    expect(refused.text).toBe(ROUTINE_NEEDED);
     const short = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: "short" });
     expect(short.isError).toBe(true);
-    expect(short.text).toBe("Send the routine's https address and its key.");
+    expect(short.text).toBe(ROUTINE_NEEDED);
     await drain(wired);
     expect(posts).toEqual([]);
     expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
@@ -678,7 +680,7 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     const posts = alertStub(() => 200);
     const refused = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: TEST_PIN_KEY });
     expect(refused.isError).toBe(true);
-    expect(refused.text).toBe("Send the routine's https address and its key.");
+    expect(refused.text).toBe(ROUTINE_NEEDED);
     expect(refused.raw).not.toContain(TEST_PIN_KEY);
     await drain(wired);
     expect(posts).toEqual([]);
@@ -778,18 +780,20 @@ async function rpc(method: string): Promise<Record<string, unknown>> {
   }
 }
 
-const ROUTINE_NEXT = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
+const ROUTINE_NEXT =
+  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
 const TIMES_NEXT = "Tell me the checkout time and the next check-in time before I text the cleaner.";
 
 describe("Cleaner Core Grok demo: Grok guidance", () => {
-  it("lists check_now and save_alert_routine, and names the address and token", async () => {
+  it("lists check_now and save_alert_routine, and names the upload link", async () => {
     const wired = await app();
     const listed = await wired.listTools(PATH, CLEANER_TOKEN);
     expect(listed.names).toEqual(expect.arrayContaining(["check_now", "save_alert_routine"]));
     const tools = ((await rpc("tools/list")).tools as { name: string; description: string }[]) ?? [];
     const alerts = tools.find((tool) => tool.name === "save_alert_routine");
-    expect(alerts?.description).toContain("address and token");
-    expect(alerts?.description).toContain("from the secure card");
+    expect(alerts?.description).toContain("with no arguments to get a one-time upload link");
+    expect(alerts?.description).toContain("webhook address and key to that link from your computer");
+    expect(alerts?.description).toContain("Never put them in chat");
     expect(alerts?.description).toContain("never repeats them");
   });
 
@@ -810,7 +814,7 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     await call(wired, "get_state", { said: "2" });
     await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE });
     const people = await call(wired, "save_people", { host: HOST, cleaner: CLEANER });
-    const copy = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
+    const copy = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like \"Harbor bookings\", works best. I'll read only that calendar, not your main one unless the bookings are there.";
     expect(people.structured?.next).toBe(copy);
     expect((await call(wired, "get_state")).structured?.next).toBe(copy);
   });
@@ -830,11 +834,13 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
       const doc = routineDoc(name);
       expect(doc, name).toContain("check_now");
-      expect(doc, name).toContain("secure card");
+      expect(doc, name).toContain("never in chat");
       expect(doc, name).not.toContain(DOOR_CODE);
     }
     expect(routineDoc("cleaner-core-alerts.md")).toContain("Cleaner Core alerts are connected.");
     expect(routineDoc("cleaner-core-alerts.md")).toContain("save_alert_routine");
+    expect(routineDoc("cleaner-core-alerts.md")).toContain("one-time upload link");
+    expect(routineDoc("cleaner-core-alerts.md")).toContain("Content-Type: application/json");
     const manifest = JSON.parse(readFileSync(join(ROOT, "grok-template", "template.json"), "utf8")) as { routines: { doc: string }[] };
     expect(manifest.routines.map((routine) => routine.doc).join(" ")).not.toContain("cleaner-core");
   });
@@ -1717,4 +1723,202 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     expect(await texts()).toEqual([]);
     await safe("12 reset");
   }, 60_000);
+});
+
+const UPLOAD_URL = "https://routine.example/upload-hook";
+const UPLOAD_KEY = "k-test-upload-key-abcdef";
+const UPLOAD_PREFIX = `${PUBLIC}/cleaner-core/alert-routine/`;
+const UPLOADED = { ok: true, message: "Alerts are connected." };
+const UPLOAD_REFUSED = "Send the routine's https webhook address as url and its key as token.";
+const UPLOAD_NEXT =
+  'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
+const ROUTINE_NEEDED = "Send the routine's https address and its key. If your secure card can't pass them to a tool, call save_alert_routine with no arguments to get a one-time upload link.";
+
+function filesIn(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? filesIn(path) : entry.isFile() ? [path] : [];
+  });
+}
+
+/** Grok asks for a one-time link. The reply holds only the link, the expiry, and plain instructions. */
+async function issueLink(wired: WiredApp): Promise<{ link: string; code: string; raw: string }> {
+  const issued = await call(wired, "save_alert_routine", {});
+  expect(issued.isError, issued.text).toBe(false);
+  const link = String(issued.structured?.uploadUrl);
+  expect(link.startsWith(UPLOAD_PREFIX), link).toBe(true);
+  const code = link.slice(UPLOAD_PREFIX.length);
+  expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(issued.structured?.expiresInMinutes).toBe(10);
+  expect(issued.structured?.next).toBe(UPLOAD_NEXT);
+  return { link, code, raw: issued.raw };
+}
+
+/** Grok's cloud computer posts to the link. The test server answers on 127.0.0.1 at the link's path. */
+async function upload(wired: WiredApp, link: string, body: string, contentType = "application/json"): Promise<{ status: number; raw: string }> {
+  const res = await fetch(`http://127.0.0.1:${wired.port}${new URL(link).pathname}`, { method: "POST", headers: { "Content-Type": contentType }, body });
+  return { status: res.status, raw: await res.text() };
+}
+
+/** The code and the values: in no log, no reply, and no file but the secret store (the values only). */
+function expectNoTrace(wired: WiredApp, code: string, replies: string[]) {
+  const logs = wired.logs.join("\n");
+  for (const secret of [code, UPLOAD_URL, UPLOAD_KEY]) {
+    expect(logs.includes(secret), "logs").toBe(false);
+    for (const reply of replies) expect(reply.includes(secret), reply).toBe(false);
+  }
+  for (const path of filesIn(wired.root)) {
+    const text = readFileSync(path, "utf8");
+    expect(text.includes(code), path).toBe(false);
+    if (text.includes('"CLEANER_CORE_ROUTINE_KEY"')) continue;
+    expect(text.includes(UPLOAD_URL), path).toBe(false);
+    expect(text.includes(UPLOAD_KEY), path).toBe(false);
+  }
+}
+
+describe("Cleaner Core Grok demo: alert upload link", () => {
+  it("issues a link on the app origin and saves nothing yet", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    await call(wired, "get_state", { said: "2" });
+    const { code } = await issueLink(wired);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
+    // Only the code's hash is kept.
+    const live = liveFile(wired);
+    expect(live).not.toContain(code);
+    expect(live).toContain(createHash("sha256").update(code).digest("hex"));
+    await drain(wired);
+    expect(posts).toEqual([]);
+  });
+
+  it("saves the routine from the upload, sends the test alert, and moves get_state past the routine step", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: googleList([]) })).isError).toBe(false);
+    const before = await call(wired, "get_state");
+    expect(before.structured?.next).toBe(ROUTINE_NEXT);
+    const { link, code } = await issueLink(wired);
+    const posted = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
+    expect(posted.status).toBe(200);
+    expect(JSON.parse(posted.raw)).toEqual(UPLOADED);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBe(UPLOAD_URL);
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBe(UPLOAD_KEY);
+    await vi.waitFor(() => expect(posts).toHaveLength(1), { timeout: 2_000, interval: 10 });
+    expect(posts[0]?.url).toBe(UPLOAD_URL);
+    expect(posts[0]?.headers.Authorization).toBe(`Bearer ${UPLOAD_KEY}`);
+    expect(JSON.parse(posts[0]?.body ?? "{}").eventType).toBe("installation.test");
+    const after = await call(wired, "get_state");
+    expect(after.structured?.next).toBe(TIMES_NEXT);
+    // Used once. A second post with the same code finds nothing.
+    const again = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
+    expect(again.status).toBe(404);
+    expectNoTrace(wired, code, [posted.raw, again.raw, before.raw, after.raw]);
+  });
+
+  it("accepts key as the token's other name", async () => {
+    const wired = await app();
+    alertStub(() => 200);
+    const { link } = await issueLink(wired);
+    const posted = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, key: UPLOAD_KEY }));
+    expect(posted.status).toBe(200);
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBe(UPLOAD_KEY);
+  });
+
+  it("expires after 10 minutes", async () => {
+    let now = new Date(FROZEN);
+    const wired = await app({ now: () => now });
+    const posts = alertStub(() => 200);
+    const { link, code } = await issueLink(wired);
+    now = new Date(now.getTime() + 10 * 60_000 + 1_000);
+    const late = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
+    expect(late.status).toBe(404);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    await drain(wired, () => now);
+    expect(posts).toEqual([]);
+    expectNoTrace(wired, code, [late.raw]);
+  });
+
+  it("a new link makes the earlier one stop working", async () => {
+    const wired = await app();
+    alertStub(() => 200);
+    const first = await issueLink(wired);
+    const second = await issueLink(wired);
+    expect(second.code).not.toBe(first.code);
+    expect((await upload(wired, first.link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }))).status).toBe(404);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect((await upload(wired, second.link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }))).status).toBe(200);
+  });
+
+  it("refuses a bad address or key with 400 and keeps the link usable", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const { link, code } = await issueLink(wired);
+    const replies: string[] = [];
+    for (const body of [
+      { url: "http://routine.example/upload-hook", token: UPLOAD_KEY },
+      { url: UPLOAD_URL, token: "short" },
+      { url: UPLOAD_URL, token: TEST_PIN_KEY },
+      { url: UPLOAD_URL },
+      { token: UPLOAD_KEY },
+    ]) {
+      const refused = await upload(wired, link, JSON.stringify(body));
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      const parsed = JSON.parse(refused.raw) as { ok: boolean; error: string };
+      expect(parsed.ok).toBe(false);
+      expect(parsed.error).toBe(UPLOAD_REFUSED);
+      expect(refused.raw).not.toContain(TEST_PIN_KEY);
+      replies.push(refused.raw);
+    }
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    await drain(wired);
+    expect(posts).toEqual([]);
+    const good = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
+    expect(good.status).toBe(200);
+    expectNoTrace(wired, code, [...replies, good.raw]);
+  });
+
+  it("refuses a body that isn't JSON with 415, and one over 4 KB, without using up the link", async () => {
+    const wired = await app();
+    alertStub(() => 200);
+    const { link } = await issueLink(wired);
+    expect((await upload(wired, link, `url=${UPLOAD_URL}&token=${UPLOAD_KEY}`, "application/x-www-form-urlencoded")).status).toBe(415);
+    expect((await upload(wired, link, "not json")).status).toBe(415);
+    const big = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY, pad: "x".repeat(5_000) }));
+    expect(big.status).toBe(413);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect((await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }))).status).toBe(200);
+  });
+
+  it("answers 404 for an unknown code, and saves nothing while Cleaner Core is off", async () => {
+    const wired = await app();
+    alertStub(() => 200);
+    const made = `${UPLOAD_PREFIX}${"A".repeat(43)}`;
+    expect((await upload(wired, made, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }))).status).toBe(404);
+    const { link } = await issueLink(wired);
+    wired.setEnv({ CLEANER_CORE_ENABLED: undefined });
+    const off = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
+    expect([404, 503]).toContain(off.status);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
+  });
+
+  it("keeps the old call with url and token working", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const saved = await call(wired, "save_alert_routine", { url: UPLOAD_URL, token: UPLOAD_KEY });
+    expect(saved.isError).toBe(false);
+    expect(saved.structured?.next).toBe(CONNECTED);
+    expect(saved.structured?.uploadUrl).toBeUndefined();
+    await drain(wired);
+    expect(posts[0]?.headers.Authorization).toBe(`Bearer ${UPLOAD_KEY}`);
+  });
+
+  it("points a masked placeholder at the upload link", async () => {
+    const wired = await app();
+    const refused = await call(wired, "save_alert_routine", { url: "**********", token: "**********" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe(ROUTINE_NEEDED);
+  });
 });

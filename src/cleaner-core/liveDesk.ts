@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
@@ -13,6 +13,7 @@ import { formatWhen, zonedInstant } from "./calendar";
 import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
+import { resolveHostedPublicUrl } from "../install/hostedRuntime";
 import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -48,8 +49,12 @@ export const FIRST_QUESTION =
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
 const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
-const CALENDAR_ASK = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
-const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
+/** The sources step. Grok asks which Google calendar holds the bookings, so it never reads the host's whole primary calendar. */
+function calendarAsk(property: string): string {
+  return `Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like "${property} bookings", works best. I'll read only that calendar, not your main one unless the bookings are there.`;
+}
+const ROUTINE_ASK =
+  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
 const PROPERTY_ASK = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
 const PEOPLE_ASK =
   "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
@@ -69,7 +74,17 @@ const PIN_REENTER = "Please enter the door code again in the private box. Don't 
 export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
-const ROUTINE_NEEDED = "Send the routine's https address and its key.";
+const ROUTINE_NEEDED =
+  "Send the routine's https address and its key. If your secure card can't pass them to a tool, call save_alert_routine with no arguments to get a one-time upload link.";
+/** Where Grok's own computer posts the routine's address and key. The rest of the path is the one-time code. */
+export const ALERT_UPLOAD_PREFIX = "/cleaner-core/alert-routine/";
+const UPLOAD_MINUTES = 10;
+const UPLOAD_NEXT =
+  'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
+const UPLOAD_LINK_OFF = "I can't make an upload link until the server's public address is saved.";
+const UPLOAD_CONNECTED = "Alerts are connected.";
+const UPLOAD_REFUSED = "Send the routine's https webhook address as url and its key as token.";
+const UPLOAD_GONE = "This upload link isn't valid anymore. Call save_alert_routine with no arguments for a new one.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
 const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
 const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
@@ -259,6 +274,8 @@ interface LiveFile {
   /** Saved calendar links in dedupe order, after the legacy link. Each one is the source `ical:<slug>`. */
   calendars?: { name: string; url: string }[];
   google?: boolean;
+  /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
+  alertUpload?: { hash: string; expiresAt: string };
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
@@ -376,6 +393,17 @@ function calendarSlug(name: string, used: Set<string>): string {
   }
 }
 
+function uploadHash(code: string): string {
+  return createHash("sha256").update(code).digest("hex");
+}
+
+/** Compares two sha256 hex digests in constant time. */
+function sameHash(a: string, b: string): boolean {
+  const left = Buffer.from(a, "hex");
+  const right = Buffer.from(b, "hex");
+  return left.length === 32 && right.length === 32 && timingSafeEqual(left, right);
+}
+
 function originOf(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
 }
@@ -467,6 +495,8 @@ export class LiveDesk {
   private readonly alerts: OperatorEventOutbox;
   /** Approvals for host messages. They live only in this process, so a restart means asking again. */
   private readonly approvals: ConfirmationBook;
+  /** The door-code key of the call that made the pending upload link. Only in memory. */
+  private uploadKey: Buffer | undefined;
 
   constructor(
     private readonly root: string,
@@ -508,15 +538,94 @@ export class LiveDesk {
     save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
     pinKey: Buffer | undefined,
   ): ToolReply {
-    const url = input.url?.trim() ?? "";
-    const token = input.token?.trim() ?? "";
-    if (!calendarUrlAllowed(url) || token.length < 8) return this.fail(ROUTINE_NEEDED);
-    if (pinKey && token === pinKey.toString("base64")) return this.fail(ROUTINE_NEEDED);
-    if (this.isServerKey(token)) return this.fail(ROUTINE_NEEDED);
+    const url = typeof input.url === "string" ? input.url.trim() : "";
+    const token = typeof input.token === "string" ? input.token.trim() : "";
+    // A Grok Bot's secure card can't fill a tool argument, so no values means: make an upload link.
+    if (!url && !token) return this.issueUpload(pinKey);
+    if (this.routineRefused(url, token, pinKey)) return this.fail(ROUTINE_NEEDED);
+    this.connectRoutine(url, token, save);
+    return this.reply({ next: ROUTINE_SAVED });
+  }
+
+  /** True when the address isn't a safe https one, the key is short, or the key is a door-code key. */
+  private routineRefused(url: string, token: string, pinKey: Buffer | undefined): boolean {
+    if (!calendarUrlAllowed(url) || token.length < 8) return true;
+    if (pinKey && token === pinKey.toString("base64")) return true;
+    if (this.isServerKey(token)) return true;
+    return this.opensSavedCode(token);
+  }
+
+  /** True when `token`, read as a key, opens the sealed door code. */
+  private opensSavedCode(token: string): boolean {
+    if (!this.file.pinSeal) return false;
+    const key = Buffer.from(token, "base64");
+    if (key.length !== 32) return false;
+    try {
+      openPin(this.file.pinSeal, key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Saves the routine through the secret store, ends any upload link, and queues the test wake-up. */
+  private connectRoutine(url: string, token: string, save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void): void {
     save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
+    this.uploadKey = undefined;
+    if (this.file.alertUpload) {
+      delete this.file.alertUpload;
+      this.persist();
+    }
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
-    return this.reply({ next: ROUTINE_SAVED });
+  }
+
+  /**
+   * Makes a one-time upload link for the routine's address and key. Only the code's sha256 and its
+   * expiry are kept, and a new link replaces the last one.
+   */
+  private issueUpload(pinKey: Buffer | undefined): ToolReply {
+    const base = publicBaseUrl(this.env()) ?? resolveHostedPublicUrl(this.env()).url;
+    if (!base) return this.fail(UPLOAD_LINK_OFF);
+    const origin = new URL(base).origin;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = randomBytes(32).toString("base64url");
+      const uploadUrl = `${origin}${ALERT_UPLOAD_PREFIX}${code}`;
+      // A link that happens to hold the door code would be refused as a reply, so make another.
+      if (this.leaks(uploadUrl)) continue;
+      this.file.alertUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString() };
+      this.uploadKey = pinKey;
+      this.persist();
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: UPLOAD_NEXT });
+    }
+    return this.fail("That didn't work. Try again.");
+  }
+
+  /**
+   * Saves the routine's address and key posted to an upload link, with the same checks as
+   * `save_alert_routine`. Only a save uses the link up. Nothing posted is repeated or logged.
+   */
+  uploadAlertRoutine(
+    code: string,
+    body: Record<string, unknown>,
+    save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
+  ): Promise<{ status: 200 | 400 | 404; body: { ok: boolean; message?: string; error?: string } }> {
+    return this.serial(async () => {
+      const pending = this.file.alertUpload;
+      if (!pending || !sameHash(uploadHash(code), pending.hash)) return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      if (this.now().getTime() >= Date.parse(pending.expiresAt)) {
+        delete this.file.alertUpload;
+        this.uploadKey = undefined;
+        this.persist();
+        return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      }
+      const url = typeof body.url === "string" ? body.url.trim() : "";
+      const given = typeof body.token === "string" ? body.token : typeof body.key === "string" ? body.key : "";
+      const token = given.trim();
+      if (this.routineRefused(url, token, this.uploadKey ?? serverPinKey(this.env()))) return { status: 400, body: { ok: false, error: UPLOAD_REFUSED } };
+      this.connectRoutine(url, token, save);
+      return { status: 200, body: { ok: true, message: UPLOAD_CONNECTED } };
+    });
   }
 
   /** Delivers every pending wake-up that is due. A routine that is down or not saved leaves them pending. */
@@ -1756,7 +1865,7 @@ export class LiveDesk {
     if (this.file.checked) done.push("Checks finished.");
     let next: string;
     if (!this.file.address) next = PROPERTY_ASK;
-    else if (!hasSources(this.file)) next = CALENDAR_ASK;
+    else if (!hasSources(this.file)) next = calendarAsk(this.file.nickname ?? this.file.business ?? "the property");
     else if (!this.file.cleaner) next = PEOPLE_ASK;
     // Setups that saved texting before the schedule step existed skip it.
     else if (!this.file.schedule && !this.file.texting) next = SCHEDULE_ASK;

@@ -18,7 +18,7 @@ import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
+import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
 import { CLEANER_PHOTO_PREFIX, photoKey, servePhoto } from "../cleaner-core/photos";
 import { publicBaseUrl } from "../messaging/publicUrl";
@@ -166,6 +166,8 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || path === "/api/connect/deny" || isInstallApiPath(path))) return true;
   if (method === "GET" && AuditExportLinks.parsePath(path)) return true;
   if (method === "GET" && path.startsWith(CLEANER_PHOTO_PREFIX)) return true;
+  // The one-time alert upload link. The code in the path is the credential.
+  if (method === "POST" && alertUploadCode(path)) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -691,6 +693,21 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         if ("answered" in result) return;
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
       }
+      const uploadCode = method === "POST" ? alertUploadCode(url.pathname) : undefined;
+      if (uploadCode) {
+        // Grok's computer posts the alert routine's address and key. Never logged or echoed.
+        const result = await handleCleanerAlertUpload({
+          code: uploadCode,
+          contentType: String(req.headers["content-type"] ?? ""),
+          readBody: () => readCapped(req, ALERT_UPLOAD_MAX_BYTES),
+          env: () => installation.env(),
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+          saveSecrets: (values) => installation.secrets.set(values),
+        });
+        // A refused body may still be arriving. Close so the rest isn't read as the next request.
+        return send(result.status, "application/json; charset=utf-8", result.body, result.status === 413 ? { Connection: "close" } : {});
+      }
       if (method === "GET" && url.pathname.startsWith(CLEANER_PHOTO_PREFIX)) {
         // A cleaner photo for Grok. Public, but only with a signed token that hasn't expired.
         const env = installation.env();
@@ -870,6 +887,33 @@ function readRaw(req: IncomingMessage): Promise<Buffer> {
       } else chunks.push(chunk);
     });
     req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+/** Reads a body of at most `max` bytes. Undefined when it is larger; the rest is drained, not kept. */
+function readCapped(req: IncomingMessage, max: number): Promise<Buffer | undefined> {
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > max) {
+    req.resume();
+    return Promise.resolve(undefined);
+  }
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    let over = false;
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => {
+      if (over) return;
+      size += chunk.length;
+      if (size > max) {
+        over = true;
+        chunks.length = 0;
+        resolve(undefined);
+      } else chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (!over) resolve(Buffer.concat(chunks));
+    });
     req.on("error", reject);
   });
 }

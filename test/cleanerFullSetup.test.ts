@@ -47,7 +47,7 @@ const LOCK = "back door lockbox";
 const TIME = groupTimeLine("Cory");
 
 const PROPERTY_NEXT = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
-const SOURCES_NEXT = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
+const SOURCES_NEXT = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like \"Lake House bookings\", works best. I'll read only that calendar, not your main one unless the bookings are there.";
 const PEOPLE_NEXT =
   "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
 const SCHEDULE_NEXT =
@@ -1915,8 +1915,22 @@ describe("Cleaner Core full diagram", () => {
     expect(Buffer.from(hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
     await safe("2 setup");
 
-    // 3. The alert routine, with a stubbed webhook.
-    await say("save_alert_routine", { url: REHEARSAL_ROUTINE, token: "k-test-rehearsal-key" });
+    // 3. The alert routine, with a stubbed webhook. A Grok Bot's secure card can't fill a tool argument,
+    // so Grok gets a one-time link and posts the address and key to it from its own computer.
+    const issued = await say("save_alert_routine");
+    const uploadLink = new URL(String(issued.uploadUrl));
+    expect(uploadLink.origin).toBe(BASE);
+    const uploaded = await hosted.http(uploadLink.pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: REHEARSAL_ROUTINE, token: "k-test-rehearsal-key" }),
+    });
+    const uploadReply = await uploaded.text();
+    expect(uploaded.status, uploadReply).toBe(200);
+    replies.push(uploadReply);
+    expect(uploadReply).not.toContain("k-test-rehearsal-key");
+    expect(hosted.logs.join("\n")).not.toContain(uploadLink.pathname);
+    expect((await say("get_state")).next).not.toMatch(/upload link/);
     await safe("3 alert routine");
     expect(routine.length).toBeGreaterThan(0);
 
