@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -1693,10 +1693,11 @@ describe("Cleaner Core full diagram", () => {
     expect(await listed.text()).toContain("send_message");
 
     let rpcId = 0;
+    // Like a real Grok Bot connected by OAuth: the bearer token only, no door-code key header.
     const tool = async (name: string, args: Record<string, unknown> = {}) => {
       const res = await hosted.http(PATH, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${access}`, [PIN_KEY_HEADER]: TEST_PIN_KEY },
+        headers: { "content-type": "application/json", authorization: `Bearer ${access}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/call", params: { name, arguments: args } }),
       });
       const raw = await res.text();
@@ -1751,6 +1752,14 @@ describe("Cleaner Core full diagram", () => {
       expect(PLAIN_CODE.test(replies.join("\n")), `${step}: replies`).toBe(false);
       expect(PLAIN_CODE.test(hosted.logs.join("\n")), `${step}: logs`).toBe(false);
       expect(hosted.logs.join("\n").includes(access), `${step}: token in logs`).toBe(false);
+      // The server's door-code key stays in the secret store: never in a reply, a log, or the desk's file.
+      const serverKey = hosted.inst.env().CLEANER_CORE_PIN_KEY;
+      if (serverKey) {
+        expect(replies.join("\n").includes(serverKey), `${step}: key in replies`).toBe(false);
+        expect(hosted.logs.join("\n").includes(serverKey), `${step}: key in logs`).toBe(false);
+        const live = join(hosted.root, "cleaner-live.json");
+        if (existsSync(live)) expect(readFileSync(live, "utf8").includes(serverKey), `${step}: key in cleaner-live.json`).toBe(false);
+      }
     };
     await safe("1 connect");
 
@@ -1766,6 +1775,7 @@ describe("Cleaner Core full diagram", () => {
     await say("activate", { googleEvents: googleList([]) });
     expect((await say("get_state")).done).toContain("Checks finished.");
     expect(sms.sent).toEqual([]);
+    expect(Buffer.from(hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
     await safe("2 setup");
 
     // 3. The alert routine, with a stubbed webhook.
@@ -1867,5 +1877,98 @@ describe("Cleaner Core full diagram", () => {
     expect(served.bytes().equals(JPEG)).toBe(true);
     expect((await checkAt("2026-10-17T17:10:00.000Z")).completed).toBeUndefined();
     await safe("10 completed and photos");
+  }, 60_000);
+
+  it("an OAuth Grok Bot with no key header saves and sends the door code, and a restart doesn't ask for it again", async () => {
+    const address = LANE.property.address;
+    const host = LANE.ownerPhone;
+    const cleaner = LANE.cleanerPhone;
+    let at = new Date("2026-10-14T14:00:00.000Z");
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
+    const hosted = await hostedApp(
+      {
+        PUBLIC_BASE_URL: BASE,
+        CLEANER_CORE_LIVE_SMS: "1",
+        CLEANER_CORE_GROUP_CHAT: "0",
+        CLEANER_CORE_SMS_ALLOWLIST: `${host},${cleaner}`,
+        CLEANER_CORE_TWILIO_ACCOUNT_SID: REHEARSAL_TWILIO_SID,
+        CLEANER_CORE_TWILIO_AUTH_TOKEN: REHEARSAL_TWILIO_AUTH,
+        CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      },
+      undefined,
+      undefined,
+      () => at,
+    );
+    const { access } = await hosted.connect(await hosted.register("Grok"), CLEANER_RESOURCE, CLEANER_SCOPE);
+    const replies: string[] = [];
+    let rpcId = 0;
+    // The bearer token only: no door-code key header.
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const res = await hosted.http(PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${access}` },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/call", params: { name, arguments: args } }),
+      });
+      const raw = await res.text();
+      replies.push(raw);
+      const result = (JSON.parse(raw) as { result: { isError?: boolean; structuredContent?: Record<string, unknown>; content?: { text?: string }[] } }).result;
+      return { isError: result.isError === true, text: result.content?.[0]?.text ?? "", structured: result.structuredContent ?? {} };
+    };
+    const say = async (name: string, args: Record<string, unknown> = {}) => {
+      const reply = await tool(name, args);
+      expect(reply.isError, `${name}: ${reply.text}`).toBe(false);
+      return reply.structured;
+    };
+    let smsId = 0;
+    const fromCleaner = async (body: string) => {
+      const path = "/webhooks/twilio/cleaner-core";
+      const fields: Record<string, string> = { MessageSid: `SMoauthkey${++smsId}`, From: cleaner, To: CLEANER_LINE, Body: body, SmsStatus: "received" };
+      const res = await hosted.http(path, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": twilioSignature(REHEARSAL_TWILIO_AUTH, `${BASE}${path}`, fields) },
+        body: new URLSearchParams(fields).toString(),
+      });
+      expect(res.status, body).toBe(200);
+    };
+    const codeTexts = () => sms.sent.filter((item) => PLAIN_CODE.test(item.body));
+
+    await say("get_state", { said: "2" });
+    await say("save_property", { business: LANE.hostName, address, timeZone: ZONE });
+    await say("save_sources", { google: true });
+    await say("save_people", { host, cleaner, cleanerName: "Ana", groupChat: "cleaner-only" });
+    await say("save_schedule", {});
+    expect(String((await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK })).next)).toContain("Saved the door code.");
+    expect((await say("get_state")).next).toBe(PREFERENCES_NEXT);
+    await say("save_preferences", {});
+    await say("activate", { googleEvents: googleList([{ id: "g-oauth", start: "2026-10-14", end: "2026-10-17" }]) });
+    await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await fromCleaner("YES");
+    await fromCleaner("YES");
+    expect((await say("get_turns")).turns).toEqual([expect.objectContaining({ checkoutDate: "2026-10-17", status: "confirmed" })]);
+    expect(codeTexts()).toEqual([]);
+
+    at = new Date("2026-10-17T15:10:00.000Z");
+    expect(await say("mark_guests_left", { said: "guests have left" })).toEqual({ next: "I sent the door code to the cleaner. I'll tell you if it doesn't go through." });
+    const privateCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
+    expect(codeTexts()).toEqual([expect.objectContaining({ to: cleaner, body: privateCode })]);
+
+    // A redeploy: the desk opens the seal with the server's key, so it doesn't ask for the code again.
+    resetLiveDesks();
+    const after = await say("get_state");
+    expect(after.next).not.toBe(DOOR_NEXT);
+    expect(after.done).toContain("Door code saved.");
+    const again = await tool("mark_guests_left", { said: "guests have left" });
+    expect(again.text).toContain("I already sent the door code to the cleaner.");
+    expect(codeTexts()).toHaveLength(1);
+
+    const serverKey = hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "";
+    expect(Buffer.from(serverKey, "base64")).toHaveLength(32);
+    const live = readFileSync(join(hosted.root, "cleaner-live.json"), "utf8");
+    expect(live.includes(serverKey)).toBe(false);
+    expect(PLAIN_CODE.test(live)).toBe(false);
+    expect(replies.join("\n").includes(serverKey)).toBe(false);
+    expect(PLAIN_CODE.test(replies.join("\n"))).toBe(false);
+    expect(hosted.logs.join("\n").includes(serverKey)).toBe(false);
   }, 60_000);
 });

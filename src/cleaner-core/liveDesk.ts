@@ -19,7 +19,7 @@ import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jo
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
-import { openPin, sealPin, type PinSeal } from "./pinSeal";
+import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
 import { isScratchTestNumber } from "./scratch";
 import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
@@ -443,6 +443,8 @@ export class LiveDesk {
     this.path = join(root, "cleaner-live.json");
     this.approvals = new ConfirmationBook(10 * 60_000, () => this.now().getTime());
     this.load();
+    // With the server's key, a saved code opens at load, so a redeploy doesn't ask for it again.
+    this.openSeal();
     // The routine's address and key are read from the env on every delivery, never saved here.
     this.alerts = new OperatorEventOutbox(
       new FileRuntimeStore(join(root, "cleaner-alerts")),
@@ -469,6 +471,7 @@ export class LiveDesk {
     const token = input.token?.trim() ?? "";
     if (!calendarUrlAllowed(url) || token.length < 8) return this.fail(ROUTINE_NEEDED);
     if (pinKey && token === pinKey.toString("base64")) return this.fail(ROUTINE_NEEDED);
+    if (this.isServerKey(token)) return this.fail(ROUTINE_NEEDED);
     save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
@@ -510,9 +513,33 @@ export class LiveDesk {
     this.startDrain();
   }
 
-  /** True when `text` contains the saved door code. */
+  /** True when `text` contains the saved door code, or the server's door-code key. */
   leaks(text: string): boolean {
-    return Boolean(this.pin && text.includes(this.pin));
+    return Boolean(this.pin && text.includes(this.pin)) || this.isServerKey(text, true);
+  }
+
+  /** True when `text` is (or, with `inside`, holds) the server's door-code key. */
+  private isServerKey(text: string, inside = false): boolean {
+    const key = this.env().CLEANER_CORE_PIN_KEY?.trim();
+    if (!key) return false;
+    return inside ? text.includes(key) : text.trim() === key;
+  }
+
+  /** The request's key, or else the server's own key. Undefined when neither is there. */
+  private keyFor(pinKey: Buffer | undefined): Buffer | undefined {
+    return pinKey ?? serverPinKey(this.env());
+  }
+
+  /** Opens a sealed code with the server's key when it isn't open yet. A seal made with another key stays shut. */
+  private openSeal(): void {
+    if (this.pin || !this.file.pinSeal) return;
+    const key = serverPinKey(this.env());
+    if (key) this.unlock(key);
+  }
+
+  /** True when a door code is saved, open in memory or only sealed. */
+  private codeSaved(): boolean {
+    return Boolean(this.pin || this.file.pinSeal);
   }
 
   chatCarriesDoorCode(text: string): boolean {
@@ -759,16 +786,17 @@ export class LiveDesk {
     if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(lockLocation) || this.chatCarriesDoorCode(lockLocation))) {
       return this.fail(`Say where the lock is in under ${MAX_LOCK_LOCATION} characters, with no code or long number in it.`);
     }
-    if (!pinKey) return this.fail(PIN_KEY_MISSING);
+    const key = this.keyFor(pinKey);
+    if (!key) return this.fail(PIN_KEY_MISSING);
     const previousPin = this.pin;
     const previousSeal = this.file.pinSeal;
     const previousLock = this.file.lockLocation;
     this.pin = code;
     if (lockLocation !== undefined) this.keep("lockLocation", lockLocation || undefined);
     for (let attempt = 0; attempt < 8; attempt++) {
-      this.file.pinSeal = sealPin(code, pinKey);
+      this.file.pinSeal = sealPin(code, key);
       const json = `${JSON.stringify(this.file)}\n`;
-      if (json.includes(code) || json.includes(pinKey.toString("base64"))) continue;
+      if (json.includes(code) || json.includes(key.toString("base64"))) continue;
       this.writeFile(json);
       // The engine names the lock in the private code text, so it reopens with the new location.
       if (this.file.lockLocation !== previousLock) this.engine = undefined;
@@ -808,7 +836,7 @@ export class LiveDesk {
   }
 
   setUpTexting(): ToolReply {
-    if (!this.pin) return this.fail("Save the door code first.");
+    if (!this.codeSaved()) return this.fail("Save the door code first.");
     this.file.texting = true;
     this.persist();
     return this.reply({
@@ -899,7 +927,7 @@ export class LiveDesk {
   }
 
   private async runChecksNow(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
-    if (!this.file.texting || !hasSources(this.file) || !this.pin) return this.fail("Set up texting first.");
+    if (!this.file.texting || !hasSources(this.file) || !this.codeSaved()) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
     }
@@ -1157,8 +1185,9 @@ export class LiveDesk {
     const said = input.said?.trim() ?? "";
     const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) return this.fail("Say that the guests have left. I won't guess from the calendar.");
-    if (!pinKey) return this.fail(PIN_KEY_MISSING);
-    if (this.unlock(pinKey) !== "ready") return this.fail(PIN_REENTER);
+    const key = this.keyFor(pinKey);
+    if (!key) return this.fail(PIN_KEY_MISSING);
+    if (this.unlock(key) !== "ready") return this.fail(PIN_REENTER);
     this.resume();
     if (this.pin) this.engine?.rememberPin(this.pin);
     if (!this.engine) return this.fail("Run the checks first.");
@@ -1216,7 +1245,8 @@ export class LiveDesk {
   private async sendMessageNow(input: { to?: string; text?: string; confirmation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
     const text = input.text?.trim() ?? "";
     if (!text || text.length > MAX_HOST_MESSAGE) return this.fail(MESSAGE_NEEDED);
-    if (pinKey && !this.pin) this.unlock(pinKey);
+    const key = this.keyFor(pinKey);
+    if (key && !this.pin) this.unlock(key);
     if (this.hostTextCarriesCode(text)) return this.fail(DOOR_CODE_IN_CHAT);
     const to = input.to?.trim() ?? "";
     if (!to) return this.fail(RECIPIENT_NEEDED);
@@ -1370,7 +1400,7 @@ export class LiveDesk {
   private async addTestTurnNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     const guard = this.testTurnGuard();
     if (guard) return this.fail(guard);
-    if (!this.file.texting || !this.pin || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
+    if (!this.file.texting || !this.codeSaved() || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
     const checkout = input.checkout?.trim() ?? "";
     const checkIn = input.checkIn?.trim() ?? "";
     if (!statedClock(checkout) || !statedClock(checkIn)) {
@@ -1607,7 +1637,7 @@ export class LiveDesk {
     if (calendars === 1) done.push("Calendar link saved.");
     if (calendars > 1) done.push(`${calendars} calendar links saved.`);
     if (this.file.google) done.push("Google Calendar saved.");
-    if (this.pin) done.push("Door code saved.");
+    if (this.codeSaved()) done.push("Door code saved.");
     const preferences = this.file.preferences;
     if (preferences) {
       const any = preferences.checklist.length > 0 || preferences.photosRequired || preferences.supplyNotes || Boolean(preferences.instructions);
@@ -1622,7 +1652,7 @@ export class LiveDesk {
     else if (!this.file.cleaner) next = PEOPLE_ASK;
     // Setups that saved texting before the schedule step existed skip it.
     else if (!this.file.schedule && !this.file.texting) next = SCHEDULE_ASK;
-    else if (!this.pin) next = DOOR_CODE_ASK;
+    else if (!this.codeSaved()) next = DOOR_CODE_ASK;
     else if (!this.file.texting) next = preferences ? REVIEW_ASK : PREFERENCES_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
@@ -1791,8 +1821,9 @@ export class LiveDesk {
   }
 
   private resume(): void {
+    this.openSeal();
     if (this.engine || !this.file.checked) return;
-    if (!this.pin && !this.file.pinSeal) return;
+    if (!this.codeSaved()) return;
     this.engine = this.openEngine();
     this.syncHold();
   }

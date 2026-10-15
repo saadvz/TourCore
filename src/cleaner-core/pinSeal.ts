@@ -21,6 +21,21 @@ export function pinKeyFromHeader(value: string | string[] | undefined): Buffer |
   return bytes;
 }
 
+/**
+ * The server's own door-code key, used when a cleaning-chat request carries no key header (a Grok Bot
+ * connected by OAuth sends only its bearer token): CLEANER_CORE_PIN_KEY, 32 random bytes in base64,
+ * or else a fresh one saved once through `save` (the secret store). Without either there is no key.
+ * The seal then guards a copied volume, not a copy of the volume and the secret store together.
+ */
+export function serverPinKey(env: NodeJS.ProcessEnv, save?: (values: { CLEANER_CORE_PIN_KEY: string }) => void): Buffer | undefined {
+  const saved = pinKeyFromHeader(env.CLEANER_CORE_PIN_KEY);
+  if (saved) return saved;
+  if (!save) return undefined;
+  const fresh = randomBytes(32);
+  save({ CLEANER_CORE_PIN_KEY: fresh.toString("base64") });
+  return fresh;
+}
+
 export function sealPin(pin: string, key: Buffer): PinSeal {
   for (let attempt = 0; attempt < 8; attempt++) {
     const iv = randomBytes(12);
