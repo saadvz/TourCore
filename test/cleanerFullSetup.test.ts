@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,13 +6,17 @@ import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { cleanerOptOutHold, groupTimeLine, offerForOthers } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
-import { DOOR_CODE_IN_CHAT, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { DOOR_CODE_IN_CHAT, drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { photoKey, servePhoto, setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
+import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { CLEANER_SCOPE } from "../src/mcp/oauth/provider";
+import { twilioSignature } from "../src/messaging/twilio/signature";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
+import { BASE, CLEANER_RESOURCE, closeHostedApps, hostedApp } from "./cleanerOauthHarness";
 import {
   ADDRESS,
   BUSINESS,
@@ -26,6 +30,7 @@ import {
   HOST,
   OBSERVER,
   OFF_LIST,
+  PIN_KEY_HEADER,
   TEST_PIN_KEY,
   fakeSms,
   startWiredApp,
@@ -62,6 +67,7 @@ afterEach(async () => {
   setCleanerAlertFetch(undefined);
   setCleanerPhotoFetch(undefined);
   resetLiveDesks();
+  closeHostedApps();
   while (open.length > 0) await open.pop()?.close();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -1622,4 +1628,244 @@ describe("Cleaner Core cleaning: a photo download can't crash or trap the cleane
     expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
     expect((ok(await desk.checkNow()).completed as Record<string, unknown>[])[0]?.photosMissing).toBe(1);
   });
+});
+
+const LANE = SCRATCH_TENANTS[0]!;
+const REHEARSAL_TWILIO_SID = "ACscratchrehearsal";
+const REHEARSAL_TWILIO_AUTH = "cleaner-twilio-auth-token-rehearsal";
+const REHEARSAL_ROUTINE = "https://routine.example/hook";
+const PARKING = "Parking is on the street today.";
+/** The plain door code as its own token, so a random id that happens to hold the digits doesn't count. */
+const PLAIN_CODE = new RegExp(`(?<![0-9A-Za-z])${DOOR_CODE}(?![0-9A-Za-z])`);
+
+function filesUnder(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...filesUnder(path));
+    else if (entry.isFile()) found.push(path);
+  }
+  return found;
+}
+
+describe("Cleaner Core full diagram", () => {
+  it("diagram rehearsal", async () => {
+    const address = LANE.property.address;
+    const host = LANE.ownerPhone;
+    const cleaner = LANE.cleanerPhone;
+    const scratch = new Set([host, cleaner]);
+    let at = new Date("2026-10-14T14:00:00.000Z");
+    const clock = () => at;
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
+    const groups = groupFetch();
+    setCleanerGroupFetch(groups.impl);
+    const routine: { url: string; body: string }[] = [];
+    setCleanerAlertFetch(async (url, init) => {
+      routine.push({ url, body: init.body });
+      return { status: 200 };
+    });
+    const mediaFetched = stubPhotos();
+    const hosted = await hostedApp(
+      {
+        PUBLIC_BASE_URL: BASE,
+        CLEANER_CORE_LIVE_SMS: "1",
+        CLEANER_CORE_GROUP_CHAT: "1",
+        CLEANER_CORE_SMS_ALLOWLIST: `${host},${cleaner}`,
+        CLEANER_CORE_TWILIO_ACCOUNT_SID: REHEARSAL_TWILIO_SID,
+        CLEANER_CORE_TWILIO_AUTH_TOKEN: REHEARSAL_TWILIO_AUTH,
+        CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+      },
+      undefined,
+      undefined,
+      clock,
+    );
+    const replies: string[] = [];
+    const stay = googleList([{ id: "g-scratch", start: "2026-10-14", end: "2026-10-17" }]);
+
+    // 1. Grok connects through OAuth with one Allow.
+    expect((await hosted.rpc(PATH, "tools/list")).status).toBe(401);
+    const clientId = await hosted.register("Grok");
+    const { access, scope } = await hosted.connect(clientId, CLEANER_RESOURCE, CLEANER_SCOPE);
+    expect(scope).toBe(CLEANER_SCOPE);
+    const listed = await hosted.rpc(PATH, "tools/list", access);
+    expect(listed.status).toBe(200);
+    expect(await listed.text()).toContain("send_message");
+
+    let rpcId = 0;
+    const tool = async (name: string, args: Record<string, unknown> = {}) => {
+      const res = await hosted.http(PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${access}`, [PIN_KEY_HEADER]: TEST_PIN_KEY },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/call", params: { name, arguments: args } }),
+      });
+      const raw = await res.text();
+      replies.push(raw);
+      expect(res.status, `${name}: ${raw}`).toBe(200);
+      const result = (JSON.parse(raw) as { result: { isError?: boolean; structuredContent?: Record<string, unknown>; content?: { text?: string }[] } }).result;
+      return { isError: result.isError === true, text: result.content?.[0]?.text ?? "", structured: result.structuredContent ?? {} };
+    };
+    const say = async (name: string, args: Record<string, unknown> = {}) => {
+      const reply = await tool(name, args);
+      expect(reply.isError, `${name}: ${reply.text}`).toBe(false);
+      return reply.structured;
+    };
+    let smsId = 0;
+    const fromCleaner = async (body: string, extra: Record<string, string> = {}) => {
+      const path = "/webhooks/twilio/cleaner-core";
+      const fields: Record<string, string> = { MessageSid: `SMrehearsal${++smsId}`, From: cleaner, To: CLEANER_LINE, Body: body, SmsStatus: "received", ...extra };
+      const res = await hosted.http(path, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": twilioSignature(REHEARSAL_TWILIO_AUTH, `${BASE}${path}`, fields) },
+        body: new URLSearchParams(fields).toString(),
+      });
+      expect(res.status, body).toBe(200);
+    };
+    const checkAt = async (iso: string): Promise<Record<string, unknown> & { alerts: string[] }> => {
+      at = new Date(iso);
+      const reply = await say("check_now", { googleEvents: stay });
+      return { ...reply, alerts: ((reply.alerts as string[] | undefined) ?? []).map(plain) };
+    };
+    const toCleaner = () => sms.sent.filter((item) => item.to === cleaner).map((item) => plain(item.body));
+    const offersSent = () => toCleaner().filter((body) => body.startsWith("Turnover at"));
+    const remindersSent = () => toCleaner().filter((body) => body.startsWith("Reminder:"));
+
+    /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text. */
+    const safe = async (step: string) => {
+      await drainCleanerAlerts(hosted.root, () => hosted.inst.env(), clock);
+      for (const item of sms.sent) {
+        expect(scratch.has(item.to), `${step}: text to ${item.to}`).toBe(true);
+        expect(isScratchTestNumber(item.to), step).toBe(true);
+        if (PLAIN_CODE.test(item.body)) expect(item.to, `${step}: door code`).toBe(cleaner);
+      }
+      for (const post of groups.posts) {
+        for (const to of post.to) expect(scratch.has(to), `${step}: group post to ${to}`).toBe(true);
+        expect(PLAIN_CODE.test(post.body), `${step}: group post`).toBe(false);
+      }
+      for (const post of routine) {
+        expect(post.url, step).toBe(REHEARSAL_ROUTINE);
+        expect(post.body, step).not.toContain("+1");
+        expect(PLAIN_CODE.test(post.body), `${step}: routine`).toBe(false);
+      }
+      for (const path of filesUnder(hosted.root)) expect(PLAIN_CODE.test(readFileSync(path, "latin1")), `${step}: ${path}`).toBe(false);
+      expect(PLAIN_CODE.test(replies.join("\n")), `${step}: replies`).toBe(false);
+      expect(PLAIN_CODE.test(hosted.logs.join("\n")), `${step}: logs`).toBe(false);
+      expect(hosted.logs.join("\n").includes(access), `${step}: token in logs`).toBe(false);
+    };
+    await safe("1 connect");
+
+    // 2. Setup steps 2 to 8 through the new tools, then activate.
+    await say("get_state", { said: "2" });
+    await say("save_property", { business: LANE.hostName, nickname: "Scratch Lane", address, propertyType: "House", timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
+    await say("save_sources", { google: true });
+    await say("save_people", { host, cleaner, cleanerName: "Ana", groupChat: "cleaner-and-host" });
+    await say("save_schedule", { firstText: "days-after-check-in", firstTextDays: 1, reminder: "days-before-checkout", reminderDays: 1, reminderTime: "6:00 PM" });
+    await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK });
+    await say("save_preferences", PREFERENCES);
+    expect((await say("get_state")).next).toBe(REVIEW_NEXT);
+    await say("activate", { googleEvents: googleList([]) });
+    expect((await say("get_state")).done).toContain("Checks finished.");
+    expect(sms.sent).toEqual([]);
+    await safe("2 setup");
+
+    // 3. The alert routine, with a stubbed webhook.
+    await say("save_alert_routine", { url: REHEARSAL_ROUTINE, token: "k-test-rehearsal-key" });
+    await safe("3 alert routine");
+    expect(routine.length).toBeGreaterThan(0);
+
+    // 4. A booking appears in Google. The alert names the usual times, and the host says yes.
+    const booked = await checkAt("2026-10-14T14:05:00.000Z");
+    expect(booked.alerts).toContain("New booking at Scratch Lane: check-in Wednesday, Oct 14, checkout Saturday, Oct 17. Use the usual 11:00 AM checkout and 4:00 PM check-in?");
+    await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(toCleaner().filter((body) => body.includes("you're invited to the cleaning group"))).toHaveLength(1);
+    await safe("4 booking and times");
+
+    // 5 and 6. The cleaner's first YES takes the invite. The offer waits for check-in + 1 day at 9:00 AM, then the second YES takes it.
+    await fromCleaner("YES");
+    expect(offersSent()).toEqual([]);
+    await checkAt("2026-10-15T12:59:00.000Z");
+    expect(offersSent()).toEqual([]);
+    await checkAt("2026-10-15T13:00:00.000Z");
+    expect(offersSent()).toHaveLength(1);
+    await checkAt("2026-10-15T13:05:00.000Z");
+    expect(offersSent()).toHaveLength(1);
+    await fromCleaner("YES");
+    expect((await say("get_turns")).turns).toEqual([expect.objectContaining({ checkoutDate: "2026-10-17", status: "confirmed" })]);
+    await safe("5-6 offer and YES");
+
+    // 7. The reminder 1 day before asks for an arrival time. Grok reads the reply, saves it, and the host approves a message.
+    await checkAt("2026-10-16T21:59:00.000Z");
+    expect(remindersSent()).toEqual([]);
+    await checkAt("2026-10-16T22:00:00.000Z");
+    expect(remindersSent()).toEqual([`Reminder: cleaning at ${address} on Saturday, Oct 17. Checkout is 11:00 AM. What time do you plan to arrive?`]);
+    at = new Date("2026-10-16T22:10:00.000Z");
+    const quietBefore = sms.sent.length;
+    await fromCleaner("I'll be there around 11:30");
+    expect(sms.sent).toHaveLength(quietBefore);
+    const read = await checkAt("2026-10-16T22:11:00.000Z");
+    expect((read.messages as { from: string; text: string; handled: string }[]).at(-1)).toEqual(
+      expect.objectContaining({ from: "cleaner", text: "I'll be there around 11:30", handled: "none" }),
+    );
+    await say("save_arrival", { time: "11:30 AM" });
+    const asked = await say("send_message", { to: "cleaner", text: PARKING });
+    expect(asked.preview).toEqual({ to: "Ana", text: PARKING });
+    const code = (asked.confirmation as { code: string }).code;
+    expect(sms.sent.filter((item) => item.body === PARKING)).toEqual([]);
+    expect(await say("send_message", { to: "cleaner", text: PARKING, confirmation: code })).toEqual({ next: "Sent to Ana." });
+    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toEqual([expect.objectContaining({ to: cleaner, body: PARKING })]);
+    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toEqual([]);
+    const again = await tool("send_message", { to: "cleaner", text: PARKING, confirmation: code });
+    expect(again.isError).toBe(true);
+    expect(again.text).toBe("That approval has expired or doesn't match. Ask the host again.");
+    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toHaveLength(1);
+    await safe("7 reminder, arrival, and message");
+
+    // 8. The checkout nudge, then "guests have left", and the private code with the lock to the cleaner only.
+    const nudge = "Checkout time at Scratch Lane. Have the guests left?";
+    expect((await checkAt("2026-10-17T14:59:00.000Z")).alerts).not.toContain(nudge);
+    expect((await checkAt("2026-10-17T15:00:00.000Z")).alerts.filter((alert) => alert === nudge)).toHaveLength(1);
+    expect((await checkAt("2026-10-17T15:05:00.000Z")).alerts).not.toContain(nudge);
+    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
+    at = new Date("2026-10-17T15:10:00.000Z");
+    await say("mark_guests_left", { said: "guests have left" });
+    const privateCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
+    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([expect.objectContaining({ to: cleaner, body: privateCode })]);
+    await safe("8 nudge and guests left");
+
+    // 9. The checklist, one photo, a note, and DONE.
+    expect(toCleaner().at(-1)).toBe("Checklist for Scratch Lane: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.");
+    at = new Date("2026-10-17T15:30:00.000Z");
+    const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${REHEARSAL_TWILIO_SID}/Messages/MMrehearsal/Media/MErehearsal`;
+    await fromCleaner("", { NumMedia: "1", MediaUrl0: mediaUrl, MediaContentType0: "image/jpeg" });
+    expect(mediaFetched).toEqual([mediaUrl]);
+    await fromCleaner("need paper towels");
+    at = new Date("2026-10-17T17:00:00.000Z");
+    await fromCleaner("DONE");
+    expect(toCleaner().at(-1)).toBe("Thanks, cleaning marked done.");
+    await safe("9 checklist, photo, note, DONE");
+
+    // 10. check_now returns the finished cleaning, and get_job_photos returns a link that works.
+    const finished = await checkAt("2026-10-17T17:05:00.000Z");
+    const completed = JSON.parse(plain(JSON.stringify(finished.completed))) as Record<string, unknown>[];
+    expect(completed).toEqual([
+      expect.objectContaining({
+        nickname: "Scratch Lane",
+        day: "Saturday, Oct 17",
+        arrivalTime: "11:30 AM",
+        checklist: PREFERENCES.checklist,
+        photos: 1,
+        notes: ["need paper towels"],
+      }),
+    ]);
+    const photos = (await say("get_job_photos", { job: completed[0]?.day })).photos as { url: string }[];
+    expect(photos).toHaveLength(1);
+    const link = new URL(photos[0]?.url ?? "");
+    expect(link.origin).toBe(BASE);
+    const served = await hosted.http(link.pathname);
+    expect(served.status).toBe(200);
+    expect(served.headers["content-type"]).toBe("image/jpeg");
+    expect(served.bytes().equals(JPEG)).toBe(true);
+    expect((await checkAt("2026-10-17T17:10:00.000Z")).completed).toBeUndefined();
+    await safe("10 completed and photos");
+  }, 60_000);
 });
