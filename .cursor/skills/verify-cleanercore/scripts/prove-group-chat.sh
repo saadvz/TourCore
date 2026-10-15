@@ -123,6 +123,9 @@ assert_journey inert
 run_smoke "$EVIDENCE/done" smoke smoke --group-chat "${BASE[@]}" --reply "$CLEANER=YES" --reply "$OWNER=guests have left" --group-reply "$CLEANER=START" --group-reply "$CLEANER=DONE"
 assert_journey done
 
+run_smoke "$EVIDENCE/done-without-start" smoke smoke --group-chat "${BASE[@]}" --reply "$CLEANER=YES" --reply "$OWNER=guests have left" --group-reply "$CLEANER=DONE" --group-reply "$CLEANER=DONE"
+assert_journey done-without-start
+
 run_smoke "$EVIDENCE/twice" smoke smoke --group-chat "${BASE[@]}" --reply "$CLEANER=YES" --reply "$OWNER=guests have left" --reply "$OWNER=guests have left"
 assert_journey twice
 
@@ -146,12 +149,12 @@ node -e '
   const fs = require("node:fs");
   const desk = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const missing = "I can'\''t send the door code yet. Let'\''s finish setting up Cleaner Core first.";
-  const failed = "A text failed to send. I saved it for your review and did not count it as delivered.";
+  const sent = "I sent the door code to the cleaner. I'\''ll tell you if it doesn'\''t go through.";
   const again = "I already sent the door code to the cleaner.";
   if (desk.missing !== missing) process.exit(1);
-  if (desk.failed !== failed) process.exit(1);
+  if (desk.sent !== sent) process.exit(1);
   if (desk.again !== again) process.exit(1);
-  if (desk.fetchesAfterFailure < 1) process.exit(1);
+  if (desk.groupSawCode !== false) process.exit(1);
   if (desk.emptyAllowlist !== "no-fetch") process.exit(1);
 ' "$EVIDENCE/desk/desk.json" || fail "desk replies"
 printf '%s\n' "feature: desk" >"$EVIDENCE/desk/result.txt"
@@ -162,7 +165,7 @@ if ! node scripts/scan-cleaner-secrets.mjs "$EVIDENCE"; then
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: eligible private held stop-host resume time injury problem before-yes inert done twice failed desk
+features: eligible private held stop-host resume time injury problem before-yes inert done done-without-start twice failed desk
 script: .cursor/skills/verify-cleanercore/scripts/prove-group-chat.sh
 phones: 555 only
 pins: redacted

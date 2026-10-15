@@ -180,7 +180,7 @@ describe("Cleaner Core live wiring", () => {
     const pinTexts = toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE));
     expect(pinTexts).toHaveLength(1);
     expect(pinTexts[0]?.to).toBe(CLEANER);
-    expect(pinTexts[0]?.body).toBe(`Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you.`);
+    expect(pinTexts[0]?.body).toBe(`Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`);
     expect(pinTexts[0]?.statusCallback).toBe("https://tour.example/webhooks/twilio/cleaner-core/status");
     expect(wired.cleanerSent.filter((item) => item.to !== CLEANER && item.body.includes(DOOR_CODE))).toEqual([]);
     expect(leftBefore.some((body) => body.includes(DOOR_CODE))).toBe(false);
@@ -492,7 +492,7 @@ describe("Cleaner Core live wiring", () => {
     const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
     expect(again.text).toContain(PIN_REPEAT);
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => ({ to: item.to, body: item.body }))).toEqual([
-      { to: CLEANER, body: `Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you.` },
+      { to: CLEANER, body: `Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.` },
     ]);
 
     const stop = { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-once-stop", token: CLEANER_AUTH };

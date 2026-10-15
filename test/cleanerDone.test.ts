@@ -1,0 +1,255 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
+import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
+import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { CALENDAR_ICS, CALENDAR_URL, CLEANER_LINE, TEST_PIN_KEY, fakeSms } from "./wiringProof";
+
+const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
+const OWNER = "+15555550100";
+const CLEANER = "+15555550101";
+const OBSERVER = "+15555550102";
+const lane = SCRATCH_TENANTS[0];
+if (!lane) throw new Error("Scratch Lane is missing");
+const PIN = lane.pin;
+const NOW = "2026-10-14T15:00:00.000Z";
+const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+const PIN_TEXT = `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
+const DONE_ACK = "Thanks, cleaning marked done.";
+const HOST_DONE = "The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 done.";
+const STARTED = "Got it, cleaning started.";
+const BEFORE_CODE = "I'll text you the door code after the guests leave. Reply DONE after that.";
+const ALREADY = "This cleaning is already marked done.";
+const NEXT_DONE = "Reply DONE when the cleaning is finished.";
+const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
+const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
+
+function sink() {
+  const sent: CleanerText[] = [];
+  return { sent, async send(text: CleanerText) { sent.push(text); } };
+}
+
+function engine(box: ReturnType<typeof sink>, group = false) {
+  return openCleanerCore({
+    enabled: true,
+    property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
+    ownerPhone: OWNER,
+    cleaner: { phone: CLEANER, approved: true },
+    pin: PIN,
+    hostName: "Scratch",
+    consented: true,
+    sink: box,
+    now: () => new Date(NOW),
+    ...(group ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
+  });
+}
+
+async function ready(group = false) {
+  const box = sink();
+  const job = engine(box, group);
+  await job.pollFeed(FEED);
+  if (group) {
+    await job.receive({ id: "host-yes", from: OWNER, text: "YES" });
+    await job.receive({ id: "cleaner-yes", from: CLEANER, text: "YES" });
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+  } else {
+    await job.receive({ id: "opt-yes", from: CLEANER, text: "YES" });
+    await job.receive({ id: "y-out", from: OWNER, text: "YES" });
+    await job.receive({ id: "y-in", from: OWNER, text: "YES" });
+  }
+  await job.receive({ id: "y-offer", from: CLEANER, text: "YES" });
+  return { box, job };
+}
+
+function hostReady(sent: CleanerText[]): CleanerText[] {
+  return sent.filter((text) => text.to === OWNER && text.body === HOST_DONE);
+}
+
+describe("DONE after the door code", () => {
+  it("finishes the job when the opted-in cleaner texts DONE without START", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    const done = await job.receive({ id: "done-1", from: CLEANER, text: "DONE" });
+    expect(done).toEqual({
+      handled: true,
+      reason: "done",
+      sent: [{ to: CLEANER, body: DONE_ACK, kind: "done" }],
+    });
+    expect(job.jobs()[0]?.status).toBe("done");
+    expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(box.sent.filter((text) => text.to === OWNER).every((text) => !text.body.includes(PIN))).toBe(true);
+  });
+
+  it("sends the host one ready text when DONE arrives twice", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    await job.receive({ id: "done-1", from: CLEANER, text: "DONE" });
+    const again = await job.receive({ id: "done-2", from: CLEANER, text: "DONE" });
+    expect(again).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ALREADY, kind: "next" }],
+    });
+    expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+    expect(job.jobs()[0]?.status).toBe("done");
+  });
+
+  it("tells the cleaner what to do when DONE arrives before the door code", async () => {
+    const { box, job } = await ready();
+    const early = await job.receive({ id: "done-early", from: CLEANER, text: "DONE" });
+    expect(early).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: BEFORE_CODE, kind: "next" }],
+    });
+    expect(job.jobs()[0]?.status).not.toBe("done");
+    expect(hostReady(box.sent)).toEqual([]);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    expect(early.sent.every((text) => !text.body.includes(PIN))).toBe(true);
+  });
+
+  it("still finishes after START and then DONE", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(await job.receive({ id: "start-1", from: CLEANER, text: "START" })).toEqual({
+      handled: true,
+      reason: "start",
+      sent: [{ to: CLEANER, body: STARTED, kind: "started" }],
+    });
+    expect(await job.receive({ id: "done-1", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "done",
+      sent: [{ to: CLEANER, body: DONE_ACK, kind: "done" }],
+    });
+    expect(job.jobs()[0]?.status).toBe("done");
+    expect(hostReady(box.sent)).toHaveLength(1);
+  });
+
+  it("puts the DONE instruction on the cleaner's door code and not on the host text", async () => {
+    const { box: sent, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(sent.sent.find((text) => text.kind === "pin")).toEqual({ to: CLEANER, body: PIN_TEXT, kind: "pin" });
+    expect(sent.sent.find((text) => text.kind === "pin-notice")).toEqual({
+      to: OWNER,
+      body: "Door code sent to the cleaner.",
+      kind: "pin-notice",
+    });
+    expect(sent.sent.filter((text) => text.to === OWNER).some((text) => text.body.includes("Reply DONE"))).toBe(false);
+  });
+
+  it("answers an unknown text from the opted-in cleaner and stays quiet for HELP", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(await job.receive({ id: "huh", from: CLEANER, text: "Where are the towels?" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: NEXT_DONE, kind: "next" }],
+    });
+    const before = box.sent.length;
+    expect(await job.receive({ id: "help-1", from: CLEANER, text: "HELP" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(box.sent).toHaveLength(before);
+    expect(job.jobs()[0]?.status).toBe("cleared");
+  });
+
+  it("stays quiet when DONE comes from a cleaner who has not opted in or who opted out", async () => {
+    const waiting = sink();
+    const pending = engine(waiting);
+    await pending.pollFeed(FEED);
+    await pending.receive({ id: "y-out", from: OWNER, text: "YES" });
+    await pending.receive({ id: "y-in", from: OWNER, text: "YES" });
+    const before = waiting.sent.length;
+    expect(await pending.receive({ id: "done-pending", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(waiting.sent).toHaveLength(before);
+
+    const { box, job } = await ready();
+    await job.receive({ id: "stop-1", from: CLEANER, text: "STOP" });
+    const afterStop = box.sent.length;
+    expect(await job.receive({ id: "done-out", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(box.sent).toHaveLength(afterStop);
+    expect(hostReady(box.sent)).toEqual([]);
+  });
+});
+
+describe("door code stays out of the group", () => {
+  it("finishes from a group DONE and keeps the code in one private text", async () => {
+    const { box, job } = await ready(true);
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    const groups = box.sent.filter((text) => text.channel === "group");
+    expect(groups.some((text) => text.body.includes(PIN) || text.body.includes("Door code"))).toBe(false);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    const done = await job.receive({ id: "done-group", from: CLEANER, text: "DONE", channel: "group" });
+    expect(done.sent).toEqual([{ to: CLEANER, body: DONE_ACK, kind: "done" }]);
+    expect(job.jobs()[0]?.status).toBe("done");
+    expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+    await job.receive({ id: "done-group-2", from: CLEANER, text: "DONE", channel: "group" });
+    expect(hostReady(box.sent)).toHaveLength(1);
+    expect(box.sent.filter((text) => text.channel === "group").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
+  });
+});
+
+describe("group chat flag", () => {
+  const roots: string[] = [];
+
+  afterEach(() => {
+    setCleanerTwilioClient(undefined);
+    setCleanerCalendarFetch(undefined);
+    resetLiveDesks();
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  async function invite(env: NodeJS.ProcessEnv): Promise<string[]> {
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
+    setCleanerCalendarFetch(async () => ({
+      status: 200,
+      url: CALENDAR_URL,
+      async text() {
+        return CALENDAR_ICS;
+      },
+    }));
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-default-"));
+    roots.push(root);
+    const desk = liveDeskFor(root, () => env, () => new Date(NOW));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: PIN }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
+    return sms.sent.map((text) => text.body);
+  }
+
+  it("uses the group thread unless the flag is 0 or false", async () => {
+    const base: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_SCRATCH_TOOLS: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${OWNER},${CLEANER},${OBSERVER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    expect(await invite(base)).toEqual([GROUP_INVITE]);
+    expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "0" })).toEqual([SOLO_INVITE]);
+    expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "false" })).toEqual([SOLO_INVITE]);
+  });
+});

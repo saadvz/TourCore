@@ -19,6 +19,11 @@
       "kind": "emergency"
     },
     {
+      "to": "+15555550100",
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.",
+      "kind": "emergency"
+    },
+    {
       "to": "+15555550101",
       "body": "If someone is hurt, call 911 now. I've let the host know.",
       "kind": "emergency"
@@ -32,7 +37,7 @@
       "arrivingUid": "stay-b",
       "status": "discovered",
       "live": true,
-      "textsBlocked": false,
+      "textsBlocked": true,
       "checkoutDate": "2026-10-18",
       "nextCheckInDate": "2026-10-18",
       "sameDay": true,
@@ -51,7 +56,7 @@
       "arrivingUid": null,
       "status": "discovered",
       "live": true,
-      "textsBlocked": false,
+      "textsBlocked": true,
       "checkoutDate": "2026-10-20",
       "nextCheckInDate": null,
       "sameDay": false,
@@ -79,12 +84,21 @@
       "to": "+15555550100",
       "body": "If someone is hurt, call 911 now.",
       "kind": "emergency",
-      "status": "sent"
+      "status": "sent",
+      "jobId": "stay-a"
     },
     {
       "id": "emergency-host:+15555550101|stay-a|1",
       "to": "+15555550100",
       "body": "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+      "kind": "emergency",
+      "status": "sent",
+      "jobId": "stay-a"
+    },
+    {
+      "id": "injury-hold:+15555550101|stay-a|1",
+      "to": "+15555550100",
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.",
       "kind": "emergency",
       "status": "sent",
       "jobId": "stay-a"
@@ -105,6 +119,7 @@
     "+15555550100: I fell and I'm hurt",
     "+15555550101: I fell and I'm hurt",
     "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+    "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.",
     "If someone is hurt, call 911 now. I've let the host know.",
     "+15555550101: I fell and I'm hurt"
   ],

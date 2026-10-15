@@ -4,7 +4,7 @@ An injury text from a known observer, when group texting was not requested, stil
 
 ## Sub-features
 
-- `alert` sends `An observer at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.` to `+15555550100`.
+- `alert` sends `An observer at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.` to `+15555550100`, then the injury hold to the same number.
 - `reply` sends `If someone is hurt, call 911 now. I've let the host know.` to `+15555550122`.
 - `once` sends no second pair when the observer repeats the injury.
 

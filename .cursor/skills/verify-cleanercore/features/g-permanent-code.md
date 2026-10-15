@@ -21,7 +21,7 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false.
 - The exposure reply is an `@` path to a temporary file. The command line does not contain the digits.
 
-- **Native group.** Run smoke with `--with-pin --group-mode native --group-capable --group +15555550199 --participant observer=+15555550122`, the Scratch feed, YES from the cleaner and the observer, YES twice from the owner, YES from the cleaner, and `guests have left`. Exit code 0. `pinRecipients` is `["+15555550101"]`. The pin body is `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.`
+- **Native group.** Run smoke with `--with-pin --group-mode native --group-capable --group +15555550199 --participant observer=+15555550122`, the Scratch feed, YES from the cleaner and the observer, YES twice from the owner, YES from the cleaner, and `guests have left`. Exit code 0. `pinRecipients` is `["+15555550101"]`. The pin body is `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`
 - **Mirror.** The same replies with `--group-mode mirrored`. The mirror copy does not contain `Door code`.
 - **Exposure.** Run `--no-poll --with-pin --watch-freshness --reply +15555550101=@<temp file>`. `sent` is one possible-code-exposure review to `+15555550100`.
 

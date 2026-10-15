@@ -30,7 +30,7 @@ const UNCERTAIN_QUEUE = "My cleaning offer to the cleaner for Wednesday, Oct 14 
 const REMINDER_MISSED = "My reminder to the cleaner for Wednesday, Oct 14 didn't go out. I didn't resend it. Reply RETRY to send it again.";
 const EXPOSURE = "I held a text to the cleaner because it looked like it had the door code in it.";
 const AIRBNB = `I saved a manual Airbnb booking exception for ${LANE}. I did not change the cleaning until you confirm it.`;
-const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you.`;
+const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PIN_NOTICE = "Door code sent to the cleaner.";
 const HEALTH = "Cleaner Core health. This check does not send texts.";
 const STOP_ACK = `You're opted out of cleaning texts for ${LANE}. Reply START to get texts again.`;
@@ -38,6 +38,7 @@ const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${LANE} says someone is hurt. They've been told to call 911.`;
 const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been told to call 911.`;
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
+const INJURY_HOLD = `The cleaning at ${LANE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${LANE}. Reply YES to get cleaning texts, or STOP to opt out.`;
 const HOLD = `The cleaning at ${LANE} is on hold until the cleaner replies YES.`;
 const COURT_MONDAY = `Is checkout at ${COURT} on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.`;
@@ -239,6 +240,7 @@ if (journey === "stale-source") {
     { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
     { to: OWNER, body: HOST_HURT, kind: "emergency" },
+    { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
     { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
   ]);
 } else if (journey === "observer-injury-group" || journey === "observer-injury-solo") {
@@ -252,6 +254,7 @@ if (journey === "stale-source") {
   same(first.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
     ...head,
     { to: OWNER, kind: "emergency", body: OBSERVER_HURT },
+    { to: OWNER, kind: "emergency", body: INJURY_HOLD },
     { to: OBSERVER, kind: "emergency", body: CLEANER_HURT },
   ]);
   if (first.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");
@@ -273,8 +276,10 @@ if (journey === "stale-source") {
     same(report.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
       ...head,
       { to: OWNER, kind: "emergency", body: HOST_HURT },
+      { to: OWNER, kind: "emergency", body: INJURY_HOLD },
       { to: CLEANER, kind: "emergency", body: CLEANER_HURT },
       { to: OWNER, kind: "emergency", body: OBSERVER_HURT },
+      { to: OWNER, kind: "emergency", body: INJURY_HOLD },
       { to: OBSERVER, kind: "emergency", body: CLEANER_HURT },
     ]);
     if (report.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");

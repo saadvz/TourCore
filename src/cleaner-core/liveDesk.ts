@@ -7,6 +7,7 @@ import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
+import { groupChatEnabled } from "./flag";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
@@ -55,11 +56,6 @@ interface PinSend {
   outcome: "accepted" | "undelivered" | "settled";
   notePending: boolean;
   delivered?: boolean;
-}
-
-function groupChatOn(env: NodeJS.ProcessEnv): boolean {
-  const raw = env.CLEANER_CORE_GROUP_CHAT?.trim().toLowerCase();
-  return raw === "1" || raw === "true";
 }
 
 export interface ToolOk {
@@ -297,7 +293,7 @@ export class LiveDesk {
     if (!statedClock(checkout) || !statedClock(checkIn)) {
       return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
     }
-    if (groupChatOn(this.env())) {
+    if (groupChatEnabled(this.env())) {
       await this.engine.confirmHostTimes({ checkout, checkIn });
     } else {
       await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
@@ -342,12 +338,12 @@ export class LiveDesk {
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
-    if (groupChatOn(this.env()) && this.engine.groupPinSettled() && !sentNow) {
+    if (groupChatEnabled(this.env()) && this.engine.groupPinSettled() && !sentNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "", outcome: "settled", notePending: false };
       this.persist();
       return this.reply({ next: "A text failed to send. I saved it for your review and did not count it as delivered." });
     }
-    if (sentNow && groupChatOn(this.env()) && !privateNow) {
+    if (sentNow && groupChatEnabled(this.env()) && !privateNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
@@ -582,7 +578,7 @@ export class LiveDesk {
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
       pinFailedBody: PIN_FAILED,
-      ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
+      ...(groupChatEnabled(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
           const hostLine = text.to === file.host && text.channel !== "group";
@@ -729,7 +725,7 @@ export class LiveDesk {
   }
 
   private privateCodeWaiting(): boolean {
-    if (!groupChatOn(this.env()) || !this.engine) return false;
+    if (!groupChatEnabled(this.env()) || !this.engine) return false;
     const tracked = this.file.pinSend;
     if (tracked?.delivered === true && tracked.outcome !== "undelivered") return false;
     if (tracked?.outcome === "undelivered") return true;
@@ -798,7 +794,7 @@ export class LiveDesk {
     }
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) {
-      if (!groupChatOn(this.env())) return { sent: [] };
+      if (!groupChatEnabled(this.env())) return { sent: [] };
       this.resume();
       if (!this.engine) return { sent: [] };
       const result = await this.engine.receive({ id, from, text });

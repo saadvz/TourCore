@@ -34,6 +34,7 @@ const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${LANE} says someone is hurt. They've been told to call 911.`;
 const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been told to call 911.`;
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
+const INJURY_HOLD = `The cleaning at ${LANE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 const MISSING = "I can't read that Notion database. Permission is missing, so I did not sync bookings and I did not send a cleaning text.";
 const GROUP = "Group text: ";
 const MIRROR = "Copy of the group text: ";
@@ -45,7 +46,7 @@ const CHECKIN_Q = `Is check-in at ${LANE} on Sunday, Oct 18 still 4:00 PM? Reply
 const PEOPLE_PROMPT = "Who should get texts? Send the cleaner's phone, then each other person's role and phone. Roles are owner, manager, or observer. I won't text anyone until they reply YES.";
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${LANE}. Reply YES to get cleaning texts, or STOP to opt out.`;
 const ANNEX_OPT = `Hi, this is Annex's cleaning scheduler for ${ANNEX}. Reply YES to get cleaning texts, or STOP to opt out.`;
-const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you.`;
+const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PIN_NOTICE = "Door code sent to the cleaner.";
 const ACTIVATED = "Activated Annex. I will text only the numbers that opted in. I will not infer consent, a vacancy, or a lock-code change.";
 const NOT_ACTIVATED = "Not activated. The cleaner has not opted in, so I did not send a cleaning text.";
@@ -241,15 +242,17 @@ if (journey === "notion-permission-denied") {
   same(first.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
     ...head,
     { to: OWNER, kind: "emergency", body: OBSERVER_HURT },
+    { to: OWNER, kind: "emergency", body: INJURY_HOLD },
     { to: OBSERVER, kind: "emergency", body: CLEANER_HURT },
   ]);
   if (first.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");
-  if (first.sent.filter((text) => text.kind === "emergency").length !== 2) fail("the injury reply was repeated or the host was not alerted");
+  if (first.sent.filter((text) => text.kind === "emergency").length !== 3) fail("the injury reply was repeated or the host was not alerted");
   if (journey === "observer-injury-group") same(first.messaging?.actual, "native");
 } else if (journey === "injury-wording") {
   const told = { to: null, kind: "emergency", body: CLEANER_HURT };
   const pair = (alert, phone) => [
     { to: OWNER, kind: "emergency", body: alert },
+    { to: OWNER, kind: "emergency", body: INJURY_HOLD },
     { ...told, to: phone },
   ];
   for (const report of reports) {
@@ -267,7 +270,7 @@ if (journey === "notion-permission-denied") {
       ...pair(OBSERVER_HURT, OBSERVER),
     ]);
     if (report.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");
-    if (report.sent.filter((text) => text.kind === "emergency").length !== 4) fail("an injury wording did not alert the host and reply once to each sender");
+    if (report.sent.filter((text) => text.kind === "emergency").length !== 6) fail("an injury wording did not alert the host and reply once to each sender");
   }
 } else if (journey === "owner-injury") {
   same(first.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
@@ -294,6 +297,7 @@ if (journey === "notion-permission-denied") {
     { to: OWNER, body: LANE_Q, kind: "host-checkout" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
     { to: OWNER, body: HOST_HURT, kind: "emergency" },
+    { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
     { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
   ]);
   if (injury.sent.filter((text) => text.body === EMERGENCY).length !== 1) fail("the injury reply was repeated");

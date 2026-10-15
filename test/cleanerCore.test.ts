@@ -630,8 +630,8 @@ describe("one Scratch turnover", () => {
 
 const PIN = "4821";
 const OPT_IN = "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
-const PIN_TEXT = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: 4821. This code is only for you.";
-const PIN_REDACTED = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
+const PIN_TEXT = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: 4821. This code is only for you. Reply DONE when the cleaning is finished.";
+const PIN_REDACTED = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.";
 const PIN_NOTICE = "Door code sent to the cleaner.";
 const CLEANER_REMINDER = "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.";
 const PIN_FAIL = "The door code didn't reach the cleaner. We'll try again in a few minutes.";
@@ -1450,8 +1450,8 @@ describe("step E second source and second tenant", () => {
     const courtOpt = "Hi, this is Scratch's cleaning scheduler for 8 Scratch Court, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
     const courtOffer = "Turnover at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.";
     const courtConfirm = "Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at 8 Scratch Court, Teaneck, NJ 07666.";
-    const courtPin = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: 7392. This code is only for you.";
-    const courtPinRedacted = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
+    const courtPin = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: 7392. This code is only for you. Reply DONE when the cleaning is finished.";
+    const courtPinRedacted = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.";
     try {
       const lane = pinned(laneBox, { tenantId: "scratch-lane", dataDir: dir });
       const court = pinned(courtBox, {

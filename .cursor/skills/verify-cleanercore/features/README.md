@@ -62,6 +62,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Approved and opted in](./opted-in-only.md) covers no code without a cleaner YES, no code for `+15555550199`, and no opt-in for an unapproved cleaner. `prove-step-d.sh`.
 - [Later checkout holds the code](./checkout-moved.md) covers a checkout moved to 2:00 PM and a code that waits for the cleaner's new YES. `prove-step-d.sh`.
 - [One full Scratch turn](./full-turn.md) covers opt-in, the cleaner's YES, the cleaner reminder, departure, the private text, START, and DONE. `prove-step-d.sh`.
+- [DONE without START](./done-without-start.md) covers DONE after the private text, one host line, a second DONE, and DONE before the private text. `prove-step-d.sh`.
 - [Sealed door code](./pin-stored.md) covers a persisted store and a stdout that redact the digits. `prove-step-d.sh`.
 - [STOP holds the code](./stop-holds.md) covers STOP before departure and a later START that does not send the code. `prove-step-d.sh`.
 - [HELP around the door code](./help-while-cleaning.md) covers a quiet HELP, a host injury, and a cleaner injury while waiting, after the code, and in progress, plus a failed host alert. `prove-step-d.sh`.

@@ -62,7 +62,7 @@ export function reminderBody(address: string, when: { day: string; time: string 
 }
 
 export function doorCodeBody(address: string, code: string): string {
-  return `Guests have left ${address}. Door code: ${code}. This code is only for you.`;
+  return `Guests have left ${address}. Door code: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
 }
 
 export function holdNote(address: string): string {
@@ -113,8 +113,29 @@ export function groupOptInBody(name: string, otherName: string, address: string)
   return `${name}, you're invited to the cleaning group for ${address} with ${otherName}. Reply YES to join that group, or STOP to opt out.`;
 }
 
-export function groupDoorCodeBody(cleanerName: string, address: string, code: string): string {
-  return `${cleanerName}, guests have left ${address}. Door code: ${code}.`;
+export type CleanerStep =
+  | "needs-yes"
+  | "waiting-for-guests"
+  | "waiting-for-code"
+  | "in-progress"
+  | "already-done"
+  | "on-hold";
+
+export function cleanerNextStep(step: CleanerStep): string {
+  switch (step) {
+    case "needs-yes":
+      return "Reply YES to schedule the cleaning, or STOP to opt out.";
+    case "waiting-for-guests":
+      return "I'll text you the door code after the guests leave. Reply DONE after that.";
+    case "waiting-for-code":
+      return "I haven't sent the door code yet. Reply DONE after I do.";
+    case "in-progress":
+      return "Reply DONE when the cleaning is finished.";
+    case "already-done":
+      return "This cleaning is already marked done.";
+    case "on-hold":
+      return "The cleaning is on hold. I'll text you when it can start again.";
+  }
 }
 
 export function privateCodeLine(cleanerName: string): string {

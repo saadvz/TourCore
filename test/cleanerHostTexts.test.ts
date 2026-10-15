@@ -119,6 +119,7 @@ describe("host texts after 46105bc", () => {
     const sms = fakeSms();
     const env: NodeJS.ProcessEnv = {
       CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_GROUP_CHAT: "0",
       CLEANER_CORE_LIVE_SMS: "1",
       CLEANER_CORE_SMS_ALLOWLIST: `${HOST},${LANE.cleanerPhone},${OBSERVER}`,
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
@@ -190,7 +191,7 @@ describe("host texts after 46105bc", () => {
     const after = redact(wired.cleanerSent.slice(afterStop), LANE.pin);
     expect(after.filter((item) => item.to === HOST)).toEqual([]);
     expect(after.filter((item) => item.body.includes("Door code:"))).toEqual([
-      { to: LANE.cleanerPhone, body: `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you.` },
+      { to: LANE.cleanerPhone, body: `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.` },
     ]);
     const lines = linesOf(await call(wired, "read_outbox"));
     expect(lines).toContain("Resume note to the host: unsent.");
@@ -222,7 +223,9 @@ describe("host texts after 46105bc", () => {
     ]);
     const retry = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
-    expect(wired.cleanerSent.length).toBe(retry);
+    expect(redact(wired.cleanerSent.slice(retry), LANE.pin)).toEqual([
+      { to: LANE.cleanerPhone, body: "This cleaning is already marked done." },
+    ]);
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"done\"");
     expect(hostBodies(wired.cleanerSent, LANE.pin).filter((body) => body === HOST_DONE)).toEqual([HOST_DONE]);
     expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin)).includes(LANE.pin)).toBe(false);

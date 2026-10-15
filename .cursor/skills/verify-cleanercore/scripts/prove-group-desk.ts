@@ -9,6 +9,7 @@ const outPath = process.argv[2];
 if (!outPath) throw new Error("prove-group-desk.ts needs an output path");
 
 const calls: string[] = [];
+const groupBodies: string[] = [];
 const conversations = new Map<string, { sid: string; address: string }[]>();
 let sequence = 0;
 setCleanerGroupFetch(async (url, init) => {
@@ -29,7 +30,11 @@ setCleanerGroupFetch(async (url, init) => {
   const tail = rest.join("/").split("?")[0] ?? "";
   const people = conversations.get(sid);
   if (!people) return reply(404, {});
-  if (tail === "Messages" && method === "POST") return reply(500, {});
+  if (tail === "Messages" && method === "POST") {
+    const params = new URLSearchParams(String(init?.body ?? ""));
+    groupBodies.push(params.get("Body") ?? "");
+    return reply(500, {});
+  }
   if (tail === "Participants" && method === "GET") {
     return reply(200, {
       participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })),
@@ -101,9 +106,10 @@ const nextOf = (reply: { ok: boolean; result?: Record<string, unknown>; error?: 
   reply.ok ? String(reply.result?.next ?? "") : String(reply.error ?? "");
 const record = {
   missing: nextOf(missing),
-  failed: nextOf(failed),
+  sent: nextOf(failed),
   again: nextOf(again),
-  fetchesAfterFailure,
+  fetchesAfterPin: fetchesAfterFailure,
+  groupSawCode: groupBodies.some((body) => /door code/i.test(body) || body.includes(DOOR_CODE)),
   emptyAllowlist: empty === undefined ? "no-fetch" : "fetched",
 };
 const json = JSON.stringify(record, null, 2);

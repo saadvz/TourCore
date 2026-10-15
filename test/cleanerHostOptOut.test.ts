@@ -45,6 +45,7 @@ const HOST_KIND_RULE = {
   held: "blocked",
   review: "blocked",
   resume: "blocked",
+  next: "blocked",
 } as const satisfies Record<TextKind, "safety" | "blocked">;
 
 function hostRule(kind: TextKind): "safety" | "blocked" {
@@ -72,6 +73,7 @@ function hostRule(kind: TextKind): "safety" | "blocked" {
     case "held":
     case "review":
     case "resume":
+    case "next":
       return "blocked";
     default: {
       const uncovered: never = kind;
@@ -269,6 +271,7 @@ describe("ordered STOP, reminder, and DONE on the Twilio log", () => {
     let now = FROZEN;
     const env: NodeJS.ProcessEnv = {
       CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_GROUP_CHAT: "0",
       CLEANER_CORE_LIVE_SMS: "1",
       CLEANER_CORE_SMS_ALLOWLIST: `${HOST},${LANE.cleanerPhone}`,
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",

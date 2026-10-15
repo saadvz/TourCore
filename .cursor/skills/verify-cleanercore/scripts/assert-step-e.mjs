@@ -28,8 +28,8 @@ const LANE_OFFER = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 11:00 AM, ne
 const LANE_CONFIRM = `Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at ${LANE}.`;
 const COURT_OFFER = `Turnover at ${COURT} on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.`;
 const COURT_CONFIRM = `Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at ${COURT}.`;
-const LANE_PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you.`;
-const COURT_PIN = `Guests have left ${COURT}. Door code: [redacted]. This code is only for you.`;
+const LANE_PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
+const COURT_PIN = `Guests have left ${COURT}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PIN_NOTICE = "Door code sent to the cleaner.";
 
 const reportPaths = journey === "tenant-isolation" ? paths.slice(0, -1) : paths;

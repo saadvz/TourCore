@@ -137,6 +137,21 @@ run_smoke "$EVIDENCE/full-turn" smoke env CLEANER_CORE_ENABLED=1 npm run --silen
   --reply "$OWNER=guests have left" --reply "$CLEANER=START" --reply "$CLEANER=DONE"
 assert_journey full-turn "$EVIDENCE/full-turn/smoke.stdout.txt"
 
+doctor "$EVIDENCE/done-without-start"
+run_smoke "$EVIDENCE/done-without-start" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
+  --with-pin --feed "$FEED" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
+  --now "$DUE" --remind --now "$AFTER" \
+  --reply "$OWNER=guests have left" --reply "$CLEANER=DONE" --reply "$CLEANER=DONE"
+assert_journey done-without-start "$EVIDENCE/done-without-start/smoke.stdout.txt"
+
+doctor "$EVIDENCE/done-early"
+run_smoke "$EVIDENCE/done-early" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
+  --with-pin --feed "$FEED" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
+  --now "$AFTER" --reply "$CLEANER=DONE"
+assert_journey done-early "$EVIDENCE/done-early/smoke.stdout.txt"
+
 doctor "$EVIDENCE/pin-stored"
 STORE_DIR="$(mktemp -d)"
 run_smoke "$EVIDENCE/pin-stored" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
@@ -213,7 +228,7 @@ if grep -R -n -E "$PIN_PATTERN" "$EVIDENCE" >/dev/null; then
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: held released not-opted unapproved-yes not-approved checkout-moved full-turn pin-stored stop-holds help-waiting help-cleared help-progress injury-failed pin-failed no-group
+features: held released not-opted unapproved-yes not-approved checkout-moved full-turn done-without-start done-early pin-stored stop-holds help-waiting help-cleared help-progress injury-failed pin-failed no-group
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
 pin: redacted
 EOF

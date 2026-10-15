@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
+import { groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
@@ -21,8 +21,7 @@ const PIN = lane.pin;
 const OPT_CLEANER = groupOptInBody("Maria", "Cory", ADDRESS);
 const OPT_HOST = groupOptInBody("Cory", "Maria", ADDRESS);
 const OPT_EXTRA = groupOptInBody("Alex", "Cory and Maria", ADDRESS);
-const GROUP_PIN = groupDoorCodeBody("Maria", ADDRESS, PIN);
-const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you.`;
+const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PRIVATE_LINE = privateCodeLine("Maria");
 const TIME_LINE = groupTimeLine("Cory");
 const HOLD = holdNote(ADDRESS);
@@ -59,17 +58,6 @@ function plainFour(forbidden: readonly string[]): string {
 function box() {
   const sent: CleanerText[] = [];
   return { sent, async send(text: CleanerText) { sent.push(text); } };
-}
-
-function failingBox() {
-  const sent: CleanerText[] = [];
-  return {
-    sent,
-    async send(text: CleanerText) {
-      if (text.kind === "pin") throw new Error("send failed");
-      sent.push(text);
-    },
-  };
 }
 
 function open(sent: { send(text: CleanerText): void | Promise<void> }, extra = false) {
@@ -127,7 +115,7 @@ describe("group thread", () => {
     const before = sent.sent.length;
     const left = await job.receive({ id: "left-1", from: OWNER, text: "guests have left" });
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([
-      { to: CLEANER, body: GROUP_PIN, kind: "pin", channel: "group", audience: [OWNER, CLEANER] },
+      { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },
     ]);
     expect(sent.sent.slice(before).filter((text) => text.kind === "pin")).toEqual(left.sent.filter((text) => text.kind === "pin"));
     expect(job.transcript().join("\n").includes(PIN)).toBe(false);
@@ -240,7 +228,7 @@ describe("group thread", () => {
     expect(after.sent.filter((text) => text.audience?.includes(CLEANER))).toEqual([]);
   });
 
-  it("does not move a time texted in the group, and does not retry a failed group send", async () => {
+  it("does not move a time texted in the group, and retries a failed private door code", async () => {
     const sent = box();
     const job = await joined(sent);
     const clock = job.jobs().find((item) => item.checkoutTime === "11:00 AM");
@@ -253,16 +241,25 @@ describe("group thread", () => {
     const quiet = await job.receive({ id: "cory-quiet", from: OWNER, text: "Sounds good", channel: "group" });
     expect(quiet.sent).toEqual([]);
 
-    const failed = failingBox();
-    const broken = await joined(failed);
+    let failedPins = 0;
+    const retried: CleanerText[] = [];
+    const once = {
+      sent: retried,
+      async send(text: CleanerText) {
+        if (text.kind === "pin" && failedPins === 0) {
+          failedPins += 1;
+          throw new Error("send failed");
+        }
+        retried.push(text);
+      },
+    };
+    const broken = await joined(once);
     const first = await broken.receive({ id: "left-fail", from: OWNER, text: "guests have left" });
     expect(first.sent.filter((text) => text.kind === "pin")).toEqual([]);
-    expect(broken.groupPinSettled()).toBe(true);
+    expect(broken.groupPinSettled()).toBe(false);
     const reminded = await broken.runReminders();
-    expect(reminded.sent.filter((text) => text.kind === "pin")).toEqual([]);
-    const second = await broken.receive({ id: "left-fail-2", from: OWNER, text: "guests have left" });
-    expect(second.sent.filter((text) => text.kind === "pin")).toEqual([]);
-    expect(failed.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    expect(reminded.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
+    expect(retried.filter((text) => text.channel === "group" && (text.body.includes("Door code") || text.body.includes(PIN)))).toEqual([]);
   });
 
   it("names a dropped group text from the fixed list when that text contains a 4-digit number", async () => {
@@ -391,7 +388,8 @@ describe("group thread", () => {
       expect(text.body).not.toMatch(/grok bot|twilio|engine|cleaner_core/i);
     }
     expect(groups.some((text) => text.body === TIME_LINE)).toBe(true);
-    expect(groups.some((text) => text.body === GROUP_PIN)).toBe(true);
+    expect(groups.some((text) => text.body.includes("Door code"))).toBe(false);
+    expect(sent.sent.some((text) => text.body === PRIVATE_PIN && !text.channel)).toBe(true);
     expect(sent.sent.some((text) => text.body === OFFER && !text.channel)).toBe(true);
     expect(sent.sent.some((text) => text.body === CONFIRM && !text.channel)).toBe(true);
   });
@@ -465,7 +463,7 @@ describe("group thread on the desk", () => {
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
     const failed = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    expect(failed).toEqual({ ok: true, result: { next: FAILED_ONCE } });
+    expect(failed).toEqual({ ok: true, result: { next: PIN_SENT } });
     const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(JSON.stringify(again).includes(DOOR_CODE)).toBe(false);
@@ -713,10 +711,9 @@ describe("live group membership", () => {
     expect(live.posts).toEqual([
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
-      { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_PIN },
     ]);
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([
-      { to: CLEANER, body: GROUP_PIN, kind: "pin", channel: "group", audience: [OWNER, CLEANER] },
+      { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },
     ]);
   });
 
@@ -825,7 +822,7 @@ describe("live group membership", () => {
     const alert = "I couldn't send the checkout time to the group.";
     const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
     const groupPin = `Maria, guests have left ${PRACTICE}. Door code: ${DOOR_CODE}.`;
-    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
     setCleanerCalendarFetch(async (url) => ({
@@ -1061,7 +1058,7 @@ describe("live group membership", () => {
     await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
     await desk.inbound({ id: "yes-cleaner-only", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule-only", from: LIVE_CLEANER, text: "YES" });
-    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
     return { desk, sms, posts: fetchBox.posts, pinKey, privatePin };
   }
 
@@ -1168,7 +1165,7 @@ describe("live group membership", () => {
     const env: NodeJS.ProcessEnv = {
       CLEANER_CORE_ENABLED: "1",
       CLEANER_CORE_LIVE_SMS: "1",
-      ...(group ? { CLEANER_CORE_GROUP_CHAT: "1" } : {}),
+      ...(group ? { CLEANER_CORE_GROUP_CHAT: "1" } : { CLEANER_CORE_GROUP_CHAT: "0" }),
       CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
@@ -1454,7 +1451,9 @@ describe("live group membership", () => {
     await grouped.desk.inbound({ id: "kinds-group-problem", from: LIVE_CLEANER, text: "The lock is broken", channel: "group" });
     expect(notesOf(grouped.desk.getState())).toContain(hold);
     const ignored = await grouped.desk.inbound({ id: "kinds-group-start", from: LIVE_CLEANER, text: "START" });
-    expect(ignored.sent.map((text) => text.body)).toEqual([]);
+    expect(ignored.sent.map((text) => text.body)).toEqual([
+      "The cleaning is on hold. I'll text you when it can start again.",
+    ]);
     expect(notesOf(grouped.desk.getState()).includes(resume)).toBe(false);
     const groupHurt = await grouped.desk.inbound({ id: "kinds-group-hurt", from: LIVE_CLEANER, text: "I fell at 2:00 PM and I'm hurt", channel: "group" });
     expect(groupHurt.sent.filter((text) => text.to === LIVE_CLEANER).map((text) => text.body)).toEqual([cleanerHurt]);
@@ -1484,7 +1483,7 @@ describe("live group membership", () => {
 
   it("keeps the private line out of the group on the private route, a failed member check, and an opted-out hold", async () => {
     const line = "Maria got the door code privately.";
-    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
 
     const pending = await readyPractice(true);
     await pending.desk.inbound({ id: "route-pending-offer", from: LIVE_CLEANER, text: "YES" });
