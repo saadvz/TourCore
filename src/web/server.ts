@@ -49,7 +49,7 @@ import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
 import { applyHostedStorageGuard, runStorageCheck } from "../install/persistentVolume";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
-import { bindHostedCleanerTenant, bindHostedTenant, clearHostedTenant, hostedCleanerTenantDecision, hostedTenantDecision, HOSTED_TENANT_RESET, resetHostedCleanerOwner } from "../install/tenant";
+import { bindHostedCleanerTenant, bindHostedTenant, cleanerOwnerResetLeftSet, clearHostedTenant, hostedCleanerTenantDecision, hostedTenantDecision, HOSTED_TENANT_RESET, resetHostedCleanerOwner } from "../install/tenant";
 import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
@@ -963,8 +963,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.env.TOURCORE_HOSTED_OWNER_RESET === HOSTED_OWNER_RESET && clearHostedTenant(installation.files)) {
       console.log("  Cleared the hosted demo owner. The next approved Grok connection becomes the owner. Tour records were not deleted. Remove TOURCORE_HOSTED_OWNER_RESET after this deploy.");
     }
+    // Checked first: true only when an earlier deploy already applied the reset.
+    const cleanerResetLeftSet = cleanerOwnerResetLeftSet(process.env, installation.files);
     if (resetHostedCleanerOwner(process.env, installation.files, () => new OAuthGrantStore(installation.runtime).revokeForPath(CLEANER_MCP_PATH))) {
       console.log("  Cleared the hosted Cleaner Core owner and signed out its Grok Bot. The next approved Grok Bot becomes the owner. Cleaning records were not deleted. Remove CLEANER_CORE_HOSTED_OWNER_RESET after this deploy.");
+    } else if (cleanerResetLeftSet) {
+      console.log("  CLEANER_CORE_HOSTED_OWNER_RESET was already applied on an earlier deploy, so the Cleaner Core owner was kept. Remove it, and set it again only for the next reset.");
     }
   }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";

@@ -27,7 +27,7 @@ If it asks what you want help with, call it again with `said: "2"`, which picks 
 
 1. Start: `get_state`.
 2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times.
-3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar.
+3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar, which you read with your own Google Calendar connector.
 4. People: `save_people`. The host, the cleaner, up to 4 extra contacts, and the group chat choice.
 5. Schedule: `save_schedule`. When the first cleaning text goes, the reminder, and quiet hours.
 6. Access: `save_door_code`, on your secure card, with the lock location.
@@ -55,7 +55,7 @@ Ask the host to enter each stay as a timed event, from check-in to checkout.
 
 - **New booking.** The alert names the stay and the usual times. When the host says yes, call `confirm_times` with those times.
 - **`needsTimes`.** Ask for the checkout time and the next check-in time. Then call `confirm_times`.
-- **Checkout nudge.** The alert asks "Have the guests left?" Ask the host. When they say yes, call `mark_guests_left` with their words.
+- **Checkout nudge.** It arrives at the next Check routine run after checkout time. The alert asks "Have the guests left?" Ask the host. When they say yes, call `mark_guests_left` with their words.
 - **`completed`.** Call `get_job_photos` and look at the photos. Compare them with the checklist. Summarize the cleaning in your own words.
 
 The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.
