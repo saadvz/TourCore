@@ -133,8 +133,12 @@ function asksForThird(text: string): boolean {
   return /three different|third number|third phone/i.test(text);
 }
 
-function coded(sent: SentSms[]): SentSms[] {
-  return sent.filter((item) => item.body.includes(DOOR_CODE));
+function codeRecipients(sent: SentSms[]): string[] {
+  return sent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.to);
+}
+
+function bodyHasCode(body: string): boolean {
+  return body.includes(DOOR_CODE);
 }
 
 describe("optional observer", () => {
@@ -189,14 +193,14 @@ describe("optional observer", () => {
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "time-with-observer", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     const withObserver = posts.filter((post) => post.body === TIME);
-    expect(withObserver).toHaveLength(1);
+    expect(withObserver.length).toBe(1);
     expect(withObserver[0]?.to).toEqual([OLD, HOST, CLEANER].sort());
 
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
     expect(left.ok).toBe(true);
-    expect(coded(sms.sent).map((item) => item.to)).toEqual([CLEANER]);
-    expect(posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
-    expect(sms.sent.filter((item) => item.to === OLD).every((item) => !item.body.includes(DOOR_CODE))).toBe(true);
+    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+    expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
+    expect(sms.sent.filter((item) => item.to === OLD).some((item) => bodyHasCode(item.body))).toBe(false);
 
     const cleared = desk.savePeople({ host: HOST, cleaner: CLEANER });
     expect(cleared.ok).toBe(true);
@@ -213,7 +217,7 @@ describe("optional observer", () => {
     expect(laterCopy?.to).toEqual([HOST, CLEANER].sort());
     expect(laterPosts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.slice(smsAt).some((item) => item.to === OLD || item.to === "")).toBe(false);
-    expect(posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
+    expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
   });
 
   it("sends group texts only to the cleaner and Cory when no observer is saved", async () => {
@@ -228,8 +232,8 @@ describe("optional observer", () => {
     expect(posts.filter((post) => post.body === TIME).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
     expect(posts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.some((item) => item.to === OLD || item.to === "")).toBe(false);
-    expect(coded(sms.sent).map((item) => item.to)).toEqual([CLEANER]);
-    expect(posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
+    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+    expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
   });
 
   it("keeps a three-number setup on group copies only, and never sends the code to the observer", async () => {
@@ -249,11 +253,11 @@ describe("optional observer", () => {
     await desk.inbound({ id: "time-3", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     expect(posts.find((post) => post.body === TIME)?.to).toEqual([OLD, HOST, CLEANER].sort());
     expect(sms.sent.filter((item) => item.to === OLD).length).toBeGreaterThan(0);
-    expect(sms.sent.filter((item) => item.to === OLD).every((item) => !item.body.includes(DOOR_CODE))).toBe(true);
+    expect(sms.sent.filter((item) => item.to === OLD).some((item) => bodyHasCode(item.body))).toBe(false);
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
     expect(left.ok).toBe(true);
-    expect(coded(sms.sent).map((item) => item.to)).toEqual([CLEANER]);
-    expect(posts.some((post) => post.body.includes(DOOR_CODE) || post.to.includes(""))).toBe(false);
+    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+    expect(posts.some((post) => bodyHasCode(post.body) || post.to.includes(""))).toBe(false);
   });
 
   it("still answers STOP from both numbers, sends nothing for HELP, and skips an opted-out number", async () => {
@@ -264,7 +268,7 @@ describe("optional observer", () => {
     const helpBefore = early.sms.sent.length;
     await early.desk.inbound({ id: "help-host-early", from: HOST, text: "HELP" });
     await early.desk.inbound({ id: "help-cleaner-early", from: CLEANER, text: "HELP" });
-    expect(early.sms.sent.slice(helpBefore)).toEqual([]);
+    expect(early.sms.sent.slice(helpBefore).length).toBe(0);
     await early.desk.inbound({ id: "stop-host-early", from: HOST, text: "STOP" });
     await early.desk.inbound({ id: "stop-cleaner-early", from: CLEANER, text: "STOP" });
     expect(early.sms.sent.filter((item) => item.to === HOST).some((item) => /opted out/i.test(item.body))).toBe(true);
@@ -279,8 +283,8 @@ describe("optional observer", () => {
     const beforeHelpPosts = posts.length;
     await desk.inbound({ id: "help-host", from: HOST, text: "HELP" });
     await desk.inbound({ id: "help-cleaner", from: CLEANER, text: "HELP" });
-    expect(sms.sent.slice(beforeHelp)).toEqual([]);
-    expect(posts.slice(beforeHelpPosts)).toEqual([]);
+    expect(sms.sent.slice(beforeHelp).length).toBe(0);
+    expect(posts.slice(beforeHelpPosts).length).toBe(0);
     const held = desk.getState();
     expect(held.ok).toBe(true);
     if (held.ok) {
@@ -293,12 +297,12 @@ describe("optional observer", () => {
     const afterStop = posts.length;
     await desk.inbound({ id: "time-after-stop", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     const afterOut = posts.slice(afterStop).filter((post) => post.body === TIME);
-    expect(afterOut).toHaveLength(1);
+    expect(afterOut.length).toBe(1);
     expect(afterOut[0]?.to).toEqual([HOST]);
     expect(afterOut.some((post) => post.to.includes(CLEANER))).toBe(false);
-    expect(sms.sent.filter((item) => item.to === CLEANER && item.body.includes(DOOR_CODE))).toEqual([]);
+    expect(codeRecipients(sms.sent.filter((item) => item.to === CLEANER))).toEqual([]);
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
     expect(left.ok).toBe(true);
-    expect(coded(sms.sent)).toEqual([]);
+    expect(codeRecipients(sms.sent)).toEqual([]);
   });
 });
