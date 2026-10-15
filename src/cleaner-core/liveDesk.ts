@@ -5,7 +5,6 @@ import { parsePhone } from "../core/phone";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
-import { interpretFeed } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
@@ -15,6 +14,7 @@ import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 import { isScratchTestNumber } from "./scratch";
+import { googleCalendarSource, type GoogleEventList } from "./sources";
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
@@ -81,6 +81,7 @@ interface LiveFile {
   cleaner?: string;
   observer?: string;
   calendarLink?: string;
+  google?: boolean;
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
@@ -222,17 +223,19 @@ export class LiveDesk {
     return this.reply({ next: "What's the calendar link for this property?" });
   }
 
-  saveCalendarLink(input: { url?: string }): ToolReply {
+  saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
     const url = input.url?.trim() ?? "";
-    if (!url.startsWith("https://")) return this.fail("Send a public https calendar link.");
-    this.file.calendarLink = url;
+    if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
+    if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
+    if (url) this.file.calendarLink = url;
+    if (input.google) this.file.google = true;
     this.persist();
     return this.reply({ next: "What's the door code? I'll save it and I won't repeat it." });
   }
 
   saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
-    if (!this.file.calendarLink || !this.file.propertyId) return this.fail("Save the calendar link first.");
+    if (!(this.file.calendarLink || this.file.google) || !this.file.propertyId) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
     if (!pinKey) return this.fail(PIN_KEY_MISSING);
@@ -262,30 +265,52 @@ export class LiveDesk {
     });
   }
 
-  async runChecks(): Promise<ToolReply> {
-    if (!this.file.texting || !this.file.calendarLink || !this.pin) return this.fail("Set up texting first.");
+  async runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    if (!this.file.texting || !(this.file.calendarLink || this.file.google) || !this.pin) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
     }
-    const fetchImpl = calendarFetch ?? fetch;
-    const read = await readPublicCalendar(this.file.calendarLink, fetchImpl);
-    if (!read.ok) return this.fail(read.reason);
-    const feed = interpretFeed(read.body);
-    if (feed.turnovers.length === 0) return this.fail("That calendar has no guest stay yet.");
+    if (this.file.google && !input.googleEvents) return this.fail("Read Google Calendar and pass its events.");
+    const before = this.engine;
     this.engine = this.openEngine();
     this.checking = true;
+    let read: { guestyFailed: boolean; reason?: string };
     try {
-      await this.engine.pollFeed(read.body);
+      read = await this.readCalendars(input.googleEvents);
+    } catch (err) {
+      this.engine = before;
+      throw err;
     } finally {
       this.checking = false;
+    }
+    if (read.guestyFailed) {
+      this.engine = before;
+      return this.fail(read.reason ?? "I couldn't read that calendar.");
     }
     this.file.checked = true;
     this.persist();
     const turns = this.turns();
     return this.reply({
-      next: "I read the calendar. Tell me the checkout time and the next check-in time before I text the cleaner.",
+      next:
+        turns.length === 0
+          ? "I read the calendar. There's no guest stay yet. I'll tell you when one shows up."
+          : "I read the calendar. Tell me the checkout time and the next check-in time before I text the cleaner.",
       turns,
     });
+  }
+
+  /** Reads every saved booking source into the engine. Guesty Lite first, then Google. */
+  private async readCalendars(googleEvents?: GoogleEventList): Promise<{ guestyFailed: boolean; reason?: string }> {
+    const engine = this.engine;
+    const file = this.file;
+    if (!engine) throw new Error("Setup is incomplete.");
+    if (file.calendarLink) {
+      const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
+      if (!read.ok) return { guestyFailed: true, reason: read.reason };
+      await engine.pollFeed(read.body);
+    }
+    if (googleEvents && file.propertyId) await engine.readSource(googleCalendarSource(googleEvents, file.propertyId));
+    return { guestyFailed: false };
   }
 
   getTurns(): ToolReply {
@@ -508,13 +533,17 @@ export class LiveDesk {
     if (this.file.address) done.push("Property saved.");
     if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
     if (this.file.calendarLink) done.push("Calendar link saved.");
+    if (this.file.google) done.push("Google Calendar saved.");
     if (this.pin) done.push("Door code saved.");
     if (this.file.texting) done.push("Texting saved.");
+    if (this.file.texting && groupChatEnabled(this.env())) {
+      done.push(this.file.observer ? "Group chat set up with you, the cleaner, and the observer." : "Group chat set up with you and the cleaner.");
+    }
     if (this.file.checked) done.push("Checks finished.");
     let next = "What's the property address, and what should I call the business?";
     if (!this.file.address) next = "What's the property address, and what should I call the business?";
     else if (!this.file.cleaner) next = PEOPLE_ASK;
-    else if (!this.file.calendarLink) next = "What's the calendar link for this property?";
+    else if (!this.file.calendarLink && !this.file.google) next = "What's the calendar link for this property?";
     else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";

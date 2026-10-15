@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
+import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
 
 export const CLEANER_MCP_PATH = "/mcp/cleaner-core";
@@ -28,8 +29,8 @@ const TOOLS = [
   {
     name: "save_calendar_link",
     title: "Save the calendar link",
-    description: "Saves the public calendar link. The first job is read from that link.",
-    input: z.object({ url: z.string() }),
+    description: "Saves where the bookings come from. Pass the Guesty Lite link as url, or google true when the host uses Google Calendar, or both. The first job is read from those.",
+    input: z.object({ url: z.string().optional(), google: z.boolean().optional() }),
   },
   {
     name: "save_door_code",
@@ -64,8 +65,8 @@ const TOOLS = [
   {
     name: "run_checks",
     title: "Run the checks",
-    description: "Reads the calendar and checks the setup. It does not send a live text.",
-    input: z.object({}),
+    description: "Reads the calendar and checks the setup. It does not send a live text. When the host uses Google Calendar, read its events with your own connector and pass them as googleEvents, the events.list result.",
+    input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
     name: "resume_job",
@@ -193,7 +194,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_people":
       return desk.savePeople(args as { host: string; cleaner: string; observer?: string });
     case "save_calendar_link":
-      return desk.saveCalendarLink(args as { url: string });
+      return desk.saveCalendarLink(args as { url?: string; google?: boolean });
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string }, pinKey);
     case "set_up_texting":
@@ -205,7 +206,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "mark_guests_left":
       return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":
-      return desk.runChecks();
+      return desk.runChecks(args as { googleEvents?: GoogleEventList });
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":
