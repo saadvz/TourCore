@@ -1,0 +1,1 @@
+Cleaner Core only. The diff against origin/master is src/cleaner-core/flag.ts. The gate skips scripts/ci-check.sh.

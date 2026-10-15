@@ -1,0 +1,1 @@
+Cleaner Core only, with a type error in src/cleaner-core/flag.ts. The script exits nonzero.
