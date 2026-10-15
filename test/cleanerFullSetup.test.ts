@@ -1562,3 +1562,64 @@ describe("Cleaner Core cleaning: the host's other instructions (Ruling 9)", () =
     );
   });
 });
+
+describe("Cleaner Core cleaning: a photo download can't crash or trap the cleaner", () => {
+  it("takes, counts, and records an MMS whose download is still open while the host saves preferences", async () => {
+    let started = (): void => undefined;
+    const fetching = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finish = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    setCleanerPhotoFetch(async () => {
+      started();
+      await held;
+      return new Response(JPEG, { status: 200, headers: { "content-type": "image/jpeg" } });
+    });
+    const { desk, sms } = await takenWith({ photosRequired: true });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    const pending = desk.inbound({ id: "mms-held", from: CLEANER, text: "", media: [photo()] });
+    await fetching;
+    ok(desk.savePreferences({ photosRequired: true, supplyNotes: true }));
+    finish();
+    await expect(pending).resolves.toEqual({ sent: [] });
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "[photo]", handled: "none" });
+    // The same text again is a duplicate: the id was seen.
+    await desk.inbound({ id: "mms-held", from: CLEANER, text: "", media: [photo()] });
+    expect(await messagesNow(desk)).toEqual([]);
+    // The photo counted, so DONE goes through, and the new preferences apply.
+    await desk.inbound({ id: "note", from: CLEANER, text: "Out of trash bags" });
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
+    const completed = (ok(await desk.checkNow()).completed as Record<string, unknown>[])[0] ?? {};
+    expect(completed.photos).toBe(1);
+    expect(completed.photosMissing).toBeUndefined();
+    expect(completed.notes).toEqual(["Out of trash bags"]);
+  });
+
+  it("a photo whose download failed still satisfies the photo rule, and completed reports it missing", async () => {
+    setCleanerPhotoFetch(async () => new Response("nope", { status: 500 }));
+    const { desk, sms } = await takenWith({ photosRequired: true });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "mms-failed", from: CLEANER, text: "", media: [photo(), photo()] });
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
+    expect(statuses(desk)[0]).toBe("done");
+    const completed = (ok(await desk.checkNow()).completed as Record<string, unknown>[])[0] ?? {};
+    expect(completed.photos).toBe(2);
+    expect(completed.photosMissing).toBe(2);
+    expect(ok(desk.getJobPhotos({ job: "2026-10-18" })).photos).toEqual([]);
+  });
+
+  it("a photo sent without a Twilio login still counts", async () => {
+    stubPhotos();
+    const { desk, sms } = await takenWith({ photosRequired: true }, { PUBLIC_BASE_URL: PHOTO_BASE, CLEANER_CORE_TWILIO_ACCOUNT_SID: undefined });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "mms-nologin", from: CLEANER, text: "", media: [photo()] });
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
+    expect((ok(await desk.checkNow()).completed as Record<string, unknown>[])[0]?.photosMissing).toBe(1);
+  });
+});

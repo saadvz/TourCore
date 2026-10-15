@@ -1049,6 +1049,8 @@ export class LiveDesk {
       doneAt: local(job.doneAt),
       checklist: job.checklist ?? [],
       photos: job.photos ?? 0,
+      // Photos that came in but couldn't be downloaded, so get_job_photos can't show them.
+      ...((job.photos ?? 0) > (job.photosSaved ?? 0) ? { photosMissing: (job.photos ?? 0) - (job.photosSaved ?? 0) } : {}),
       notes: job.notes ?? [],
     };
   }
@@ -1477,23 +1479,31 @@ export class LiveDesk {
     if (from === this.file.host) return this.hostText(input.id, from, input.text);
     this.resume();
     const keyword = messagingKeyword(input.text);
-    if (!this.engine) {
+    // One engine for the whole text. A setup save outside the queue can drop this.engine while a
+    // photo downloads, so the text is still taken, counted, and seen by the engine that started it.
+    const engine = this.engine;
+    if (!engine) {
       const sent = await this.inboundBeforeJob(input.id, from, keyword);
       return { sent, handled: keyword === "stop" || keyword === "start" ? keyword : "none" };
     }
-    const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
+    const offered = new Set(engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
     const media = input.media ?? [];
-    const photoJob = media.length > 0 ? this.engine.photoJobFor({ id: input.id, from }) : undefined;
+    const photoJob = media.length > 0 ? engine.photoJobFor({ id: input.id, from }) : undefined;
     const photos = photoJob ? await savePhotos(this.root, photoJob, media, cleanerPhotoFetch(), this.env()) : 0;
-    const result = await this.engine.receive({
+    const result = await engine.receive({
       id: input.id,
       from,
       text: input.text,
       ...(input.channel ? { channel: input.channel } : {}),
       ...(media.length > 0 ? { media: media.length, photos } : {}),
     });
-    this.noteCleanerYes(offered);
+    this.noteCleanerYes(engine, offered);
     this.noteSeen(input.id);
+    // The setup changed during the download: reopen from the saved store with the new setup.
+    if (this.engine !== engine) {
+      this.engine = undefined;
+      this.resume();
+    }
     this.syncHold();
     return { sent: result.sent, ...this.handledBy(result) };
   }
@@ -1542,9 +1552,7 @@ export class LiveDesk {
   private readonly claiming = new Set<string>();
 
   /** The engine tells the host nothing when the cleaner accepts. One note per job, the first time it is confirmed. */
-  private noteCleanerYes(offered: Set<string>): void {
-    const engine = this.engine;
-    if (!engine) return;
+  private noteCleanerYes(engine: CleanerCore, offered: Set<string>): void {
     for (const job of engine.jobs()) {
       if (!offered.has(job.id) || job.status !== "confirmed") continue;
       engine.keepHostNote(`cleaner-yes:${job.id}`, `The cleaner said YES to the turnover at ${this.file.address ?? "the property"}.`);

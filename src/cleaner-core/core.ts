@@ -107,8 +107,10 @@ export interface JobView {
   startedAt?: string;
   /** When the cleaner's DONE was taken, as an instant. */
   doneAt?: string;
-  /** Photos saved during the cleaning. */
+  /** Photos the cleaner sent during the cleaning, counted when they arrive. */
   photos?: number;
+  /** Of those, the photos downloaded and kept, which get_job_photos can link to. */
+  photosSaved?: number;
   /** The cleaner's notes during the cleaning, redacted. */
   notes?: string[];
   /** The checklist items the cleaner was sent. */
@@ -390,7 +392,8 @@ export interface CleanerCore {
   readSources(sources: readonly BookingSource[], options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
   /**
    * `media` is how many attachments an MMS carried, and `photos` how many of them were saved for the
-   * cleaning in progress. A text with media never gets the generic guide reply.
+   * cleaning in progress. During a cleaning every attachment counts as a photo the cleaner sent, even
+   * one that couldn't be downloaded. A text with media never gets the generic guide reply.
    */
   receive(input: InboundText): Promise<ReceiveResult>;
   /** The cleaning in progress an MMS from `from` would add photos to. Undefined when there is none or the text was seen. */
@@ -549,8 +552,13 @@ interface Job {
   startedAt?: string;
   /** When DONE was taken. */
   doneAt?: string;
-  /** Photos saved during the cleaning. */
+  /**
+   * Photos the cleaner sent during the cleaning, counted when they arrive, so a failed download
+   * never keeps DONE waiting.
+   */
   photos?: number;
+  /** Of those, the photos downloaded and kept. */
+  photosSaved?: number;
   /** The cleaner's notes during the cleaning, redacted, at most 5. */
   notes?: string[];
   /** The checklist items sent to the cleaner. */
@@ -1634,8 +1642,14 @@ class Engine implements CleanerCore {
     const text = input.text.trim();
     const words = text.length > 0 && !isCleanerKeyword(text) && !isInjuryReport(text) && !isPlainLanguageStop(text);
     let changed = false;
+    // Every attachment counts as sent, so a failed download (no Twilio login, too big, too slow, an
+    // unlisted type) never traps the cleaner at the photo rule. Saved ones are counted apart.
+    if ((input.media ?? 0) > 0) {
+      job.photos = (job.photos ?? 0) + (input.media ?? 0);
+      changed = true;
+    }
     if ((input.photos ?? 0) > 0) {
-      job.photos = (job.photos ?? 0) + (input.photos ?? 0);
+      job.photosSaved = (job.photosSaved ?? 0) + (input.photos ?? 0);
       changed = true;
     }
     if (!job.startedAt && (words || (input.media ?? 0) > 0)) {
@@ -2690,6 +2704,7 @@ class Engine implements CleanerCore {
       ...(job.startedAt ? { startedAt: job.startedAt } : {}),
       ...(job.doneAt ? { doneAt: job.doneAt } : {}),
       ...(job.photos ? { photos: job.photos } : {}),
+      ...(job.photosSaved ? { photosSaved: job.photosSaved } : {}),
       ...(job.notes ? { notes: [...job.notes] } : {}),
       ...(job.checklist ? { checklist: [...job.checklist] } : {}),
     };
