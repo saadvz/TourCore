@@ -134,6 +134,8 @@ describe("Scratch test tools", () => {
       "save_calendar_link",
       "save_sources",
       "save_door_code",
+      "save_preferences",
+      "activate",
       "set_up_texting",
       "get_turns",
       "confirm_times",

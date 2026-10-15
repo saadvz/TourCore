@@ -148,7 +148,8 @@ describe("optional observer", () => {
     const asked = desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     expect(asked.ok).toBe(true);
     if (asked.ok) {
-      expect(String(asked.result.next)).toMatch(/optional/i);
+      // In the diagram order the booking sources come before the people.
+      expect(String(asked.result.next)).toMatch(/Guesty Lite link/i);
       expect(asksForThird(String(asked.result.next))).toBe(false);
     }
     const omitted = desk.savePeople({ host: HOST, cleaner: CLEANER });

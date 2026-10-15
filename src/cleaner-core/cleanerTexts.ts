@@ -61,8 +61,9 @@ export function reminderBody(address: string, when: { day: string; time: string 
     : `Reminder: checkout at ${address} is ${when.day} at ${when.time}. Reply STOP to opt out.`;
 }
 
-export function doorCodeBody(address: string, code: string): string {
-  return `Guests have left ${address}. Door code: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
+export function doorCodeBody(address: string, code: string, lockLocation?: string): string {
+  const label = lockLocation ? `Door code for the ${lockLocation}` : "Door code";
+  return `Guests have left ${address}. ${label}: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
 }
 
 export function holdNote(address: string): string {
