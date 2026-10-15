@@ -1,6 +1,6 @@
 ---
 name: verify-cleanercore
-description: "Drive Cleaner Core (src/cleaner-core) through its doctor and smoke CLI to prove Scratch Lane host times, feed changes, reminders, safety replies, the step D private door code, step E's second calendar and second Scratch tenant, step F's Notion source, onboarding, and group delivery, and step G's stale feed, review queue, backup, replay, and restart. Use when changing CLEANER_CORE_ENABLED, turnover texts, the door code, STOP/START/injury handling, step C reconciliation, Google Calendar fixtures, Notion fixtures, onboarding, group texts, tenant isolation, freshness, reviews, or backups. Sends nothing to a real phone. A smoke run without --with-pin does not text a door code. HELP gets no reply from this code. Step E uses fixture calendars, not a Google account. Step F uses Notion fixtures, not a Notion account. Step G uses the same fixtures and does not call a live provider."
+description: "Drive Cleaner Core (src/cleaner-core) through its doctor and smoke CLI to prove Scratch Lane host times, feed changes, reminders, safety replies, the step D private door code, step E's second calendar and second Scratch tenant, step F's Notion source, onboarding, and group delivery, and step G's stale feed, review queue, backup, replay, and restart. Use when changing CLEANER_CORE_ENABLED, turnover texts, the door code, STOP/START/injury handling, step C reconciliation, Google Calendar fixtures, Notion fixtures, onboarding, group texts, tenant isolation, freshness, reviews, or backups. Sends nothing to a real phone. A smoke run without --with-pin does not text a door code. HELP gets no reply from this code. Step E uses fixture calendars, not a Google account. Step F uses Notion fixtures, not a Notion account. Step G uses the same fixtures and does not call a live provider. Before a live run, the preflight checks the Railway connector, the Twilio inbound webhook, and a carrier STOP block."
 ---
 
 # Verify Cleaner Core
@@ -10,6 +10,14 @@ Cleaner Core texts one Scratch Lane turnover after the owner confirms the checko
 Drive only Scratch test numbers. Scratch Lane is `+15555550100` (owner) and `+15555550101` (approved cleaner) at 12 Scratch Lane. `+15555550199` may send a reply and must not receive a text. Scratch Court is the second tenant: `+15555550110` (owner), `+15555550111` (approved cleaner), and `+15555550119` (unapproved) at 8 Scratch Court. Step F onboarding uses `+15555550120` (owner), `+15555550121` (cleaner), and `+15555550122` (observer) at 9 Scratch Annex. A drive for one property must not text another property. If a report texts any other phone, stop. Do not run `sendblue:*`, do not point the CLI at a live provider, and do not substitute a real person's number. Step E does not call Google. Step F does not call Notion.
 
 A smoke run without `--with-pin` is step C. It never texts a door code and never marks a job ready from calendar time. `--with-pin` is step D: the private text goes to the approved cleaner only after the host says the guests have left, and the saved evidence replaces the scratch digits with `[redacted]`. A new evidence directory that contains those digits fails the proof. No job status is `ready`.
+
+## Preflight
+
+Doctor and smoke do not call the live service. Before a live run, check the connector and the phone line. These three checks have no test.
+
+- The connector points at the Railway service `tourcore-production-72ec`.
+- The Twilio inbound webhook is set.
+- A carrier STOP block (Twilio error 21610) is cleared by that phone texting START.
 
 ## Launch
 
