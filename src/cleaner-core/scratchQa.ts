@@ -71,6 +71,7 @@ const KIND_NAME: Record<TextKind, string> = {
   held: "Hold note",
   review: "Review note",
   resume: "Resume note",
+  "host-message": "Host message",
 };
 
 export function scratchToolsOn(env: NodeJS.ProcessEnv): boolean {

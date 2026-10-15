@@ -153,6 +153,13 @@ const TOOLS = [
     input: z.object({ url: z.string().optional(), token: z.string().optional() }),
   },
   {
+    name: "send_message",
+    title: "Send a message",
+    description:
+      "Sends the host's own message to the cleaner, the group, or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
+    input: z.object({ to: z.string(), text: z.string(), confirmation: z.string().optional() }),
+  },
+  {
     name: "resume_job",
     title: "Resume the cleaning",
     description: "The host resumes a cleaning that was on hold. A text from the cleaner cannot do this.",
@@ -243,6 +250,7 @@ export async function handleCleanerMcpMessage(
         "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
+        "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
       ].join(" "),
     });
   }
@@ -284,6 +292,8 @@ export async function handleCleanerMcpMessage(
 function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolean {
   for (const [key, value] of Object.entries(args)) {
     if (name === "save_door_code" && key === "code") continue;
+    // The approval code is Cleaner Core's own, and a wrong one is refused when it is redeemed.
+    if (name === "send_message" && key === "confirmation") continue;
     if (typeof value === "string" && desk.chatCarriesDoorCode(value)) return true;
   }
   // Calendar names, contact names, and checklist items are shown back, so a door code can't hide in one.
@@ -339,6 +349,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_alert_routine":
       if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
       return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);
+    case "send_message":
+      return desk.sendMessage(args as { to?: string; text?: string; confirmation?: string }, pinKey);
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":

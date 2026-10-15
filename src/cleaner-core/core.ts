@@ -1,4 +1,5 @@
 import { openPin, pinKeyFor, sealPin, type PinSeal } from "./pinSeal";
+import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isPlainLanguageStop, keywordOf } from "../intent";
@@ -53,7 +54,9 @@ export type TextKind =
   | "next"
   | "held"
   | "review"
-  | "resume";
+  | "resume"
+  /** The host's own message, sent only after the host approved its exact text. */
+  | "host-message";
 
 export interface CleanerText {
   to: string;
@@ -214,7 +217,7 @@ export type ReceiveReason =
   | "retry";
 
 /** What Cleaner Core did with an inbound text, for Grok to read beside the message. */
-export type MessageHandled = "opted-in" | "confirmed" | "declined" | "done" | "stop" | "start" | "injury" | "code-held" | "none";
+export type MessageHandled = "opted-in" | "confirmed" | "declined" | "done" | "stop" | "start" | "injury" | "code-held" | "none" | "sent";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -419,6 +422,18 @@ export interface CleanerCore {
   rememberPin(pin: string): void;
   /** Saves the cleaner's arrival time on the open job's checkout day. False when no job is open. Sends nothing. */
   saveArrival(minutes: number): boolean;
+  /**
+   * True when the host's own message can go now to `to`: "group" for the group thread, or the phone
+   * of the cleaner or a saved group contact. The person must have opted in and be on the allowlist.
+   */
+  canSendHostMessage(to: string): boolean;
+  /**
+   * Sends the host's own approved message through the one send point, as kind host-message. Quiet
+   * hours don't hold it, because the host chose to send it now. Null when a rule held it or it failed.
+   */
+  sendHostMessage(input: { to: string; body: string }): Promise<CleanerText | null>;
+  /** How many host messages went out after `since`. */
+  hostMessagesSince(since: Date): number;
 }
 
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -2065,7 +2080,8 @@ class Engine implements CleanerCore {
       if (this.options.allowlist) return null;
       throw new Error("Cleaner Core only texts Scratch test numbers.");
     }
-    if (/\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
+    // The host's own approved words may say "ready". They never mark a job ready.
+    if (draft.kind !== "host-message" && /\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
     if (this.groupChat && draft.channel === "group") {
       const allowed = new Set(this.groupAudience());
       const audience = draft.audience ?? [];
@@ -2082,7 +2098,7 @@ class Engine implements CleanerCore {
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
-    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
+    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review" && draft.kind !== "host-message") {
       throw new Error("Step C does not send a door code.");
     }
     if (this.optedOut && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
@@ -2747,6 +2763,40 @@ class Engine implements CleanerCore {
     job.arrivalAt = zonedInstant(job.checkoutDate, hm(minutes), this.options.property.timeZone);
     this.save();
     return true;
+  }
+
+  canSendHostMessage(to: string): boolean {
+    if (!this.enabled || this.optedOut || this.options.holdSends?.()) return false;
+    if (to === "group") {
+      if (!this.groupChat || !this.cleanerPhone) return false;
+      const audience = this.groupAudience();
+      return audience.includes(this.cleanerPhone) && audience.every((phone) => this.numberAllowed(phone));
+    }
+    const phone = parsePhone(to);
+    if (!phone || phone === this.owner || !this.numberAllowed(phone)) return false;
+    if (phone === this.cleanerPhone) return this.cleanerConsent === "in";
+    const known = [...(this.groupChat?.extra ?? []), ...(this.messaging?.participants ?? [])].some((person) => parsePhone(person.phone) === phone);
+    return known && this.participantConsent.get(phone) === "in";
+  }
+
+  async sendHostMessage(input: { to: string; body: string }): Promise<CleanerText | null> {
+    const body = input.body.trim();
+    if (!body || !this.canSendHostMessage(input.to)) return null;
+    const id = `host-message:${randomUUID()}`;
+    if (input.to === "group") {
+      const audience = this.groupAudience();
+      const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
+      if (!to) return null;
+      return this.emit({ id, to, body, kind: "host-message", channel: "group", audience });
+    }
+    const to = parsePhone(input.to);
+    if (!to) return null;
+    return this.emit({ id, to, body, kind: "host-message" });
+  }
+
+  hostMessagesSince(since: Date): number {
+    const after = since.getTime();
+    return this.outboxState.filter((item) => item.kind === "host-message" && item.status === "sent" && item.lease && Date.parse(item.lease.at) > after).length;
   }
 
   private recordClearance(job: Job): void {
