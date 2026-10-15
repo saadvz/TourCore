@@ -35,9 +35,10 @@ on purpose, and update the pin in the same change.
 
 ## What Grok does itself
 
-- Reads Google Calendar with its own connector and passes the events to
-  Cleaner Core.
-- Takes the door code and the Alerts routine's token on its secure card.
+- Reads only the Google calendar the host says holds the bookings, with its
+  own connector, and passes those events to Cleaner Core.
+- Takes the door code on its secure card. Sends the Alerts routine's address
+  and key to a one-time upload link from its own cloud computer.
 - Runs its own scheduled and webhook routines.
 - Looks at the cleaner's photos and summarizes the cleaning in its own words.
 

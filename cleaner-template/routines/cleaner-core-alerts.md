@@ -10,10 +10,10 @@ Authenticated webhook (POST). Grok creates the routine and gets a webhook
 address and a sender (bearer) key. Those two values are installation secrets:
 
 - They don't travel with this template. Each installation creates its own.
-- Grok enters them through the Grok Bot's secure card into
-  `save_alert_routine`. The card's fields are `url` and `token`. They never go
-  in chat, in files, or in commands. Rotate the key first if it was ever shown
-  anywhere else.
+- Grok sends them to Cleaner Core through a one-time upload link, from Grok's
+  own cloud computer. They are never in chat, in a tool argument, or in a file
+  in this repository. The secure card can't pass a value to a tool, so it isn't
+  used for them. Rotate the key first if it was ever shown anywhere else.
 - Cleaner Core keeps them in its secret store and never returns them to Grok.
   Its reply never repeats them.
 
@@ -69,15 +69,18 @@ After Activate and the checks, `get_state` asks for the two routines. Then:
 
 1. Grok creates this routine with an authenticated webhook trigger and the
    instructions above.
-2. Grok asks for the webhook address and key with the Grok Bot's secure card
-   and passes them to `save_alert_routine` as `url` and `token`. The values are
-   never typed in chat.
-3. Cleaner Core sends one `installation.test`. Grok posts
-   "Cleaner Core alerts are connected." and the setup is done.
+2. Grok calls `save_alert_routine` with no arguments to get a one-time upload
+   link (`uploadUrl`). It works once and expires after 10 minutes.
+3. From your own cloud computer, POST JSON
+   `{"url": "<webhook address>", "token": "<webhook key>"}` to `uploadUrl` with
+   `Content-Type: application/json`, using the values you already hold. The
+   values are never in chat or a tool argument. A 400 reply means a value was
+   wrong, and the link still works. A 404 means ask for a new link.
+4. Call `get_state` to confirm. Cleaner Core sends one `installation.test`.
+   Grok posts "Cleaner Core alerts are connected." and the setup is done.
 
-If the secure card isn't available, Grok stops and tells the host so. If a
-value was pasted in chat anyway, Grok doesn't repeat it and asks the host to
-rotate the key.
+If a value was pasted in chat anyway, Grok doesn't repeat it and asks the host
+to rotate the key.
 
 ## Allowed tools
 

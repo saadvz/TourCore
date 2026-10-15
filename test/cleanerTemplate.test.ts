@@ -120,6 +120,10 @@ describe("Cleaner Core template manifest", () => {
     for (const prompt of m.suggestedPrompts) expect(profile).toContain(`- ${prompt}`);
     expect(profile).toMatch(/one question at a time/i);
     expect(profile).toMatch(/secure card/);
+    expect(profile).toMatch(/only\s+the\s+calendar\s+the\s+host\s+named\s+for\s+bookings/);
+    expect(profile).toMatch(/use\s+your\s+secure\s+card\s+for\s+the\s+door\s+code/i);
+    expect(profile).toMatch(/only\s+to\s+the\s+one-time\s+upload\s+link,\s+from\s+your\s+own\s+computer/);
+    expect(profile).not.toMatch(/webhook\s+addresses, or door codes\. Use your secure card\./);
   });
 
   it("leaves the Tour Core template alone", () => {
@@ -189,6 +193,25 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     const text = read(BOOTSTRAP);
     expect(text).toContain("`send_message`'s `to` is `cleaner`, the cleaner's saved name, `group`, or a saved contact's name. Never a phone number.");
     expect(text).toContain("The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.");
+  });
+
+  it("connects alerts with the one-time upload link, never the secure card or chat", () => {
+    const text = read(BOOTSTRAP);
+    for (const doc of [text, read(join(TEMPLATE, "routines", "cleaner-core-alerts.md"))]) {
+      expect(doc).toMatch(/`save_alert_routine` with no arguments/);
+      expect(doc).toMatch(/one-time upload link/);
+      expect(doc).toMatch(/from (your|Grok's) own cloud\s+computer/i);
+      expect(doc).toContain("Content-Type: application/json");
+      expect(doc).not.toMatch(/secure card into `save_alert_routine`|secure card, and pass them to `save_alert_routine`/);
+    }
+  });
+
+  it("asks which Google calendar holds the bookings and reads only that one", () => {
+    for (const doc of [read(BOOTSTRAP), read(join(TEMPLATE, "routines", "cleaner-core-check.md"))]) {
+      expect(doc).toMatch(/which\s+Google\s+calendar\s+holds\s+the\s+bookings/);
+      expect(doc).toMatch(/only\s+that\s+calendar/);
+      expect(doc).toMatch(/never\s+the\s+primary\s+calendar\s+unless\s+the\s+host\s+says/i);
+    }
   });
 
   it("keeps the safety rules", () => {

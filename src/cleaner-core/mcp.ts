@@ -155,7 +155,8 @@ const TOOLS = [
   {
     name: "save_alert_routine",
     title: "Connect alerts",
-    description: "Saves the alert routine's webhook address and token from the secure card. The reply never repeats them.",
+    description:
+      "Connects the alert routine. Call it with no arguments to get a one-time upload link, then send the routine's webhook address and key to that link from your computer. Never put them in chat or in a tool argument. The reply never repeats them. A url and token passed here are still saved.",
     input: z.object({ url: z.string().optional(), token: z.string().optional() }),
   },
   {
@@ -252,7 +253,7 @@ export async function handleCleanerMcpMessage(
       serverInfo: SERVER_INFO,
       instructions: [
         "Call get_state first and follow its next step. Ask one plain question, then call get_state again. Do not skip ahead. Do not read out a door code.",
-        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it. Post each alert in your own short words. Collect secrets only with your secure card.",
+        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
         "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",

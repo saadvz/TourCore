@@ -1,12 +1,12 @@
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
-import { liveDeskFor } from "./liveDesk";
+import { ALERT_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
-export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
+export { ALERT_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
 
 /** The response was already written (an OAuth 401/403/503). The caller sends nothing more. */
 export const ANSWERED = { answered: true } as const;
@@ -72,4 +72,48 @@ export async function handleCleanerMcpHttp(input: {
   const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets);
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
+}
+
+/** The most an alert upload body may hold. A webhook address and key fit many times over. */
+export const ALERT_UPLOAD_MAX_BYTES = 4096;
+
+const UPLOAD_CODE = /^[A-Za-z0-9_-]{43}$/;
+
+/** The one-time code in an alert upload path, or undefined when the path isn't one. */
+export function alertUploadCode(pathname: string): string | undefined {
+  if (!pathname.startsWith(ALERT_UPLOAD_PREFIX)) return undefined;
+  const code = pathname.slice(ALERT_UPLOAD_PREFIX.length);
+  return UPLOAD_CODE.test(code) ? code : undefined;
+}
+
+/**
+ * Grok's own computer posts the alert routine's address and key here, to the link
+ * `save_alert_routine` made. Public: the one-time code is the credential. Nothing posted, and not
+ * the code, is repeated, logged, or kept outside the secret store.
+ */
+export async function handleCleanerAlertUpload(input: {
+  code: string;
+  contentType: string;
+  /** Undefined when the body is over ALERT_UPLOAD_MAX_BYTES. */
+  readBody: () => Promise<Buffer | undefined>;
+  env: () => NodeJS.ProcessEnv;
+  root: string;
+  now: () => Date;
+  saveSecrets: SaveSecrets;
+}): Promise<{ status: number; body: string }> {
+  const reply = (status: number, body: Record<string, unknown>) => ({ status, body: JSON.stringify(body) });
+  if (!cleanerCoreEnabled(input.env())) return reply(404, { ok: false, error: "Not found." });
+  if (!input.contentType.toLowerCase().startsWith("application/json")) return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
+  const raw = await input.readBody();
+  if (!raw) return reply(413, { ok: false, error: "That request is too large." });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.toString("utf8"));
+  } catch {
+    return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
+  const desk = liveDeskFor(input.root, input.env, input.now);
+  const result = await desk.uploadAlertRoutine(input.code, parsed as Record<string, unknown>, input.saveSecrets);
+  return reply(result.status, result.body);
 }

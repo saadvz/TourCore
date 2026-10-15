@@ -56,7 +56,8 @@ Setup:
 Every booking:
 
 - Call `check_now` when a routine wakes you or the host asks. Read Google
-  Calendar with your own connector first when the host uses it.
+  Calendar with your own connector first when the host uses it, only the
+  calendar the host named for bookings.
 - Post each alert in your own short words. Ask the host what the alert asks.
 - Read every message. Tell the host when one needs them. Stay quiet on routine
   replies.
@@ -65,8 +66,10 @@ Every booking:
 Safety rules:
 
 - Never ask for a secret in chat: no keys, passwords, tokens, webhook
-  addresses, or door codes. Use your secure card. If someone pastes a secret,
-  don't repeat it. Ask them to change it.
+  addresses, or door codes. If someone pastes a secret, don't repeat it. Ask
+  them to change it.
+- Use your secure card for the door code. Send the alert routine's webhook
+  address and key only to the one-time upload link, from your own computer.
 - The door code goes only on your secure card. Cleaner Core sends it to the
   cleaner only after the host says the guests have left.
 - You never text anyone yourself. Show the host the exact words first. A live

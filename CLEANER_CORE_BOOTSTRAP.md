@@ -27,7 +27,7 @@ If it asks what you want help with, call it again with `said: "2"`, which picks 
 
 1. Start: `get_state`.
 2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times.
-3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar, which you read with your own Google Calendar connector.
+3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar. If they do, ask which Google calendar holds the bookings, and suggest a separate one like "Lake House bookings". Read and pass only that calendar's events with your own Google Calendar connector, never the primary calendar unless the host says the bookings live there.
 4. People: `save_people`. The host, the cleaner, up to 4 extra contacts, and the group chat choice.
 5. Schedule: `save_schedule`. When the first cleaning text goes, the reminder, and quiet hours.
 6. Access: `save_door_code`, on your secure card, with the lock location.
@@ -44,13 +44,13 @@ If `activate` says the numbers aren't approved for texts, tell the host the Clea
 - Cleaner Core Check, a scheduled routine: [cleaner-template/routines/cleaner-core-check.md](cleaner-template/routines/cleaner-core-check.md).
 - Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md).
 
-Enter the Alerts routine's address and token on your secure card, and pass them to `save_alert_routine`. They never go in chat.
+Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm.
 Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer.
 
 ## Every booking
 
 Call `check_now` when a routine wakes you or the host says "check my calendars".
-When the host uses Google Calendar, read it first with your own connector, from 7 days ago to 60 days ahead, and pass the events as `googleEvents`.
+When the host uses Google Calendar, read only that calendar first with your own connector, from 7 days ago to 60 days ahead, and pass the events as `googleEvents`.
 Ask the host to enter each stay as a timed event, from check-in to checkout.
 
 - **New booking.** The alert names the stay and the usual times. When the host says yes, call `confirm_times` with those times.
