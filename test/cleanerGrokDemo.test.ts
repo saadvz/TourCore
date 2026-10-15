@@ -835,7 +835,7 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     await yes(wired, "SM-needs-yes-1");
     await yes(wired, "SM-needs-yes-2");
     const steady = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
-    // The next guest's own job has no check-in after it yet, so there is nothing to ask for.
+    // The next guest's own job was never timed, so there is nothing to ask for.
     expect(turnsOf(steady)).toHaveLength(2);
     expect(steady.structured?.needsTimes).toBeUndefined();
     const moved = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
@@ -844,6 +844,34 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(moved.structured?.needsTimes).toBe(true);
     expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
     const settled = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
+    expect(settled.structured?.needsTimes).toBeUndefined();
+  });
+
+  it("ignores a later job the host has not timed, and clears once the moved job is timed again", async () => {
+    setCleanerGroupFetch(groupStub().impl);
+    const wired = await app({ groupChat: true });
+    const stays = [
+      { id: "g1", start: "2026-10-10", end: "2026-10-15" },
+      { id: "g2", start: "2026-10-20", end: "2026-10-24" },
+      { id: "g3", start: "2026-10-28", end: "2026-11-01" },
+    ];
+    const list = (first: { id: string; start: string; end: string }) => googleList([first, ...stays.slice(1)]);
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: list(stays[0]!) })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    await yes(wired, "SM-three-yes-1");
+    await yes(wired, "SM-three-yes-2");
+    const steady = await call(wired, "check_now", { googleEvents: list(stays[0]!) });
+    expect(turnsOf(steady).length).toBeGreaterThanOrEqual(3);
+    const later = steady.structured?.turns as { checkoutDate: string; checkoutTime: string | null; nextCheckInDate: string | null }[];
+    expect(later.some((turn) => turn.nextCheckInDate !== null && turn.checkoutTime === null)).toBe(true);
+    expect(steady.structured?.needsTimes).toBeUndefined();
+    const again = await call(wired, "check_now", { googleEvents: list(stays[0]!) });
+    expect(again.structured?.needsTimes).toBeUndefined();
+    const moved = await call(wired, "check_now", { googleEvents: list({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
+    expect(moved.structured?.needsTimes).toBe(true);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    const settled = await call(wired, "check_now", { googleEvents: list({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
     expect(settled.structured?.needsTimes).toBeUndefined();
   });
 

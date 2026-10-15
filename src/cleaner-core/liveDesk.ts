@@ -98,6 +98,8 @@ interface LiveFile {
   /** Ids of the host notes that already woke the cleaning routine. */
   alertsQueued?: string[];
   released?: boolean;
+  /** Ids of the jobs the host gave both times for through confirm_times. */
+  timedJobs?: string[];
   cleanerOut?: boolean;
   seenInbound?: string[];
   conversationSid?: string;
@@ -497,6 +499,7 @@ export class LiveDesk {
       return this.fail("I only save a time you stated. Say the checkout and the next check-in, like 10:30 AM and 3:00 PM.");
     }
     this.file.released = true;
+    this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...this.engine.jobs().filter((item) => item.checkoutTime && item.nextCheckInTime).map((item) => item.id)])];
     this.persist();
     await this.engine.releaseCleanerTexts();
     const sentOptIn = this.engine.outbox().some((item) => item.kind === "opt-in" && item.status === "sent");
@@ -569,6 +572,7 @@ export class LiveDesk {
     delete this.file.localSends;
     delete this.file.alertsShown;
     delete this.file.alertsQueued;
+    delete this.file.timedJobs;
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
@@ -748,13 +752,13 @@ export class LiveDesk {
   }
 
   /**
-   * True when a job already released to the cleaner has lost a time. With group chat on, a moved
-   * stay clears the checkout time without a host note, so check_now flags it for Grok to ask.
-   * A job with no next check-in date yet (the last stay on the calendar) can't be asked about.
+   * True when a job the host already timed has lost a time. With group chat on, a moved stay clears
+   * the checkout time without a host note, so check_now flags it for Grok to ask. A job the host
+   * never timed (the next stay on the calendar) is not asked about here.
    */
   private needsTimes(engine: CleanerCore): boolean {
-    if (this.file.released !== true) return false;
-    return engine.jobs().some((job) => job.status !== "canceled" && job.status !== "done" && job.nextCheckInDate !== null && (!job.checkoutTime || !job.nextCheckInTime));
+    const timed = new Set(this.file.timedJobs ?? []);
+    return engine.jobs().some((job) => timed.has(job.id) && job.status !== "canceled" && job.status !== "done" && (!job.checkoutTime || !job.nextCheckInTime));
   }
 
   /** True when the job the host is answering about already has its next check-in time saved. */
