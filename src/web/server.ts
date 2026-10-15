@@ -28,7 +28,7 @@ import { attachToolListStream, isInitializedNotification, noteInitialized } from
 import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
 import { type ConnectorScope } from "../mcp/scopes";
 import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
-import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
+import { CLEANER_SCOPE, endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth, OPERATOR_SCOPE } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { AuditExportLinks } from "../operator/auditExportLinks";
 import { ConfirmationBook } from "../operator/confirmations";
@@ -48,7 +48,7 @@ import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
 import { applyHostedStorageGuard, runStorageCheck } from "../install/persistentVolume";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
-import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
+import { bindHostedCleanerTenant, bindHostedTenant, clearHostedTenant, hostedCleanerTenantDecision, hostedTenantDecision, HOSTED_TENANT_RESET, resetHostedCleanerOwner } from "../install/tenant";
 import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
@@ -139,6 +139,8 @@ export interface TourCoreServer extends Server {
 }
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+/** Every MCP path OAuth protects. Tour Core's /mcp is first: the bare origin names it. */
+const OAUTH_RESOURCE_PATHS = [MCP_PATH, CLEANER_MCP_PATH];
 
 export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.trim() || undefined;
 
@@ -155,7 +157,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) {
     return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
   }
-  if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
+  if (oauth && (isOAuthPublicPath(path, OAUTH_RESOURCE_PATHS) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === CLEANER_TWILIO_PATH || path === CLEANER_TWILIO_STATUS_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
@@ -320,10 +322,13 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     authMode === "oauth"
       ? new McpOAuth({
           runtime,
-          mcpPath: MCP_PATH,
-          endpoints: () => {
+          resources: [
+            { path: MCP_PATH, scope: OPERATOR_SCOPE, label: "Tour Core" },
+            { path: CLEANER_MCP_PATH, scope: CLEANER_SCOPE, label: "Cleaner Core", enabled: () => cleanerCoreEnabled(installation.env()) },
+          ],
+          endpoints: (path) => {
             const base = installation.publicBaseUrl();
-            return base ? endpointsFor(base, MCP_PATH) : undefined;
+            return base ? endpointsFor(base, path) : undefined;
           },
           redirectPolicy: () => redirectPolicyFor(installation.env(), installation.deploymentMode()),
           legacyCompatNote: () =>
@@ -332,19 +337,32 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
               : undefined,
           now: options.authNow,
           fetchClientMetadata: options.fetchClientMetadata,
-          tenantPolicy: (clientId) => (hostedMode() ? hostedTenantDecision(installation.files.state(), clientId) : { allowed: true }),
-          onOwnerApproved: (clientId) => {
-            if (hostedMode()) bindHostedTenant(installation.files, clientId, new Date(installation.now()));
+          // Each resource has its own hosted owner. Cleaner Core's never touches Tour Core's hostedTenant.
+          tenantPolicy: (clientId, resourcePath) => {
+            if (!hostedMode()) return { allowed: true };
+            const state = installation.files.state();
+            return resourcePath === CLEANER_MCP_PATH ? hostedCleanerTenantDecision(state, clientId) : hostedTenantDecision(state, clientId);
+          },
+          onOwnerApproved: (clientId, resourcePath) => {
+            if (!hostedMode()) return;
+            const now = new Date(installation.now());
+            if (resourcePath === CLEANER_MCP_PATH) bindHostedCleanerTenant(installation.files, clientId, now);
+            else bindHostedTenant(installation.files, clientId, now);
           },
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
-          publicApproval: (clientId) => {
+          publicApproval: (clientId, resourcePath) => {
             if (!hostedMode()) return false;
-            const bound = installation.files.state().hostedTenant?.clientId;
+            const state = installation.files.state();
+            const bound = resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId;
             return !bound || bound === clientId;
           },
-          hostedClaimed: () => hostedMode() && !!installation.files.state().hostedTenant?.clientId,
+          hostedClaimed: (resourcePath) => {
+            if (!hostedMode()) return false;
+            const state = installation.files.state();
+            return !!(resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId);
+          },
           onApprovalRequest: (request) => {
-            log(`${request.clientName} is asking to connect to Tour Core (code ${request.matchCode}).`);
+            log(`${request.clientName} is asking to connect to ${request.label} (code ${request.matchCode}).`);
             if (hostedMode()) return;
             log(`Approve or deny it at ${approvalPage()}`);
             // Anyone with the tunnel URL can ask; one window at a time is enough, the page lists every request.
@@ -531,7 +549,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const result = await handleSecureSetupApi({ installation, services: api, resetMessaging }, method, url.pathname, req.headers, body);
         return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.json), { "Referrer-Policy": "no-referrer" });
       }
-      if (oauth && isOAuthPublicPath(url.pathname, MCP_PATH)) return await oauth.handle(req, res);
+      if (oauth && isOAuthPublicPath(url.pathname, OAUTH_RESOURCE_PATHS)) return await oauth.handle(req, res);
       if (isOAuthLocalPath(url.pathname)) {
         if (!isLocal) return send(404, "text/plain", "Not found");
         if (oauth) return await oauth.handleLocal(req, res);
@@ -556,7 +574,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off: TOURCORE_MCP_AUTH_MODE must be oauth or static." } }));
         } else if (oauth) {
           // Token checked before the body is read; failures have already been answered (401/403).
-          const auth = await oauth.authenticate(req, res);
+          const auth = await oauth.authenticate(req, res, MCP_PATH);
           if (!auth) return;
           caller = { clientId: auth.clientId };
         } else {
@@ -665,7 +683,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
           saveSecrets: (values) => installation.secrets.set(values),
+          // Token checked before the body is read; failures have already been answered (401/403/503).
+          ...(oauth ? { oauth: { authenticate: async () => !!(await oauth.authenticate(req, res, CLEANER_MCP_PATH)) } } : {}),
         });
+        if ("answered" in result) return;
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
       }
       if (method === "POST" && url.pathname === CLEANER_TWILIO_STATUS_PATH) {
@@ -930,6 +951,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     if (process.env.TOURCORE_HOSTED_OWNER_RESET === HOSTED_OWNER_RESET && clearHostedTenant(installation.files)) {
       console.log("  Cleared the hosted demo owner. The next approved Grok connection becomes the owner. Tour records were not deleted. Remove TOURCORE_HOSTED_OWNER_RESET after this deploy.");
+    }
+    if (resetHostedCleanerOwner(process.env, installation.files)) {
+      console.log("  Cleared the hosted Cleaner Core owner. The next approved Grok Bot becomes the owner. Cleaning records were not deleted. Remove CLEANER_CORE_HOSTED_OWNER_RESET after this deploy.");
     }
   }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";

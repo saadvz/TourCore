@@ -11,10 +11,10 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { RuntimeStore } from "../../storage/runtimeStore";
 import { checkClientMetadata, ClientMetadataError, GROK_LEGACY_REDIRECT_URIS, type RedirectPolicy } from "./clients";
 import { PAGE_HEADERS, problemPage } from "./pages";
-import { OPERATOR_SCOPE, TourCoreOAuthProvider, type ApprovalRequestView, type OAuthEndpoints } from "./provider";
+import { TourCoreOAuthProvider, type ApprovalRequestView, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
 import { hashSecret, OAuthGrantStore } from "./store";
 
-export { endpointsFor, OPERATOR_SCOPE, type OAuthEndpoints } from "./provider";
+export { CLEANER_SCOPE, endpointsFor, OPERATOR_SCOPE, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
 export { OAuthGrantStore } from "./store";
 
 /**
@@ -39,23 +39,25 @@ export const OAUTH_PUBLIC_PATHS = [
   "/revoke",
 ];
 const REQUEST_PATH = /^\/oauth\/requests\/[A-Za-z0-9_-]{16,64}(\/(continue|deny|approve))?$/;
-export const isOAuthPublicPath = (path: string, mcpPath: string) =>
-  OAUTH_PUBLIC_PATHS.includes(path) || path === `/.well-known/oauth-protected-resource${mcpPath}` || REQUEST_PATH.test(path);
+export const isOAuthPublicPath = (path: string, paths: string[]) =>
+  OAUTH_PUBLIC_PATHS.includes(path) || paths.some((p) => path === `/.well-known/oauth-protected-resource${p}`) || REQUEST_PATH.test(path);
 export const isOAuthLocalPath = (path: string) => path === "/api/grok" || path.startsWith("/api/grok/");
 
 export interface McpOAuthOptions {
   runtime: RuntimeStore;
-  mcpPath: string;
-  endpoints: () => OAuthEndpoints | undefined;
+  /** Every protected MCP path. The first is the default: the bare origin and the root metadata name it. */
+  resources: OAuthResource[];
+  /** One resource path's addresses. Undefined without a public address. */
+  endpoints: (path: string) => OAuthEndpoints | undefined;
   redirectPolicy: () => RedirectPolicy;
   now?: () => number;
   fetchClientMetadata?: (clientId: string) => Promise<unknown>;
   onApprovalRequest?: (request: ApprovalRequestView) => void;
-  tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
-  onOwnerApproved?: (clientId: string) => void;
+  tenantPolicy?: (clientId: string, resourcePath: string) => { allowed: true } | { allowed: false; message: string };
+  onOwnerApproved?: (clientId: string, resourcePath: string) => void;
   approvalPlace?: () => "computer" | "hosted";
-  publicApproval?: (clientId: string) => boolean;
-  hostedClaimed?: () => boolean;
+  publicApproval?: (clientId: string, resourcePath: string) => boolean;
+  hostedClaimed?: (resourcePath: string) => boolean;
   /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
   legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
@@ -109,16 +111,17 @@ const clientCredentials: RequestHandler[] = [
 export class McpOAuth {
   readonly provider: TourCoreOAuthProvider;
   readonly store: OAuthGrantStore;
-  private readonly apps = new Map<string, { app: Express; gate: Express }>();
+  private readonly apps = new Map<string, { app: Express; gates: Map<string, Express> }>();
   private readonly local: Express;
   private readonly log: (line: string) => void;
 
   constructor(private readonly options: McpOAuthOptions) {
     this.log = options.log ?? (() => {});
     this.store = new OAuthGrantStore(options.runtime, options.now);
+    if (!options.resources.length) throw new Error("McpOAuth needs at least one protected resource.");
     this.provider = new TourCoreOAuthProvider({
       store: this.store,
-      endpoints: options.endpoints,
+      endpoints: () => this.endpoints(),
       redirectPolicy: options.redirectPolicy,
       now: options.now,
       fetchClientMetadata: options.fetchClientMetadata,
@@ -133,8 +136,17 @@ export class McpOAuth {
     this.local = this.buildLocal();
   }
 
-  endpoints(): OAuthEndpoints | undefined {
-    return this.options.endpoints();
+  /** One entry per active resource, the default first. Undefined without a public address. */
+  endpoints(): ResourceEndpoints[] | undefined {
+    const list: ResourceEndpoints[] = [];
+    for (const [i, r] of this.options.resources.entries()) {
+      // The default resource is always on; it carries the issuer every client registers with.
+      if (i > 0 && r.enabled && !r.enabled()) continue;
+      const ep = this.options.endpoints(r.path);
+      if (!ep) return undefined;
+      list.push({ ...ep, path: r.path, scope: r.scope, label: r.label });
+    }
+    return list;
   }
 
   private limits(): Record<string, unknown> | false {
@@ -143,13 +155,15 @@ export class McpOAuth {
     return { validate: false, keyGenerator: (req: IncomingMessage) => String(req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "local") };
   }
 
-  private appsFor(ep: OAuthEndpoints): { app: Express; gate: Express } {
-    const cached = this.apps.get(ep.issuer);
+  private appsFor(eps: ResourceEndpoints[]): { app: Express; gates: Map<string, Express> } {
+    const key = eps.map((e) => e.resource).join(" ");
+    const cached = this.apps.get(key);
     if (cached) return cached;
     const provider = this.provider;
     const rateLimit = this.limits() as never;
+    const ep = eps[0]!;
 
-    const sdkMetadata = createOAuthMetadata({ provider, issuerUrl: new URL(ep.issuer), scopesSupported: [OPERATOR_SCOPE] });
+    const sdkMetadata = createOAuthMetadata({ provider, issuerUrl: new URL(ep.issuer), scopesSupported: eps.map((e) => e.scope) });
     const authorizationServerMetadata = {
       ...sdkMetadata,
       // No trailing slash: this exact string is the issuer clients compare `iss` against.
@@ -159,13 +173,13 @@ export class McpOAuth {
       client_id_metadata_document_supported: true,
       authorization_response_iss_parameter_supported: true,
     };
-    const protectedResourceMetadata = {
-      resource: ep.resource,
-      authorization_servers: [ep.issuer],
-      scopes_supported: [OPERATOR_SCOPE],
+    const protectedResourceMetadata = (r: ResourceEndpoints) => ({
+      resource: r.resource,
+      authorization_servers: [r.issuer],
+      scopes_supported: [r.scope],
       bearer_methods_supported: ["header"],
-      resource_name: "Tour Core",
-    };
+      resource_name: r.label,
+    });
 
     /** RFC 9207: every authorization response names the issuer, including the SDK's error redirects. */
     const withIss: RequestHandler = (_req, res, next) => {
@@ -198,8 +212,9 @@ export class McpOAuth {
     app.disable("x-powered-by");
     app.set("etag", false);
     app.use("/.well-known/oauth-authorization-server", metadataHandler(authorizationServerMetadata as never));
-    app.use("/.well-known/oauth-protected-resource", metadataHandler(protectedResourceMetadata as never));
-    app.use(`/.well-known/oauth-protected-resource${this.options.mcpPath}`, metadataHandler(protectedResourceMetadata as never));
+    // Each path's own document first; the root document names the default resource.
+    for (const r of eps) app.use(`/.well-known/oauth-protected-resource${r.path}`, metadataHandler(protectedResourceMetadata(r) as never));
+    app.use("/.well-known/oauth-protected-resource", metadataHandler(protectedResourceMetadata(ep) as never));
     app.use("/authorize", withIss, authorizationHandler({ provider, rateLimit }));
     app.use("/token", ...clientCredentials, tokenHandler({ provider, rateLimit }));
     app.use("/register", ...registrationChecks, clientRegistrationHandler({ clientsStore: provider.clientsStore, clientSecretExpirySeconds: 0, rateLimit }));
@@ -243,21 +258,27 @@ export class McpOAuth {
       oauthError(res, 400, "invalid_request", "That request couldn't be read.");
     });
 
-    const gate = express();
-    gate.disable("x-powered-by");
-    gate.use(requireBearerAuth({ verifier: provider, requiredScopes: [OPERATOR_SCOPE], resourceMetadataUrl: ep.resourceMetadataUrl }));
-    gate.use((req: GateRequest) => req[AUTH_DONE]?.(req.auth));
+    // One gate per resource. A grant opens only the resource and scope it was issued for.
+    const gates = new Map<string, Express>();
+    for (const r of eps) {
+      const gate = express();
+      gate.disable("x-powered-by");
+      const verifier = { verifyAccessToken: (token: string) => provider.verifyAccessToken(token, r) };
+      gate.use(requireBearerAuth({ verifier, requiredScopes: [r.scope], resourceMetadataUrl: r.resourceMetadataUrl, expectedResource: new URL(r.resource) }));
+      gate.use((req: GateRequest) => req[AUTH_DONE]?.(req.auth));
+      gates.set(r.path, gate);
+    }
 
-    const built = { app, gate };
-    this.apps.set(ep.issuer, built);
+    const built = { app, gates };
+    this.apps.set(key, built);
     return built;
   }
 
   /** The public OAuth routes. Without PUBLIC_BASE_URL there is no issuer, so there's nothing to serve. */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const ep = this.endpoints();
-    if (!ep) return json(res, 404, { error: "not_found", error_description: "Set PUBLIC_BASE_URL so Tour Core can publish its OAuth addresses." });
-    return run(this.appsFor(ep).app, req, res);
+    const eps = this.endpoints();
+    if (!eps) return json(res, 404, { error: "not_found", error_description: "Set PUBLIC_BASE_URL so Tour Core can publish its OAuth addresses." });
+    return run(this.appsFor(eps).app, req, res);
   }
 
   /** Local operator app: approve, deny, disconnect. The caller has already checked this is the computer's own address. */
@@ -266,22 +287,28 @@ export class McpOAuth {
   }
 
   /**
-   * Validates the bearer token before any MCP message is read. Resolves with
-   * the token's info, or undefined after answering 401/403 itself. There is
-   * no unauthenticated fallback.
+   * Validates the bearer token for one protected path before any MCP message
+   * is read. The grant's resource and scope must be that path's. Resolves
+   * with the token's info, or undefined after answering 401/403/503 itself.
+   * There is no unauthenticated fallback.
    */
-  async authenticate(req: IncomingMessage, res: ServerResponse): Promise<AuthInfo | undefined> {
-    const ep = this.endpoints();
-    if (!ep) {
+  async authenticate(req: IncomingMessage, res: ServerResponse, path: string): Promise<AuthInfo | undefined> {
+    const eps = this.endpoints();
+    if (!eps) {
       json(res, 503, { error: { message: "Tour Core's OAuth connector needs PUBLIC_BASE_URL set to its https tunnel address." } });
+      return undefined;
+    }
+    const ep = eps.find((e) => e.path === path);
+    if (!ep) {
+      json(res, 503, { error: { message: "That connector is off." } });
       return undefined;
     }
     if (!req.headers.authorization) {
       // RFC 6750 §3: no error code when no credentials were sent; point the client at the metadata (RFC 9728 §5.1).
-      json(res, 401, { error: { message: "Connect Tour Core in Grok to sign in." } }, { "WWW-Authenticate": `Bearer resource_metadata="${ep.resourceMetadataUrl}", scope="${OPERATOR_SCOPE}"` });
+      json(res, 401, { error: { message: `Connect ${ep.label} in Grok to sign in.` } }, { "WWW-Authenticate": `Bearer resource_metadata="${ep.resourceMetadataUrl}", scope="${ep.scope}"` });
       return undefined;
     }
-    const { gate } = this.appsFor(ep);
+    const gate = this.appsFor(eps).gates.get(path)!;
     return new Promise((resolve) => {
       (req as GateRequest)[AUTH_DONE] = resolve;
       res.once("finish", () => resolve(undefined));
@@ -324,7 +351,7 @@ export class McpOAuth {
       next();
     });
     app.get("/api/grok", (_req, res) => {
-      const ep = this.endpoints();
+      const ep = this.endpoints()?.[0];
       res.json({
         mode: "oauth",
         legacyCompat: this.options.redirectPolicy().exact.length > 0,
