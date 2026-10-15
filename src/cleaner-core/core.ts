@@ -553,6 +553,7 @@ class Engine implements CleanerCore {
   private participantConsent = new Map<string, "pending" | "in" | "out">();
   private readonly groupChat: CleanerCoreOptions["groupChat"];
   private hostGroup: "pending" | "in" | "out" = "pending";
+  private hostGroupSaved = false;
   private problemHold = false;
   private ownerOptedOut = false;
   private holdCause: "cleaner" | "owner" | "injury" | undefined;
@@ -1653,11 +1654,13 @@ class Engine implements CleanerCore {
   }
 
   private seatHost(): void {
-    if (!this.groupChat || !this.owner || this.hostGroup !== "pending") return;
+    if (!this.groupChat || !this.owner) return;
     if (this.ownerOptedOut || this.optedOut) {
       this.hostGroup = "out";
       return;
     }
+    if (this.hostGroup === "out" || this.hostGroup === "in") return;
+    if (this.hostGroupSaved) return;
     if (this.everConsented) this.hostGroup = "in";
   }
 
@@ -2458,7 +2461,10 @@ class Engine implements CleanerCore {
     this.reviewItems = record.reviews ?? [];
     this.auditLog = record.audit ?? [];
     this.counters = { ...emptyCounters(), ...record.counters };
-    if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
+    if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") {
+      this.hostGroup = record.hostGroup;
+      this.hostGroupSaved = true;
+    }
     if (record.problemHold === true) this.problemHold = true;
     if (record.ownerOptedOut === true) this.ownerOptedOut = true;
     if (record.holdCause === "cleaner" || record.holdCause === "owner" || record.holdCause === "injury") this.holdCause = record.holdCause;

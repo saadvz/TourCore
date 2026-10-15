@@ -115,6 +115,26 @@ describe("DONE after the door code", () => {
     expect(hostReady(box.sent)).toEqual([]);
   });
 
+  it("leaves the job unfinished and sends the host no ready text when START and DONE follow an injury", async () => {
+    const { box, job } = await ready();
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    await job.receive({ id: "hurt", from: CLEANER, text: "I fell and I'm hurt" });
+    expect(await job.receive({ id: "start-held", from: CLEANER, text: "START" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(await job.receive({ id: "done-held", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(job.jobs()[0]?.status).toBe("cleared");
+    expect(hostReady(box.sent)).toEqual([]);
+    expect(box.sent.filter((text) => text.body === STARTED || text.body === DONE_ACK)).toEqual([]);
+  });
+
   it("sends the host one ready text when DONE arrives twice", async () => {
     const { box, job } = await ready();
     await job.receive({ id: "left", from: OWNER, text: "guests have left" });
