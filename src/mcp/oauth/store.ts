@@ -164,6 +164,28 @@ export class OAuthGrantStore {
     return true;
   }
 
+  /**
+   * Ends every grant for one MCP path (any origin), access and refresh
+   * tokens alike. Other paths' grants and every registered client stay.
+   * Returns how many were revoked.
+   */
+  revokeForPath(path: string): number {
+    const doc = this.read();
+    const forPath = (g: Grant) => {
+      try {
+        return new URL(g.resource).pathname.replace(/\/+$/, "") === path;
+      } catch {
+        return false;
+      }
+    };
+    const kept = doc.grants.filter((g) => !forPath(g));
+    const revoked = doc.grants.length - kept.length;
+    if (!revoked) return 0;
+    doc.grants = kept;
+    this.write(doc);
+    return revoked;
+  }
+
   /** "Disconnect Grok": every grant and every registered client goes; tokens stop working immediately. */
   revokeAll(): { grants: number; clients: number } {
     const doc = this.read();

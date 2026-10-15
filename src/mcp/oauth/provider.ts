@@ -207,9 +207,11 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     return all.find((ep, i) => sameResource(given, ep, i === 0));
   }
 
-  /** The active resource a code or grant was issued for, matched exactly. */
-  private resourceOf(issuer: string, resource: string): ResourceEndpoints | undefined {
-    return this.options.endpoints()?.find((ep) => ep.issuer === issuer && ep.resource === resource);
+  /** The active resource a code or grant was issued for, matched exactly, and whether it is the default (Tour Core). */
+  private resourceOf(issuer: string, resource: string): { ep: ResourceEndpoints; isDefault: boolean } | undefined {
+    const all = this.options.endpoints() ?? [];
+    const i = all.findIndex((ep) => ep.issuer === issuer && ep.resource === resource);
+    return i < 0 ? undefined : { ep: all[i]!, isDefault: i === 0 };
   }
 
   get clientsStore(): OAuthRegisteredClientsStore {
@@ -452,10 +454,10 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     // The SDK has already checked the PKCE verifier against challengeForAuthorizationCode.
     const entry = this.liveCode(client, authorizationCode);
     entry.used = true;
-    const ep = this.resourceOf(entry.issuer, entry.resource);
+    const target = this.resourceOf(entry.issuer, entry.resource);
     if (redirectUri !== undefined && redirectUri !== entry.redirectUri) throw new InvalidGrantError("redirect_uri doesn't match the authorization request.");
-    if (!ep) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
-    if (resource && !sameResource(resource, ep, ep === this.defaultEndpoints())) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    if (!target) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
+    if (resource && !sameResource(resource, target.ep, target.isDefault)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
     const t = this.now();
     const access = newSecret("tca_");
     const refresh = client.grant_types?.includes("refresh_token") ? newSecret("tcr_") : undefined;
@@ -491,9 +493,9 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       this.options.store.revokeGrant(grant.id);
       throw new InvalidGrantError("The refresh token has expired; connect again.");
     }
-    const ep = this.resourceOf(grant.issuer, grant.resource);
-    if (!ep) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
-    if (resource && !sameResource(resource, ep, ep === this.defaultEndpoints())) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    const target = this.resourceOf(grant.issuer, grant.resource);
+    if (!target) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
+    if (resource && !sameResource(resource, target.ep, target.isDefault)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
     if (scopes?.length && scopes.some((s) => !grant.scopes.includes(s))) throw new InvalidScopeError("A refresh can't add scopes.");
     const access = newSecret("tca_");
     const refresh = newSecret("tcr_");

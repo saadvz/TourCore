@@ -70,8 +70,15 @@ export function clearHostedCleanerTenant(files: InstallationFiles): boolean {
   return true;
 }
 
-/** Startup: clears the cleaner owner only when the reset value is exactly right. True when one was cleared. */
-export function resetHostedCleanerOwner(env: NodeJS.ProcessEnv, files: InstallationFiles): boolean {
+/**
+ * Startup: only when the reset value is exactly right, clears the cleaner
+ * owner and revokes every Cleaner Core grant (access and refresh), so the
+ * previous owner's Grok Bot is signed out at once. Tour Core's binding and
+ * grants are untouched. True when anything was cleared or revoked.
+ */
+export function resetHostedCleanerOwner(env: NodeJS.ProcessEnv, files: InstallationFiles, revokeCleanerGrants: () => number): boolean {
   if (env.CLEANER_CORE_HOSTED_OWNER_RESET?.trim() !== CLEANER_HOSTED_OWNER_RESET) return false;
-  return clearHostedCleanerTenant(files);
+  const cleared = clearHostedCleanerTenant(files);
+  const revoked = revokeCleanerGrants();
+  return cleared || revoked > 0;
 }
