@@ -184,3 +184,23 @@ Grok does whatever its own abilities can do. These points replace the matching p
   - Photos are deleted by `reset_scratch`, and 30 days after the job is done.
 - **Texting stays with Cleaner Core.** Grok decides when, and Cleaner Core sends. The safety rules live at that one send point, and the Twilio keys stay out of Grok.
 - **Not now:** Notion.
+
+## Grok reads the messages (Saad, 2026-10-15)
+
+This replaces the "Cleaner replies" point in the Grok-first revision.
+
+- **Every message reaches Grok.** Every inbound text from the cleaner or a saved contact is recorded as a message: `{ from: role, name, text, at, handled }`.
+  - The door code is redacted and the text is capped at 300 characters.
+  - `handled` names what Cleaner Core did: `opted-in`, `confirmed`, `declined`, `done`, `stop`, `start`, `injury`, `code-held`, or `none`.
+  - Each new message wakes the Alerts routine.
+- **`check_now` returns `messages`** that are new since the last check, tracked by id.
+- **Grok decides what the landlord needs to hear.**
+  - Grok alerts the landlord in its own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury.
+  - Grok stays quiet on routine acknowledgements.
+  - Grok calls `save_arrival` when a message gives a time.
+- **Deterministic safety stays on the server.** Grok does not decide these:
+  - STOP and START;
+  - the injury reply to the cleaner, plus the direct injury text to the host;
+  - the door-code gate;
+  - the no-reply-to-HELP rule.
+- **The server-written host notes stay** as a fallback when Grok isn't running.
