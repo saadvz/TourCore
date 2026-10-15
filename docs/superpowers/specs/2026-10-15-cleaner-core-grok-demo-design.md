@@ -38,13 +38,13 @@ The demo is rehearsed on Scratch numbers first. Then it runs once on real phones
 
 1. **Setup conversation.** The steps are the same as today: property, host, cleaner, optional observer, Guesty Lite link, door code in the private box, and texting. One question is added: "Do you also take bookings in Google Calendar?" When the answer is yes, Grok uses its own Google Calendar connector. Cleaner Core stores no Google credential. After texting is saved, `get_state` lists the group chat in `done`, with the people in it.
 2. **Cleaner Core Check routine.** This is a scheduled Grok routine. It runs every few minutes for the demo and hourly in real use. Each run, Grok reads the property's Google Calendar events, calls `check_now` with them, and posts any new alerts in plain words. When Saad says "check my calendars," Grok runs the same steps at once.
-3. **Cleaner Core Alerts routine.** This routine has an authenticated webhook trigger, built the same way as Tour Core's Operator Updates routine. A webhook wakes Grok. Grok calls `check_now` with no events and posts the new alerts. The routine's address and key are installation secrets. Grok collects them with secure secret input and submits them through Tour Core's existing secure setup form. They never appear in chat, tool arguments, files, or logs.
+3. **Cleaner Core Alerts routine.** This routine has an authenticated webhook trigger, built the same way as Tour Core's Operator Updates routine. A webhook wakes Grok. Grok calls `check_now` with no events and posts the new alerts. The routine's address and key are installation secrets. The Grok Bot shows its secure card in chat. Saad enters the address and key there, and the Grok Bot passes them to `save_alert_routine`. Cleaner Core does not use Tour Core's setup page. The values never appear in chat text, files, or logs.
 
 The routine instructions live in `grok-template/routines/`. The tool descriptions and the `get_state` next steps tell Grok when to call each tool.
 
 ### Cleaner Core's side
 
-1. **`check_now`.** This is the one new tool. Input: an optional `googleEvents` object in the Google Calendar API `events.list` shape (`timeZone`, `items`), passed through as Grok received it. The tool does these steps in order:
+1. **`check_now`.** This is the main new tool. Input: an optional `googleEvents` object in the Google Calendar API `events.list` shape (`timeZone`, `items`), passed through as Grok received it. The tool does these steps in order:
    - Re-reads the saved Guesty Lite link with `readPublicCalendar`, when one is saved.
    - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, renamed for live use). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed.
    - Merges the sources through the existing `readSource` path. A stay in both calendars is one job.
@@ -54,7 +54,8 @@ The routine instructions live in `grok-template/routines/`. The tool description
    It sends nothing when `CLEANER_CORE_ENABLED` is off. Calls do not overlap: a second call waits for the first.
 2. **`run_checks`** accepts Guesty only, Google only, or both. Today it requires the Guesty link.
 3. **Alert push.** When Cleaner Core records a new host alert, it queues one `cleaning.update` event. The queue and the sender are Tour Core's existing `OperatorEventOutbox` and `GrokRoutineWebhookSink`. Cleaner Core keeps its own outbox file and its own address and key, `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`, in the existing secret store. The event holds only `schemaVersion`, `eventId`, `eventType`, `propertyId`, and `occurredAt`. It holds no text, no phone number, and no door code. The existing 15-second retry delivers it. With no address saved, events wait in the queue and nothing fails.
-4. **`read_outbox`** on Scratch properties shows each text's wording. The door code prints as `[redacted]`.
+4. **`save_alert_routine`.** This is the second new tool. Input: the routine's webhook address and key, from the Grok Bot's secure card. It checks that the address is https and stores both values in the secret store as `CLEANER_CORE_ROUTINE_URL` and `CLEANER_CORE_ROUTINE_KEY`. It replaces an earlier pair and keeps no history. Its reply never includes either value, and it logs neither. It then queues one test event, so the Grok Bot can confirm the routine woke.
+5. **`read_outbox`** on Scratch properties shows each text's wording. The door code prints as `[redacted]`.
 
 No new flag. Everything sits behind `CLEANER_CORE_ENABLED`. The Scratch tools stay Scratch-only.
 
@@ -108,5 +109,5 @@ Proof: run the verify-cleanercore skill's `prove-step-g.sh`, which reruns steps 
 
 ## Open items to settle in the plan
 
-- Which secure setup form entry stores the Cleaner Core routine address and key. Fallback: Railway environment variables that Saad sets.
+- Confirm that the Grok Bot's secure card hands its value to the tool call without putting it in the chat or the model's context. If the value would show up there, it breaks the AGENTS.md secrets rule. The fallback is Railway environment variables that Saad sets.
 - How Grok's Google Calendar connector shapes an event. The plan keeps a thin adapter if it differs from `events.list`.
