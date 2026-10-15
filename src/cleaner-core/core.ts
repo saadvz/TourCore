@@ -891,7 +891,7 @@ class Engine implements CleanerCore {
     const checkout = clockMinutes(input.checkout);
     const checkIn = clockMinutes(input.checkIn);
     if (checkout === undefined || checkIn === undefined) return [];
-    const job = this.ordered().find((item) => !item.canceled && !item.declined);
+    const job = this.ordered().find((item) => !item.canceled && !item.declined && !item.done && !item.started);
     if (!job) return [];
     this.addFact(job.id, "checkout", checkout);
     if (job.nextCheckInDate) this.addFact(job.id, "checkin", checkIn);
@@ -1331,7 +1331,8 @@ class Engine implements CleanerCore {
   }
 
   private async clearDeparture(id: string): Promise<ReceiveResult> {
-    const job = this.releaseJob();
+    // The next confirmed job, or else the last started or finished one, so a failed code text can still be resent.
+    const job = this.codeJob();
     if (!job || this.stale(job) || !this.confirmSent(job)) return this.markIgnored(id);
     this.recordClearance(job);
     this.inboundIds.push(id);
@@ -1482,6 +1483,9 @@ class Engine implements CleanerCore {
     }
     for (const job of this.jobsState) {
       if (seen.has(job.id) || job.canceled) continue;
+      // A calendar read covers a window of days. A job that is under way, finished, or past
+      // simply left that window, so it is kept as it is and nobody is told it was called off.
+      if (job.done || job.started || this.pinDelivered(job) || this.beforeToday(job.checkoutDate)) continue;
       job.canceled = true;
       job.version += 1;
       this.tombstones.push({ uid: job.id, version: job.version, contentHash: job.contentHash });
@@ -1729,7 +1733,7 @@ class Engine implements CleanerCore {
 
   notePrivateCodeDelivered(): void {
     if (!this.groupChat || !this.owner) return;
-    const job = this.releaseJob();
+    const job = this.codeJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key || this.delivery(key) !== "sent") return;
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
@@ -2161,6 +2165,10 @@ class Engine implements CleanerCore {
   private derive(job: Job): JobStatus {
     if (job.canceled) return "canceled";
     if (job.declined) return "declined";
+    // A started or finished cleaning keeps that status when a later booking changes its next check-in.
+    // Moving its checkout clears both flags, so a moved job is timed and offered again.
+    if (job.done) return "done";
+    if (job.started) return "in_progress";
     const checkout = this.latestFact(job.id, "checkout");
     const checkin = this.latestFact(job.id, "checkin");
     if (!checkout) return "discovered";
@@ -2310,11 +2318,18 @@ class Engine implements CleanerCore {
     return isScratchTestNumber(parsed);
   }
 
+  /** The confirmed job the host's departure or a later checkout time is about. A started or finished cleaning is never moved or released again. */
   private releaseJob(): Job | undefined {
     return this.ordered().find((job) => {
+      if (job.done || job.started) return false;
       const status = this.derive(job);
-      return status === "confirmed" || status === "awaiting_departure" || status === "cleared" || status === "in_progress" || status === "done";
+      return status === "confirmed" || status === "awaiting_departure" || status === "cleared";
     });
+  }
+
+  /** The job whose door-code text is the latest: the one waiting for release, or else the last cleaning that started. */
+  private codeJob(): Job | undefined {
+    return this.releaseJob() ?? this.ordered().filter((job) => !job.canceled && !job.declined && (job.done || job.started)).at(-1);
   }
 
   private pinKey(job: Job): string | undefined {
@@ -2379,7 +2394,7 @@ class Engine implements CleanerCore {
   }
 
   pinAccepted(): boolean {
-    const job = this.releaseJob();
+    const job = this.codeJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key) return false;
     const phase = this.pinPhase.get(key);
@@ -2423,6 +2438,11 @@ class Engine implements CleanerCore {
       if (item.jobId !== jobId || item.status === "sent") continue;
       if (item.kind === "pin" || item.kind === "pin-failed" || item.kind === "pin-notice" || item.kind === "pin-held") item.status = "canceled";
     }
+  }
+
+  /** True when `ymd` is an earlier day than today in the property's time zone. */
+  private beforeToday(ymd: string): boolean {
+    return this.now().getTime() >= Date.parse(zonedInstant(addCalendarDays(ymd, 1), "00:00", this.options.property.timeZone));
   }
 
   private checkoutReached(job: Job): boolean {

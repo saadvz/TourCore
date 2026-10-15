@@ -14,7 +14,23 @@ import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-cor
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
-import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, OBSERVER, startWiredApp, TEST_PIN_KEY, type SentSms, type WiredApp } from "./wiringProof";
+import {
+  ADDRESS,
+  BUSINESS,
+  CALENDAR_URL,
+  CLEANER,
+  CLEANER_AUTH,
+  CLEANER_LINE,
+  CLEANER_TOKEN,
+  DOOR_CODE,
+  FROZEN,
+  HOST,
+  OBSERVER,
+  startWiredApp,
+  TEST_PIN_KEY,
+  type SentSms,
+  type WiredApp,
+} from "./wiringProof";
 
 const PATH = "/mcp/cleaner-core";
 const open: WiredApp[] = [];
@@ -905,6 +921,146 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
   });
 });
 
+/** A stay that checks out on the frozen test day, 2026-10-14. */
+const TODAY_STAY = { id: "g1", start: "2026-10-10", end: "2026-10-14" };
+/** A stay added after the first job is done. Its own checkout is Oct 28. */
+const LATER_STAY = { id: "g3", start: "2026-10-26", end: "2026-10-28" };
+
+async function cleanerSays(wired: WiredApp, body: string, sid: string) {
+  const res = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body, sid, token: CLEANER_AUTH });
+  expect(res.status).toBe(200);
+}
+
+function toTheCleaner(wired: WiredApp, from = 0): SentSms[] {
+  return wired.cleanerSent.slice(from).filter((item) => item.to === CLEANER);
+}
+
+function turnOn(reply: { structured: Record<string, unknown> | undefined }, checkoutDate: string) {
+  return (reply.structured?.turns as { checkoutDate: string; status: string; checkoutTime: string | null; nextCheckInTime: string | null }[] | undefined)?.find(
+    (turn) => turn.checkoutDate === checkoutDate,
+  );
+}
+
+/** Google-only setup, the first job confirmed, the code sent, and the cleaner's DONE. */
+async function finishedJob(wired: WiredApp) {
+  await confirmedJob(wired, TODAY_STAY);
+  expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+  await cleanerSays(wired, "DONE", "SM-first-done");
+  expect(turnOn(await call(wired, "get_turns"), "2026-10-14")?.status).toBe("done");
+}
+
+describe("Cleaner Core Grok demo: final review fixes", () => {
+  it("a done stay missing from the next day's read sends nothing and stays done", async () => {
+    let now = new Date(FROZEN);
+    const wired = await app({ now: () => now });
+    await finishedJob(wired);
+    const before = wired.cleanerSent.length;
+    now = new Date(zonedInstant("2026-10-15", "09:00", ZONE));
+    const next = await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
+    expect(next.isError).toBe(false);
+    expect(toTheCleaner(wired, before)).toEqual([]);
+    expect(turnOn(next, "2026-10-14")?.status).toBe("done");
+  });
+
+  it("a stay checking out today whose code was sent stays active when it leaves the read", async () => {
+    const wired = await app();
+    await confirmedJob(wired, TODAY_STAY);
+    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    const before = wired.cleanerSent.length;
+    const missing = await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
+    expect(missing.isError).toBe(false);
+    expect(toTheCleaner(wired, before)).toEqual([]);
+    expect(turnOn(missing, "2026-10-14")?.status).not.toBe("canceled");
+  });
+
+  it("a stay from an earlier day is not called off when it leaves the read", async () => {
+    let now = new Date(FROZEN);
+    const wired = await app({ now: () => now });
+    await confirmedJob(wired, TODAY_STAY);
+    const before = wired.cleanerSent.length;
+    now = new Date(zonedInstant("2026-10-15", "09:00", ZONE));
+    const missing = await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
+    expect(toTheCleaner(wired, before).map(textKind)).not.toContain("cancel-update");
+    expect(turnOn(missing, "2026-10-14")?.status).not.toBe("canceled");
+  });
+
+  it("a same-day stay that has not started is still called off once when it is removed", async () => {
+    const wired = await app();
+    await confirmedJob(wired, TODAY_STAY);
+    const before = wired.cleanerSent.length;
+    const removed = await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
+    expect(toTheCleaner(wired, before).map(textKind)).toEqual(["cancel-update"]);
+    expect(turnOn(removed, "2026-10-14")?.status).toBe("canceled");
+    await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
+    expect(toTheCleaner(wired, before).map(textKind)).toEqual(["cancel-update"]);
+  });
+
+  for (const groupChat of [false, true]) {
+    it(`a second booking after the first job is done is reported and timed (group chat ${groupChat ? "on" : "off"})`, async () => {
+      if (groupChat) setCleanerGroupFetch(groupStub().impl);
+      const wired = await app({ groupChat });
+      await finishedJob(wired);
+      const before = wired.cleanerSent.length;
+      const checked = await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY, NEXT_STAY, LATER_STAY]) });
+      expect(checked.isError).toBe(false);
+      expect(alertsOf(checked).some((line) => line.includes("Saturday, Oct 24"))).toBe(true);
+      const times = await call(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+      expect(times.isError).toBe(false);
+      expect(times.structured?.next).not.toContain("asking them to reply YES");
+      const got = toTheCleaner(wired, before);
+      expect(got.some((item) => item.body.includes("Oct 14"))).toBe(false);
+      expect(got.map(textKind)).not.toContain("corrected");
+      const offers = got.filter((item) => /Reply YES to schedule it/.test(item.body));
+      expect(offers).toHaveLength(1);
+      expect(offers[0]?.body).toContain("Saturday, Oct 24");
+      expect(offers[0]?.body).toContain("11:00 AM");
+      const turns = await call(wired, "get_turns");
+      expect(turnOn(turns, "2026-10-14")?.status).toBe("done");
+      expect(turnOn(turns, "2026-10-24")).toMatchObject({ checkoutTime: "11:00 AM", nextCheckInTime: "4:00 PM", status: "offered" });
+      await cleanerSays(wired, "YES", "SM-second-yes");
+      const confirmed = toTheCleaner(wired, before).filter((item) => item.body.startsWith("Cleaning is scheduled for"));
+      expect(confirmed.map((item) => item.body)).toEqual([`Cleaning is scheduled for Saturday, Oct 24 at 11:00 AM at ${ADDRESS}.`]);
+    });
+
+    it(`confirm_times works for a stay with no next stay (group chat ${groupChat ? "on" : "off"})`, async () => {
+      if (groupChat) setCleanerGroupFetch(groupStub().impl);
+      const wired = await app({ groupChat });
+      await setUpGoogle(wired);
+      expect((await call(wired, "run_checks", { googleEvents: googleList([TODAY_STAY]) })).isError).toBe(false);
+      const times = await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+      expect(times.isError, times.text).toBe(false);
+      const turns = await call(wired, "get_turns");
+      expect(turnOn(turns, "2026-10-14")).toMatchObject({ checkoutTime: "10:30 AM", nextCheckInTime: null });
+      expect((await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY]) })).structured?.needsTimes).toBeUndefined();
+      await yes(wired, "SM-single-yes-1");
+      await yes(wired, "SM-single-yes-2");
+      const confirmed = toTheCleaner(wired).filter((item) => item.body.startsWith("Cleaning is scheduled for"));
+      expect(confirmed.map((item) => item.body)).toEqual([`Cleaning is scheduled for Wednesday, Oct 14 at 10:30 AM at ${ADDRESS}.`]);
+    });
+  }
+
+  it("a finished job with no next stay stays done when a later stay is added", async () => {
+    const wired = await app();
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: googleList([TODAY_STAY]) })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    await yes(wired, "SM-lone-yes-1");
+    await yes(wired, "SM-lone-yes-2");
+    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    await cleanerSays(wired, "DONE", "SM-lone-done");
+    const before = wired.cleanerSent.length;
+    const added = await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY, NEXT_STAY]) });
+    expect(added.isError).toBe(false);
+    expect(turnOn(added, "2026-10-14")?.status).toBe("done");
+    expect(added.structured?.needsTimes).toBeUndefined();
+    // The host is asked about the new turnover, not about the finished one.
+    expect(alertsOf(added).some((line) => line.includes("Saturday, Oct 24"))).toBe(true);
+    expect(alertsOf(added).some((line) => line.includes("Oct 20"))).toBe(false);
+    expect(toTheCleaner(wired, before)).toEqual([]);
+  });
+
+});
+
 const LANE = SCRATCH_TENANTS[0];
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 
@@ -982,62 +1138,59 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
       expect(wired.logs.join("\n"), step).not.toMatch(PLAIN_CODE);
     };
 
-    /** Demo steps 1 to 4: setup, a stay that checks out today, the host's times, and the cleaner's YES. */
-    const happyStart = async (setup: () => Promise<void>) => {
-      await setup();
-      await safe("1 setup");
+    // 1. Setup with Google, then the routines.
+    await say("get_state", { said: "2" });
+    await say("save_property", { business: "Scratch", address, timeZone: ZONE });
+    await say("save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone });
+    await say("save_calendar_link", { google: true });
+    await say("save_door_code", { code: DOOR_CODE });
+    await say("set_up_texting");
+    await say("run_checks", { googleEvents: googleList([]) });
+    const lines = await done(wired);
+    expect(lines).toContain("Group chat set up with you and the cleaner.");
+    expect(lines).toContain("Checks finished.");
+    expect((await say("get_state")).structured?.next).toBe(ROUTINE_NEXT);
+    await say("save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY });
+    expect((await say("get_state")).structured?.next).toBe(TIMES_NEXT);
+    await safe("1 setup");
 
-      const booked = await say("check_now", { googleEvents: withNext(today) });
-      // With group chat on, Grok collects the times, so the alert names the booking and asks for both.
-      expect(alertsOf(booked)).toContain(`New booking at ${address}, checking out Wednesday, Oct 14. What are the checkout time and the next check-in time?`);
-      expect(await labelled("Cleaning offer to the cleaner")).toEqual([]);
-      await safe("2 new booking");
+    // 2. Saad adds one stay that checks out today. No next stay is needed.
+    const booked = await say("check_now", { googleEvents: googleList([today]) });
+    // With group chat on, Grok collects the times, so the alert names the booking and asks for both.
+    expect(alertsOf(booked)).toContain(`New booking at ${address}, checking out Wednesday, Oct 14. What are the checkout time and the next check-in time?`);
+    expect(await labelled("Cleaning offer to the cleaner")).toEqual([]);
+    await safe("2 new booking");
 
-      await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
-      const optIn = await labelled("Opt-in text to the cleaner");
-      expect(optIn).toHaveLength(1);
-      // With group chat on, the opt-in is the invitation to the cleaning group.
-      expect(optIn[0]?.body).toContain(`you're invited to the cleaning group for ${address}`);
-      expect(optIn[0]?.body).toContain("Reply YES");
-      await safe("3 times");
+    // 3. The host's times. With no next stay, only the checkout time is saved.
+    await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
+    const optIn = await labelled("Opt-in text to the cleaner");
+    expect(optIn).toHaveLength(1);
+    // With group chat on, the opt-in is the invitation to the cleaning group.
+    expect(optIn[0]?.body).toContain(`you're invited to the cleaning group for ${address}`);
+    expect(optIn[0]?.body).toContain("Reply YES");
+    await safe("3 times");
 
-      // The engine asks a new cleaner to opt in first. The first YES opts in and brings the offer.
-      await fromCleaner("YES");
-      // The cleaner gets the private offer, and the group gets a copy that says the cleaner will confirm.
-      const offers = await labelled("Cleaning offer to the cleaner");
-      expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true, true]);
-      expect(offers.filter((item) => item.body.endsWith("Reply YES to schedule it, or STOP to opt out."))).toHaveLength(1);
-      await fromCleaner("YES");
-      expect(await labelled("Confirmation to the cleaner")).toHaveLength(1);
-      const heard = alertsOf(await say("check_now", { googleEvents: withNext(today) }));
-      expect([...heard, ...(await notesNow())]).toContain(yesNote);
-      await safe("4 cleaner YES");
-    };
-
-    await happyStart(async () => {
-      await say("get_state", { said: "2" });
-      await say("save_property", { business: "Scratch", address, timeZone: ZONE });
-      await say("save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone });
-      await say("save_calendar_link", { google: true });
-      await say("save_door_code", { code: DOOR_CODE });
-      await say("set_up_texting");
-      await say("run_checks", { googleEvents: googleList([]) });
-      const lines = await done(wired);
-      expect(lines).toContain("Group chat set up with you and the cleaner.");
-      expect(lines).toContain("Checks finished.");
-      expect((await say("get_state")).structured?.next).toBe(ROUTINE_NEXT);
-      await say("save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY });
-      expect((await say("get_state")).structured?.next).toBe(TIMES_NEXT);
-    });
+    // 4. The cleaner replies YES twice. The first YES accepts the group invite and brings the offer.
+    // The second YES takes the offer.
+    await fromCleaner("YES");
+    // The cleaner gets the private offer, and the group gets a copy that says the cleaner will confirm.
+    const offers = await labelled("Cleaning offer to the cleaner");
+    expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true, true]);
+    expect(offers.filter((item) => item.body.endsWith("Reply YES to schedule it, or STOP to opt out."))).toHaveLength(1);
+    await fromCleaner("YES");
+    expect(await labelled("Confirmation to the cleaner")).toHaveLength(1);
+    const heard = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
+    expect([...heard, ...(await notesNow())]).toContain(yesNote);
+    await safe("4 cleaner YES");
     // The YES woke the routine with an event that carries no text, number, or code.
     expect(routine.map((post) => JSON.parse(post.body).eventType)).toContain("cleaning.update");
 
     // 5. The reminder goes out on the first check at or after 8 AM on the cleaning day.
     expect(await labelled("Reminder to the cleaner")).toEqual([]);
     now = new Date(zonedInstant("2026-10-14", "08:00", ZONE));
-    await say("check_now", { googleEvents: withNext(today) });
+    await say("check_now", { googleEvents: googleList([today]) });
     expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
-    await say("check_now", { googleEvents: withNext(today) });
+    await say("check_now", { googleEvents: googleList([today]) });
     expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
     await safe("5 reminder");
 
@@ -1052,33 +1205,65 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
 
     // 7. The cleaner says DONE. The host's ready note comes back to Grok.
     await fromCleaner("DONE");
-    const ready = alertsOf(await say("check_now", { googleEvents: withNext(today) }));
+    const ready = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
     expect([...ready, ...(await notesNow())]).toContain(readyNote);
     expect(await labelled("Done note to the host")).toHaveLength(1);
     await safe("7 done");
 
-    // 8. Reset Scratch, run steps 1 to 4 again, then move the stay and remove it.
-    expect((await say("reset_scratch")).structured?.next).toBe("Scratch is reset. No jobs, notes or test texts are left.");
-    expect(await texts()).toEqual([]);
-    await safe("8 reset");
-    await happyStart(async () => {
-      await say("run_checks", { googleEvents: googleList([]) });
-    });
+    // Booking changes run on the same property, with no reset, as on the real phones.
+    const firstDone = async () => {
+      const turns = (await say("get_turns")).structured?.turns as { checkoutDate: string; status: string }[];
+      expect(turns.find((turn) => turn.checkoutDate === "2026-10-14")?.status).toBe("done");
+    };
+    const aboutFirstJob = async () => (await texts()).filter((item) => item.body.includes("Oct 14")).length;
+    const firstJobTexts = await aboutFirstJob();
 
-    const moved = { id: "g1", start: "2026-10-10", end: "2026-10-15" };
-    const movedCheck = await say("check_now", { googleEvents: withNext(moved) });
+    // 8. Saad adds a later stay. Grok reports it and asks for the times. The finished job stays done.
+    const second = { id: "g2", start: "2026-10-20", end: "2026-10-24" };
+    const secondBooked = await say("check_now", { googleEvents: googleList([today, second]) });
+    expect(alertsOf(secondBooked)).toContain(`New booking at ${address}, checking out Saturday, Oct 24. What are the checkout time and the next check-in time?`);
+    expect(secondBooked.structured?.needsTimes).toBeUndefined();
+    await firstDone();
+    await safe("8 second booking");
+
+    // 9. The host's times. The cleaner already joined, so the offer goes out at once with no second invite.
+    const secondTimes = await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(secondTimes.structured?.next).toBe("Times saved. I sent the cleaner the cleaning offer. They reply YES to take it.");
+    expect(await labelled("Opt-in text to the cleaner")).toHaveLength(1);
+    const secondOffers = (await labelled("Cleaning offer to the cleaner")).filter((item) => item.body.includes("Oct 24"));
+    expect(secondOffers.map((item) => item.body.startsWith(`Turnover at ${address} on Saturday, Oct 24. Checkout 11:00 AM`))).toEqual([true, true]);
+    await fromCleaner("YES");
+    const confirmations = (await labelled("Confirmation to the cleaner")).map((item) => item.body);
+    expect(confirmations).toEqual([expect.stringContaining("Wednesday, Oct 14 at 10:00 AM"), expect.stringContaining("Saturday, Oct 24 at 11:00 AM")]);
+    await firstDone();
+    await safe("9 second times and YES");
+
+    // 10. Saad moves the second stay. Grok asks again, and the cleaner gets one correction.
+    const moved = { id: "g2", start: "2026-10-20", end: "2026-10-25" };
+    const movedCheck = await say("check_now", { googleEvents: googleList([today, moved]) });
     expect(movedCheck.structured?.needsTimes).toBe(true);
     expect(await labelled("Time correction to the cleaner")).toEqual([]);
-    await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
+    await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
     const corrected = await labelled("Time correction to the cleaner");
     expect(corrected).toHaveLength(1);
-    expect(corrected[0]?.body).toContain("Oct 15 at 10:00 AM");
-    await safe("8 moved");
+    expect(corrected[0]?.body).toContain("Oct 25 at 11:00 AM");
+    await firstDone();
+    await safe("10 moved");
 
-    await say("check_now", { googleEvents: googleList([NEXT_STAY]) });
+    // 11. Saad deletes the second stay. The cleaner gets one cancellation, and the finished job stays done.
+    await say("check_now", { googleEvents: googleList([today]) });
     const canceled = await labelled("Cancellation to the cleaner");
     expect(canceled).toHaveLength(1);
+    expect(canceled[0]?.body).toContain("Oct 25");
     expect(await labelled("Time correction to the cleaner")).toHaveLength(1);
-    await safe("8 removed");
+    await firstDone();
+    // Nothing more went out about the first job after it was done.
+    expect(await aboutFirstJob()).toBe(firstJobTexts);
+    await safe("11 removed");
+
+    // 12. Reset Scratch clears the jobs and the test texts.
+    expect((await say("reset_scratch")).structured?.next).toBe("Scratch is reset. No jobs, notes or test texts are left.");
+    expect(await texts()).toEqual([]);
+    await safe("12 reset");
   }, 60_000);
 });

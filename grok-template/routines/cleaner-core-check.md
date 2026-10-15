@@ -12,8 +12,9 @@ webhook address, no key, and no secret.
 ## Instructions for the routine
 
 1. If the host uses Google Calendar, read it with your own Google Calendar
-   connector. Read today and the next 60 days, with recurring events expanded
-   into single events.
+   connector. Read from 7 days ago to 60 days ahead, with recurring events
+   expanded into single events. Starting 7 days back keeps a stay that ends
+   today in the read.
 2. Call `check_now` with `{ timeZone, items }` as `googleEvents`, exactly as
    you read it. Don't edit, filter, or add to the events.
 3. If the Google read failed, call `check_now` without `googleEvents`. Never
@@ -26,6 +27,12 @@ webhook address, no key, and no secret.
 6. If the reply says `needsTimes`, ask the host for the checkout time and the
    next check-in time, then call `confirm_times`.
 7. Never show a door code, an id, or a phone number.
+
+## How the host enters a stay
+
+Ask the host to enter each stay as a timed event, from the check-in time to
+the checkout time. An all-day Google event ends on the day after its last day,
+so an all-day stay would read as checking out a day late.
 
 ## Connecting it
 

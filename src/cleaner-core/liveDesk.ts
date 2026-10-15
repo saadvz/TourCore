@@ -181,6 +181,22 @@ function propertyIdFor(business: string): string {
   return `live-${slug}`;
 }
 
+type JobView = ReturnType<CleanerCore["jobs"]>[number];
+
+/** A job has its times when it has a checkout time, and a next check-in time if a next stay is booked. */
+function hasTimes(job: JobView): boolean {
+  return Boolean(job.checkoutTime && (job.nextCheckInTime || !job.nextCheckInDate));
+}
+
+/**
+ * The job confirm_times would time: the first one that is not called off, declined, started, or done.
+ * A finished cleaning is never timed again, so a later booking is the one asked about.
+ */
+function timesTarget(engine: CleanerCore): JobView | undefined {
+  const closed = new Set(["canceled", "declined", "in_progress", "done"]);
+  return engine.jobs().find((job) => !closed.has(job.status));
+}
+
 export class LiveDesk {
   private file: LiveFile = {};
   private pin: string | undefined;
@@ -482,7 +498,7 @@ export class LiveDesk {
    */
   private newBookingAlert(engine: CleanerCore): { id: string; body: string }[] {
     if (!groupChatEnabled(this.env()) || !this.file.address || !this.file.timeZone) return [];
-    const job = engine.jobs().find((item) => item.status !== "canceled" && item.status !== "declined");
+    const job = timesTarget(engine);
     if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
     const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
     return [{ id: `new-booking:${job.id}`, body: `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?` }];
@@ -501,29 +517,40 @@ export class LiveDesk {
     if (!statedClock(checkout) || !statedClock(checkIn)) {
       return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
     }
+    const engine = this.engine;
+    const target = timesTarget(engine);
+    const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
     if (groupChatEnabled(this.env())) {
-      await this.engine.confirmHostTimes({ checkout, checkIn });
+      await engine.confirmHostTimes({ checkout, checkIn });
     } else {
-      await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
-      // The engine reads a lone time as the checkout while the job is still open. When the next
-      // check-in is already stored (a moved stay keeps it), a second text would overwrite the checkout.
-      if (!this.checkInStored(this.engine)) {
-        await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+      await engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
+      // The engine reads a lone time as the checkout while the job is still open. A stay with no
+      // next stay has no check-in to ask about, and when the next check-in is already stored (a
+      // moved stay keeps it), a second text would overwrite the checkout.
+      const after = engine.jobs().find((item) => item.id === target?.id);
+      if (after?.nextCheckInDate && !after.nextCheckInTime) {
+        await engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
       }
     }
-    const job = this.engine.jobs().find((item) => item.checkoutTime && item.nextCheckInTime);
-    if (!job) {
+    const job = engine.jobs().find((item) => item.id === target?.id);
+    if (!job || !hasTimes(job)) {
       return this.fail("I only save a time you stated. Say the checkout and the next check-in, like 10:30 AM and 3:00 PM.");
     }
     this.file.released = true;
-    this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...this.engine.jobs().filter((item) => item.checkoutTime && item.nextCheckInTime).map((item) => item.id)])];
+    this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
     this.persist();
-    await this.engine.releaseCleanerTexts();
-    const sentOptIn = this.engine.outbox().some((item) => item.kind === "opt-in" && item.status === "sent");
+    await engine.releaseCleanerTexts();
+    // Only the texts this call sent, so an opt-in from an earlier job is not reported again.
+    const sentNow = engine.outbox().filter((item) => item.status === "sent" && !sentBefore.has(item.id) && item.to === this.file.cleaner);
+    const sent = (kind: TextKind) => sentNow.some((item) => item.kind === kind);
     return this.reply({
-      next: sentOptIn
+      next: sent("opt-in")
         ? "Times saved. The cleaner got one text asking them to reply YES. Nothing else goes to them until they do."
-        : "Times saved. Nothing was sent.",
+        : sent("offer")
+          ? "Times saved. I sent the cleaner the cleaning offer. They reply YES to take it."
+          : sent("corrected")
+            ? "Times saved. I sent the cleaner the new time."
+            : "Times saved. Nothing was sent.",
       turns: this.turns(),
     });
   }
@@ -775,13 +802,7 @@ export class LiveDesk {
    */
   private needsTimes(engine: CleanerCore): boolean {
     const timed = new Set(this.file.timedJobs ?? []);
-    return engine.jobs().some((job) => timed.has(job.id) && job.status !== "canceled" && job.status !== "done" && (!job.checkoutTime || !job.nextCheckInTime));
-  }
-
-  /** True when the job the host is answering about already has its next check-in time saved. */
-  private checkInStored(engine: CleanerCore): boolean {
-    const open = new Set(["discovered", "awaiting_checkin", "host_confirmed", "offered"]);
-    return Boolean(engine.jobs().find((job) => open.has(job.status))?.nextCheckInTime);
+    return engine.jobs().some((job) => timed.has(job.id) && job.status !== "canceled" && job.status !== "done" && !hasTimes(job));
   }
 
   /** The host notes the host may see now. A private-code line waits for delivery, and PIN_SENT for the accepted text. */
