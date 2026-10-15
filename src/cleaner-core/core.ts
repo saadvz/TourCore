@@ -430,6 +430,8 @@ interface Job {
   announced: Announced | null;
   started: boolean;
   done: boolean;
+  /** Every source UID this booking was read under while the job was live. Absent means only its id. */
+  aliases?: string[];
 }
 
 interface Clearance {
@@ -1276,6 +1278,7 @@ class Engine implements CleanerCore {
     const preserveHostClock = this.watchFreshness && freshness.includes("stale");
     const kept = this.keepJobIds(normalized.feed.turnovers, normalized.provenance);
     this.reconcile(kept.turnovers, preserveHostClock, kept.moved);
+    this.learnAliases(kept.uids);
     const settled = await this.settleUncertain();
     const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
     sent.unshift(...settled);
@@ -1600,23 +1603,32 @@ class Engine implements CleanerCore {
   /**
    * A stay read under another source's UID keeps the job it already has, so the host's times and the
    * cleaner's YES stay and nobody gets a cancel and a new offer. That happens when calendars are
-   * reordered or a duplicate calendar is removed. A job matches when one of the merged stay's source
-   * UIDs is its id, or else when it has the same checkout day. A called-off job is never taken over.
+   * reordered or a duplicate calendar is removed. A job matches only the same booking: one of the
+   * merged stay's source UIDs is one the job was already read under (its aliases). A different booking
+   * on the same day is a new job, because a calendar date never confirms a time. A called-off job is
+   * never taken over.
    */
-  private keepJobIds(turnovers: Turnover[], provenance: JobProvenance[]): { turnovers: Turnover[]; moved: Set<string> } {
+  private keepJobIds(turnovers: Turnover[], provenance: JobProvenance[]): { turnovers: Turnover[]; moved: Set<string>; uids: Map<string, string[]> } {
+    const uidsOf = (turnover: Turnover) => provenance.find((item) => item.jobId === turnover.id)?.sources.map((source) => source.uid) ?? [turnover.id];
+    const owner = new Map<string, Job>();
+    for (const job of this.jobsState) {
+      if (job.canceled) continue;
+      for (const uid of aliasesOf(job)) if (!owner.has(uid)) owner.set(uid, job);
+    }
     const ids = new Set(turnovers.map((turnover) => turnover.id));
     const claimed = new Set(this.jobsState.filter((job) => ids.has(job.id)).map((job) => job.id));
     const rename = new Map<string, string>();
     for (const turnover of turnovers) {
       if (claimed.has(turnover.id)) continue;
-      const uids = provenance.find((item) => item.jobId === turnover.id)?.sources.map((source) => source.uid) ?? [];
-      const open = this.jobsState.filter((job) => !job.canceled && !claimed.has(job.id));
-      const match = open.find((job) => uids.includes(job.id)) ?? open.find((job) => job.checkoutDate === turnover.checkoutDate);
+      const match = uidsOf(turnover)
+        .map((uid) => owner.get(uid))
+        .find((job): job is Job => job !== undefined && !claimed.has(job.id));
       if (!match) continue;
       claimed.add(match.id);
       rename.set(turnover.id, match.id);
     }
-    if (rename.size === 0) return { turnovers, moved: new Set() };
+    const uids = new Map(turnovers.map((turnover) => [rename.get(turnover.id) ?? turnover.id, uidsOf(turnover)] as const));
+    if (rename.size === 0) return { turnovers, moved: new Set(), uids };
     const mapped = turnovers.map((turnover) => {
       const id = rename.get(turnover.id) ?? turnover.id;
       const arrivingUid = turnover.arrivingUid === null ? null : (rename.get(turnover.arrivingUid) ?? turnover.arrivingUid);
@@ -1628,7 +1640,16 @@ class Engine implements CleanerCore {
         contentHash: `${turnover.checkoutDate}|${turnover.nextCheckInDate ?? ""}|${arrivingUid ?? ""}`,
       };
     });
-    return { turnovers: mapped, moved: new Set(rename.values()) };
+    return { turnovers: mapped, moved: new Set(rename.values()), uids };
+  }
+
+  /** A live job learns every source UID its booking was just read under. */
+  private learnAliases(uids: Map<string, string[]>): void {
+    for (const job of this.jobsState) {
+      const seen = uids.get(job.id);
+      if (!seen || job.canceled) continue;
+      job.aliases = [...new Set([...aliasesOf(job), ...seen])];
+    }
   }
 
   private reconcile(turnovers: Turnover[], preserveHostClock = false, moved: ReadonlySet<string> = new Set()): void {
@@ -3088,10 +3109,15 @@ function foreignTenantId(slice: Stored): string {
   return match?.id ?? "scratch-lane";
 }
 
-/** The read lists this job: its id is a stay or a merged source UID, or a stay checks out that day. */
+function aliasesOf(job: Job): string[] {
+  return job.aliases && job.aliases.includes(job.id) ? job.aliases : [job.id, ...(job.aliases ?? [])];
+}
+
+/** The read lists this job's booking: a stay or a merged source UID is one the job was read under. */
 function listsJob(normalized: NormalizedSources, job: Job): boolean {
-  if (normalized.feed.turnovers.some((turnover) => turnover.id === job.id || turnover.checkoutDate === job.checkoutDate)) return true;
-  return normalized.provenance.some((item) => item.sources.some((source) => source.uid === job.id));
+  const known = new Set(aliasesOf(job));
+  if (normalized.feed.turnovers.some((turnover) => known.has(turnover.id))) return true;
+  return normalized.provenance.some((item) => item.sources.some((source) => known.has(source.uid)));
 }
 
 /** A saved snapshot is used only when it has the shape the engine wrote. */

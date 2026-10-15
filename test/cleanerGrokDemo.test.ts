@@ -1450,6 +1450,27 @@ describe("Cleaner Core Grok demo: editing calendars never silently cancels a cle
     expect(toTheCleaner(wired, before)).toEqual([]);
   });
 
+  it("a different guest on the same checkout day is a new job", async () => {
+    const wired = await app();
+    const guestA = { id: "gA", start: "2026-10-14", end: "2026-10-18" };
+    const guestB = { id: "gB", start: "2026-10-16", end: "2026-10-18" };
+    await confirmedJob(wired, guestA);
+    expect(engineOf(wired).jobs().find((job) => job.id === "google:gA")?.checkoutTime).toBe("10:30 AM");
+    const before = wired.cleanerSent.length;
+    const first = await call(wired, "check_now", { googleEvents: withNext(guestB) });
+    expect(first.isError).toBe(false);
+    const second = await call(wired, "check_now", { googleEvents: withNext(guestB) });
+    const jobs = engineOf(wired).jobs();
+    // Guest A's job is called off the usual way. The cleaner hears once, and nothing carries over.
+    expect(jobs.find((job) => job.id === "google:gA")?.status).toBe("canceled");
+    expect(toTheCleaner(wired, before).map(textKind)).toEqual(["cancel-update"]);
+    // Guest B is a new job with no time and no YES, and the host is asked its checkout time.
+    expect(jobs.find((job) => job.id === "google:gB")).toMatchObject({ status: "discovered", checkoutTime: null, nextCheckInTime: null });
+    const asked = [...alertsOf(first), ...alertsOf(second)].filter((line) => line.startsWith(HOST_CHECKOUT));
+    expect(asked.some((line) => line.includes("Oct 18"))).toBe(true);
+    expect(toTheCleaner(wired, before).some((item) => item.body.startsWith("Cleaning is scheduled for"))).toBe(false);
+  });
+
   it("swapping labels on two links never cancels a stay when one then fails", async () => {
     const wired = await app();
     serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY });
