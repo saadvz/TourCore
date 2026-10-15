@@ -77,7 +77,10 @@ export interface WiredApp {
   close: () => Promise<void>;
   tool: (path: string, token: string, name: string, args?: Record<string, unknown>, options?: { pinKey?: string | null }) => Promise<ToolResult>;
   listTools: (path: string, token: string) => Promise<{ status: number; names: string[]; raw: string }>;
-  postTwilio: (path: string, input: { from: string; to: string; body: string; sid: string; token: string }) => Promise<{ status: number; raw: string }>;
+  /** `extra` adds signed form fields, like NumMedia and MediaUrl0 for an MMS. */
+  postTwilio: (path: string, input: { from: string; to: string; body: string; sid: string; token: string; extra?: Record<string, string> }) => Promise<{ status: number; raw: string }>;
+  /** Changes the server's raw environment. An undefined value removes the name. */
+  setEnv: (values: NodeJS.ProcessEnv) => void;
   postStatus: (input: { sid: string; status: string; signed?: boolean }) => Promise<{ status: number; raw: string }>;
   logs: string[];
 }
@@ -202,8 +205,8 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     const parsed = JSON.parse(raw) as { result?: { tools?: Array<{ name: string }> } };
     return { status: res.status, names: parsed.result?.tools?.map((item) => item.name) ?? [], raw };
   };
-  const postTwilio = async (path: string, input: { from: string; to: string; body: string; sid: string; token: string }) => {
-    const fields = { MessageSid: input.sid, From: input.from, To: input.to, Body: input.body, SmsStatus: "received" };
+  const postTwilio = async (path: string, input: { from: string; to: string; body: string; sid: string; token: string; extra?: Record<string, string> }) => {
+    const fields: Record<string, string> = { MessageSid: input.sid, From: input.from, To: input.to, Body: input.body, SmsStatus: "received", ...input.extra };
     const rawBody = new URLSearchParams(fields).toString();
     const signature = twilioSignature(input.token, `${PUBLIC}${path}`, fields);
     const res = await fetch(`http://127.0.0.1:${port}${path}`, {
@@ -222,7 +225,13 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers, body: rawBody });
     return { status: res.status, raw: await res.text() };
   };
-  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
+  const setEnv = (values: NodeJS.ProcessEnv) => {
+    for (const [name, value] of Object.entries(values)) {
+      if (value === undefined) delete env[name];
+      else env[name] = value;
+    }
+  };
+  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, setEnv, postStatus, logs };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

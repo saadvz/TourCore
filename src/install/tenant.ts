@@ -37,3 +37,69 @@ export function clearHostedTenant(files: InstallationFiles): boolean {
   files.writeState(next);
   return true;
 }
+
+/**
+ * Cleaner Core's hosted owner: the first Grok Bot a human allowed on
+ * /mcp/cleaner-core. Separate from hostedTenant, so one host can serve both.
+ * CLEANER_CORE_HOSTED_OWNER_RESET=reset-cleaner-owner clears it once. A
+ * variable left set doesn't clear it again on the next deploy.
+ */
+
+export const CLEANER_HOSTED_OWNER_RESET = "reset-cleaner-owner";
+
+export const SECOND_CLEANER_TENANT_MESSAGE =
+  "This hosted Cleaner Core already belongs to one Grok Bot. A second Grok Bot can't connect here.";
+
+export function hostedCleanerTenantDecision(state: InstallState, clientId: string): { allowed: true } | { allowed: false; message: string } {
+  const bound = state.hostedCleanerTenant?.clientId;
+  if (!bound || bound === clientId) return { allowed: true };
+  return { allowed: false, message: SECOND_CLEANER_TENANT_MESSAGE };
+}
+
+export function bindHostedCleanerTenant(files: InstallationFiles, clientId: string, now: Date): void {
+  const state = files.state();
+  if (state.hostedCleanerTenant?.clientId) return;
+  files.writeState({ ...state, hostedCleanerTenant: { clientId, boundAt: now.toISOString() } });
+}
+
+export function clearHostedCleanerTenant(files: InstallationFiles): boolean {
+  const state = files.state();
+  if (!state.hostedCleanerTenant) return false;
+  const next = { ...state };
+  delete next.hostedCleanerTenant;
+  files.writeState(next);
+  return true;
+}
+
+/**
+ * Startup: only when the reset value is exactly right, clears the cleaner
+ * owner and revokes every Cleaner Core grant (access and refresh), so the
+ * previous owner's Grok Bot is signed out at once. Tour Core's binding and
+ * grants are untouched. True when anything was cleared or revoked.
+ *
+ * One-shot: the install state records that the reset was applied, so a
+ * variable left set (Railway redeploys on every push) doesn't sign the new
+ * owner out again. A deploy without the variable removes the record, so
+ * setting it again later resets again.
+ */
+export function resetHostedCleanerOwner(env: NodeJS.ProcessEnv, files: InstallationFiles, revokeCleanerGrants: () => number, now: Date = new Date()): boolean {
+  const state = files.state();
+  if (env.CLEANER_CORE_HOSTED_OWNER_RESET?.trim() !== CLEANER_HOSTED_OWNER_RESET) {
+    if (state.cleanerOwnerResetAppliedAt) {
+      const next = { ...state };
+      delete next.cleanerOwnerResetAppliedAt;
+      files.writeState(next);
+    }
+    return false;
+  }
+  if (state.cleanerOwnerResetAppliedAt) return false;
+  const cleared = clearHostedCleanerTenant(files);
+  const revoked = revokeCleanerGrants();
+  files.writeState({ ...files.state(), cleanerOwnerResetAppliedAt: now.toISOString() });
+  return cleared || revoked > 0;
+}
+
+/** True when CLEANER_CORE_HOSTED_OWNER_RESET is still set after it was applied. */
+export function cleanerOwnerResetLeftSet(env: NodeJS.ProcessEnv, files: InstallationFiles): boolean {
+  return env.CLEANER_CORE_HOSTED_OWNER_RESET?.trim() === CLEANER_HOSTED_OWNER_RESET && Boolean(files.state().cleanerOwnerResetAppliedAt);
+}

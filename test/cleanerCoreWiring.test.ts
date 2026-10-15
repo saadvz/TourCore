@@ -60,7 +60,6 @@ const PRODUCT = /\b(Tour Core|Cleaner Core)\b/;
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
-const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
 const PIN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
@@ -526,20 +525,24 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toHaveLength(1);
   });
 
-  it("refuses to seal or send when the header key is missing or wrong", async () => {
+  it("seals with the server's own key when the header is missing, and refuses a wrong header key", async () => {
     const wired = await app();
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
-    const missing = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE }, { pinKey: null });
-    expect(missing.isError).toBe(true);
-    expect(missing.text).toBe(PIN_KEY_MISSING);
-    expect(missing.raw).not.toContain(DOOR_CODE);
+    // No header, like a Grok Bot connected by OAuth: the server's own key, made once in the secret store.
+    const serverSealed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE }, { pinKey: null });
+    expect(serverSealed.isError).toBe(false);
+    expect(serverSealed.raw).not.toContain(DOOR_CODE);
+    const serverKey = wired.env().CLEANER_CORE_PIN_KEY ?? "";
+    expect(Buffer.from(serverKey, "base64")).toHaveLength(32);
+    expect(serverSealed.raw).not.toContain(serverKey);
     const savedPath = join(wired.root, "cleaner-live.json");
-    const beforeSeal = readFileSync(savedPath, "utf8");
-    expect(beforeSeal).not.toContain("pinSeal");
-    expect(beforeSeal).not.toContain(DOOR_CODE);
+    const serverSeal = readFileSync(savedPath, "utf8");
+    expect(serverSeal).toContain("pinSeal");
+    expect(serverSeal).not.toContain(DOOR_CODE);
+    expect(serverSeal).not.toContain(serverKey);
 
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
@@ -558,8 +561,11 @@ describe("Cleaner Core live wiring", () => {
     expect(stored).not.toContain(wrongKey);
     expect(stored).not.toContain(TEST_PIN_KEY);
     expect(stored).not.toContain(DOOR_CODE);
+    // The header sealed this code, so the server's key can't open it.
     const absent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" }, { pinKey: null });
-    expect(absent.text).toBe(PIN_KEY_MISSING);
+    expect(absent.text).toBe(PIN_REENTER);
+    expect(absent.raw).not.toContain(serverKey);
+    expect(stored).not.toContain(serverKey);
     expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
 
     const parsed = JSON.parse(stored) as { propertyId: string; pinSeal: { iv: string; tag: string; data: string } };

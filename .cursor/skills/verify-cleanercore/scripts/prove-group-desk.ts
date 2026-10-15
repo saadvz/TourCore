@@ -78,12 +78,12 @@ const env: NodeJS.ProcessEnv = {
 };
 const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
 const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-desk.getState("2");
-desk.saveProperty({ business: "Harbor", address: "12 Practice Lane, Teaneck, NJ 07666", timeZone: "America/New_York" });
-desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER });
-desk.saveCalendarLink({ url: CALENDAR_URL });
-desk.saveDoorCode({ code: DOOR_CODE }, pinKey);
-desk.setUpTexting();
+await desk.getState("2");
+await desk.saveProperty({ business: "Harbor", address: "12 Practice Lane, Teaneck, NJ 07666", timeZone: "America/New_York" });
+await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER });
+await desk.saveCalendarLink({ url: CALENDAR_URL });
+await desk.saveDoorCode({ code: DOOR_CODE }, pinKey);
+await desk.setUpTexting();
 await desk.runChecks();
 const missing = await desk.markGuestsLeft({ said: "The guests have left" }, undefined);
 await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });

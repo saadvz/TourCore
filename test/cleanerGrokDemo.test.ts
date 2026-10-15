@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -439,12 +439,12 @@ function resultOf(reply: ToolReply): Record<string, unknown> {
 async function openDesk(root: string, env: NodeJS.ProcessEnv): Promise<LiveDesk> {
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
   const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-  expect(desk.getState("2").ok).toBe(true);
-  expect(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }).ok).toBe(true);
-  expect(desk.savePeople({ host: HOST, cleaner: CLEANER }).ok).toBe(true);
-  expect(desk.saveCalendarLink({ google: true }).ok).toBe(true);
-  expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
-  expect(desk.setUpTexting().ok).toBe(true);
+  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE })).ok).toBe(true);
+  expect((await desk.savePeople({ host: HOST, cleaner: CLEANER })).ok).toBe(true);
+  expect((await desk.saveCalendarLink({ google: true })).ok).toBe(true);
+  expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
+  expect((await desk.setUpTexting()).ok).toBe(true);
   expect((await desk.runChecks({ googleEvents: googleList([]) })).ok).toBe(true);
   return desk;
 }
@@ -698,13 +698,13 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     expect(posts).toHaveLength(1);
     await yes(wired, "SM-wake-yes-1");
     await drain(wired);
-    // The opt-in YES leaves no host note, so the notes from Grok's own steps don't wake it either.
-    expect(posts).toHaveLength(1);
+    // Grok reads every message, so the opt-in YES wakes it too.
+    expect(posts).toHaveLength(2);
     await yes(wired, "SM-wake-yes-2");
     await drain(wired);
     const wakes = posts.slice(1);
-    expect(wakes).toHaveLength(1);
-    const raw = wakes[0]?.body ?? "";
+    expect(wakes).toHaveLength(2);
+    const raw = wakes[1]?.body ?? "";
     const body = JSON.parse(raw) as Record<string, unknown>;
     expect(Object.keys(body)).toEqual(["schemaVersion", "eventId", "eventType", "occurredAt"]);
     expect(body.eventType).toBe("cleaning.update");
@@ -763,7 +763,7 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function routineDoc(name: string): string {
-  return readFileSync(join(ROOT, "grok-template", "routines", name), "utf8");
+  return readFileSync(join(ROOT, "cleaner-template", "routines", name), "utf8");
 }
 
 async function rpc(method: string): Promise<Record<string, unknown>> {
@@ -826,7 +826,7 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     expect((await call(wired, "get_state")).structured?.next).toBe(TIMES_NEXT);
   });
 
-  it("ships both routine docs without adding them to the Tour Core manifest", () => {
+  it("ships both routine docs in the Cleaner Core template, not the Tour Core manifest", () => {
     for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
       const doc = routineDoc(name);
       expect(doc, name).toContain("check_now");
@@ -1095,7 +1095,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     expect(kindsSince(wired, before)).not.toContain("cancel-update");
   });
 
-  it("after a restart with Guesty down, Google is not applied alone", async () => {
+  it("after a restart with Guesty down, Google is applied beside the saved Guesty snapshot", async () => {
     const wired = await app();
     await setUpBoth(wired);
     const list = googleList(GOOGLE_STAYS);
@@ -1186,6 +1186,329 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     expect(posts.map((post) => JSON.parse(post.body).eventType).filter((type) => type === "cleaning.update")).toHaveLength(1);
     const checked = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
     expect(alertsOf(checked)).toEqual(expect.arrayContaining([YES_NOTE, `The cleaner marked the cleaning at ${ADDRESS} done.`]));
+  });
+});
+
+const AIRBNB_URL = "https://calendar.example/airbnb.ics";
+const VRBO_URL = "https://calendar.example/vrbo.ics";
+
+function icsOf(events: { uid: string; start: string; end: string }[]): string {
+  const lines = ["BEGIN:VCALENDAR"];
+  for (const event of events) {
+    lines.push("BEGIN:VEVENT", `UID:${event.uid}`, `DTSTART;VALUE=DATE:${event.start}`, `DTEND;VALUE=DATE:${event.end}`, "SUMMARY:Guest", "END:VEVENT");
+  }
+  lines.push("END:VCALENDAR", "");
+  return lines.join("\n");
+}
+
+/** Airbnb has one stay. Vrbo has a later stay and the same Airbnb stay under its own UID. */
+const AIRBNB_ICS = icsOf([{ uid: "air-1", start: "20261014", end: "20261018" }]);
+const VRBO_ICS = icsOf([
+  { uid: "vrbo-1", start: "20261020", end: "20261024" },
+  { uid: "vrbo-dup", start: "20261014", end: "20261018" },
+]);
+
+/** Vrbo with only its own stay. */
+const VRBO_ONLY = icsOf([{ uid: "vrbo-1", start: "20261020", end: "20261024" }]);
+
+/** Serves each link's calendar. `null` makes that link fail. */
+function serveCalendars(bodies: { airbnb: string | null; vrbo: string | null; guesty?: string | null }) {
+  setCleanerCalendarFetch(async (url) => {
+    const body = url === AIRBNB_URL ? bodies.airbnb : url === VRBO_URL ? bodies.vrbo : url === CALENDAR_URL ? (bodies.guesty ?? null) : null;
+    return {
+      status: body === null ? 500 : 200,
+      url,
+      async text() {
+        return body ?? "";
+      },
+    };
+  });
+}
+
+async function setUpSources(wired: WiredApp, google: boolean) {
+  await setUpTo(wired);
+  const saved = await call(wired, "save_sources", {
+    calendars: [
+      { name: "Airbnb", url: AIRBNB_URL },
+      { name: "Vrbo", url: VRBO_URL },
+    ],
+    ...(google ? { google: true } : {}),
+  });
+  expect(saved.isError, saved.text).toBe(false);
+  expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+  expect((await call(wired, "set_up_texting")).isError).toBe(false);
+}
+
+function storeFile(wired: WiredApp): string {
+  const path = join(wired.root, "cleaner-job", "cleaner-core.json");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+describe("Cleaner Core Grok demo: several calendar links", () => {
+  it("two iCal links and Google make one job per stay", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
+    await setUpSources(wired, true);
+    const list = googleList([
+      { id: "g1", start: "2026-10-14", end: "2026-10-18" },
+      { id: "g5", start: "2026-10-26", end: "2026-10-28" },
+    ]);
+    const checks = await call(wired, "run_checks", { googleEvents: list });
+    expect(checks.isError, checks.text).toBe(false);
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    const checked = await call(wired, "check_now", { googleEvents: list });
+    expect(checked.isError).toBe(false);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
+    expect(checked.structured?.unread).toBeUndefined();
+    expect(wired.cleanerSent).toEqual([]);
+  });
+
+  it("a restart keeps every source", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const before = wired.cleanerSent.length;
+    expect(storeFile(wired)).not.toContain(AIRBNB_URL);
+    expect(storeFile(wired)).not.toContain(VRBO_URL);
+
+    // After a restart, Vrbo fails. Airbnb's new stay is applied, and Vrbo's jobs stay.
+    resetLiveDesks();
+    serveCalendars({ airbnb: icsOf([{ uid: "air-1", start: "20261014", end: "20261018" }, { uid: "air-2", start: "20261026", end: "20261028" }]), vrbo: null });
+    const checked = await call(wired, "check_now", {});
+    expect(checked.isError).toBe(false);
+    expect(checked.structured?.unread).toEqual(["Vrbo"]);
+    expect(checked.structured?.guestyUnread).toBeUndefined();
+    expect(checked.text).not.toContain(VRBO_URL);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
+
+    // Another restart with Airbnb down keeps Airbnb's jobs.
+    resetLiveDesks();
+    serveCalendars({ airbnb: null, vrbo: VRBO_ICS });
+    const other = await call(wired, "check_now", {});
+    expect(other.isError).toBe(false);
+    expect(other.structured?.unread).toEqual(["Airbnb"]);
+    expect(turnsOf(other).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24", "2026-10-28"]);
+    expect(turnsOf(other).every((turn) => turn.status !== "canceled")).toBe(true);
+    expect(kindsSince(wired, before)).not.toContain("cancel-update");
+  });
+
+  it("save_sources refuses a private or http link", async () => {
+    const wired = await app();
+    await setUpTo(wired);
+    for (const url of ["http://calendar.example/airbnb.ics", "https://192.168.1.20/airbnb.ics", "https://10.0.0.5/airbnb.ics", "https://localhost/airbnb.ics"]) {
+      const refused = await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url }] });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).not.toContain(url);
+    }
+    // One bad link refuses the whole list.
+    const mixed = await call(wired, "save_sources", {
+      calendars: [
+        { name: "Airbnb", url: AIRBNB_URL },
+        { name: "Vrbo", url: "http://calendar.example/vrbo.ics" },
+      ],
+    });
+    expect(mixed.isError).toBe(true);
+    expect((await call(wired, "save_sources", { calendars: [] })).isError).toBe(true);
+    const nine = Array.from({ length: 9 }, (_, index) => ({ name: `Calendar ${index + 1}`, url: `https://calendar.example/${index}.ics` }));
+    expect((await call(wired, "save_sources", { calendars: nine })).isError).toBe(true);
+    expect(liveFile(wired)).not.toContain("calendar.example");
+    expect((await done(wired)).some((line) => /calendar/i.test(line))).toBe(false);
+    // Google alone is enough.
+    expect((await call(wired, "save_sources", { google: true })).isError).toBe(false);
+    expect(await done(wired)).toContain("Google Calendar saved.");
+  });
+
+  it("two links with the same name stay two sources", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: icsOf([{ uid: "vrbo-1", start: "20261020", end: "20261024" }]) });
+    await setUpTo(wired);
+    const saved = await call(wired, "save_sources", {
+      calendars: [
+        { name: "Airbnb", url: AIRBNB_URL },
+        { name: "airbnb!", url: VRBO_URL },
+      ],
+    });
+    expect(saved.isError).toBe(false);
+    expect(await done(wired)).toContain("2 calendar links saved.");
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24"]);
+  });
+
+  it("save_calendar_link still saves one link", async () => {
+    const wired = await app();
+    await setUpTo(wired);
+    expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
+    expect(await done(wired)).toContain("Calendar link saved.");
+    expect(JSON.parse(liveFile(wired)).calendarLink).toBe(CALENDAR_URL);
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(checks.isError).toBe(false);
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(GUESTY_JOBS);
+    guestyCalendar(false);
+    const down = await call(wired, "check_now", {});
+    expect(down.structured?.guestyUnread).toBe(true);
+    expect(down.structured?.unread).toEqual(["Guesty Lite"]);
+    expect(turnsOf(down).every((turn) => turn.status !== "canceled")).toBe(true);
+  });
+});
+
+const AIRBNB = { name: "Airbnb", url: AIRBNB_URL };
+const VRBO = { name: "Vrbo", url: VRBO_URL };
+
+function engineOf(wired: WiredApp): CleanerCore {
+  return (liveDeskFor(wired.root, wired.env, () => new Date(FROZEN)) as unknown as { engine: CleanerCore }).engine;
+}
+
+function offersTo(wired: WiredApp): number {
+  return toTheCleaner(wired).filter((item) => /Reply YES to schedule it/.test(item.body)).length;
+}
+
+describe("Cleaner Core Grok demo: editing calendars never silently cancels a cleaning", () => {
+  it("removing a calendar that alone holds an upcoming job is refused until dropJobs", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const saved = liveFile(wired);
+    const refused = await call(wired, "save_sources", { calendars: [AIRBNB] });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("Removing that calendar would call off 1 upcoming cleaning. Ask the host, then save again with dropJobs: true.");
+    expect(refused.structured?.wouldCancel).toEqual([{ checkoutDate: "2026-10-24" }]);
+    expect(liveFile(wired)).toBe(saved);
+    const still = await call(wired, "check_now", {});
+    expect(turnsOf(still).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24"]);
+    expect(turnsOf(still).every((turn) => turn.status !== "canceled")).toBe(true);
+    const dropped = await call(wired, "save_sources", { calendars: [AIRBNB], dropJobs: true });
+    expect(dropped.isError, dropped.text).toBe(false);
+    const after = await call(wired, "check_now", {});
+    expect(turnOn(after, "2026-10-24")?.status).toBe("canceled");
+    expect(turnOn(after, "2026-10-18")?.status).not.toBe("canceled");
+  });
+
+  it("omitting google keeps Google, and turning it off asks first", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY });
+    await setUpSources(wired, true);
+    expect((await call(wired, "run_checks", { googleEvents: googleList([{ id: "g5", start: "2026-10-26", end: "2026-10-28" }]) })).isError).toBe(false);
+    expect((await call(wired, "save_sources", { calendars: [AIRBNB, VRBO] })).isError).toBe(false);
+    expect(await done(wired)).toContain("Google Calendar saved.");
+    const off = await call(wired, "save_sources", { calendars: [AIRBNB, VRBO], google: false });
+    expect(off.isError).toBe(true);
+    expect(off.structured?.wouldCancel).toEqual([{ checkoutDate: "2026-10-28" }]);
+    expect(await done(wired)).toContain("Google Calendar saved.");
+  });
+
+  it("save_calendar_link keeps the other calendars", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY, guesty: CALENDAR_ICS });
+    await setUpTo(wired);
+    expect((await call(wired, "save_sources", { calendars: [AIRBNB, VRBO] })).isError).toBe(false);
+    expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
+    expect(await done(wired)).toContain("3 calendar links saved.");
+    const file = JSON.parse(liveFile(wired)) as { calendarLink?: string; calendars?: unknown[] };
+    expect(file.calendarLink).toBe(CALENDAR_URL);
+    expect(file.calendars).toEqual([AIRBNB, VRBO]);
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect((await call(wired, "set_up_texting")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(checks.isError, checks.text).toBe(false);
+    expect(turnsOf(checks).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-22", "2026-10-24"]);
+  });
+
+  it("reordering or removing a duplicate calendar keeps the job, its times, and the cleaner's YES", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    await yes(wired, "SM-dup-yes-1");
+    await yes(wired, "SM-dup-yes-2");
+    const job = engineOf(wired).jobs().find((item) => item.checkoutDate === "2026-10-18");
+    expect(job?.status).not.toBe("discovered");
+    const before = wired.cleanerSent.length;
+    const offered = offersTo(wired);
+
+    expect((await call(wired, "save_sources", { calendars: [VRBO, AIRBNB] })).isError).toBe(false);
+    const reordered = await call(wired, "check_now", {});
+    expect(turnOn(reordered, "2026-10-18")).toMatchObject({ checkoutTime: "10:30 AM", nextCheckInTime: "3:00 PM", status: job?.status });
+    expect(engineOf(wired).jobs().find((item) => item.checkoutDate === "2026-10-18")?.id).toBe(job?.id);
+
+    // Vrbo still lists the stay, so removing Airbnb calls nothing off and needs no dropJobs.
+    const removed = await call(wired, "save_sources", { calendars: [VRBO] });
+    expect(removed.isError, removed.text).toBe(false);
+    const after = await call(wired, "check_now", {});
+    expect(turnOn(after, "2026-10-18")).toMatchObject({ checkoutTime: "10:30 AM", nextCheckInTime: "3:00 PM", status: job?.status });
+    expect(engineOf(wired).jobs().find((item) => item.checkoutDate === "2026-10-18")?.id).toBe(job?.id);
+    expect(kindsSince(wired, before)).not.toContain("cancel-update");
+    expect(offersTo(wired)).toBe(offered);
+    expect(toTheCleaner(wired, before)).toEqual([]);
+  });
+
+  it("a different guest on the same checkout day is a new job", async () => {
+    const wired = await app();
+    const guestA = { id: "gA", start: "2026-10-14", end: "2026-10-18" };
+    const guestB = { id: "gB", start: "2026-10-16", end: "2026-10-18" };
+    await confirmedJob(wired, guestA);
+    expect(engineOf(wired).jobs().find((job) => job.id === "google:gA")?.checkoutTime).toBe("10:30 AM");
+    const before = wired.cleanerSent.length;
+    const first = await call(wired, "check_now", { googleEvents: withNext(guestB) });
+    expect(first.isError).toBe(false);
+    const second = await call(wired, "check_now", { googleEvents: withNext(guestB) });
+    const jobs = engineOf(wired).jobs();
+    // Guest A's job is called off the usual way. The cleaner hears once, and nothing carries over.
+    expect(jobs.find((job) => job.id === "google:gA")?.status).toBe("canceled");
+    expect(toTheCleaner(wired, before).map(textKind)).toEqual(["cancel-update"]);
+    // Guest B is a new job with no time and no YES, and the host is asked its checkout time.
+    expect(jobs.find((job) => job.id === "google:gB")).toMatchObject({ status: "discovered", checkoutTime: null, nextCheckInTime: null });
+    const asked = [...alertsOf(first), ...alertsOf(second)].filter((line) => line.startsWith(HOST_CHECKOUT));
+    expect(asked.some((line) => line.includes("Oct 18"))).toBe(true);
+    expect(toTheCleaner(wired, before).some((item) => item.body.startsWith("Cleaning is scheduled for"))).toBe(false);
+  });
+
+  it("swapping labels on two links never cancels a stay when one then fails", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const swapped = await call(wired, "save_sources", {
+      calendars: [
+        { name: "Airbnb", url: VRBO_URL },
+        { name: "Vrbo", url: AIRBNB_URL },
+      ],
+    });
+    expect(swapped.isError, swapped.text).toBe(false);
+    serveCalendars({ airbnb: null, vrbo: VRBO_ONLY });
+    const checked = await call(wired, "check_now", {});
+    expect(checked.isError).toBe(false);
+    expect(checked.structured?.unread).toEqual(["Vrbo"]);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
+  });
+
+  it("a store saved before snapshots were kept applies nothing when a link fails", async () => {
+    const wired = await app();
+    serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ONLY });
+    await setUpSources(wired, false);
+    expect((await call(wired, "run_checks")).isError).toBe(false);
+    resetLiveDesks();
+    const path = join(wired.root, "cleaner-job", "cleaner-core.json");
+    const store = JSON.parse(readFileSync(path, "utf8")) as { snapshots?: unknown; tenants?: Record<string, { snapshots?: unknown }> };
+    const slices = store.tenants ? Object.values(store.tenants) : [store];
+    expect(slices.some((slice) => slice.snapshots !== undefined)).toBe(true);
+    for (const slice of slices) delete slice.snapshots;
+    writeFileSync(path, `${JSON.stringify(store)}\n`);
+    serveCalendars({ airbnb: icsOf([{ uid: "air-1", start: "20261014", end: "20261018" }, { uid: "air-2", start: "20261026", end: "20261028" }]), vrbo: null });
+    const checked = await call(wired, "check_now", {});
+    expect(checked.isError).toBe(false);
+    expect(checked.structured?.unread).toEqual(["Vrbo"]);
+    expect(turnsOf(checked).map((turn) => turn.checkoutDate)).toEqual(["2026-10-18", "2026-10-24"]);
+    expect(turnsOf(checked).every((turn) => turn.status !== "canceled")).toBe(true);
   });
 });
 

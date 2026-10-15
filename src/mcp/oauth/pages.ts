@@ -34,7 +34,8 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }): string {
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; label?: "Tour Core" | "Cleaner Core" }): string {
+  if (p.label === "Cleaner Core") return cleanerConsentPage(p);
   const requestId = escape(p.requestId);
   const decision = p.hosted
     ? `${p.firstClaim ? "<p>Approving this first connection will make this Grok connection the owner of this Tour Core demo.</p>" : ""}
@@ -65,6 +66,41 @@ export function consentPage(p: { requestId: string; matchCode: string; clientNam
           ${decision}
           <p class="match-code">${escape(p.matchCode)}</p>
           <p id="oauth-status" class="muted" data-request="${requestId}">Waiting for approval…</p>
+        </div>
+        <button type="button" id="oauth-deny">Deny</button>`,
+    `\n    <script type="module" src="/oauth.js"></script>`,
+  );
+}
+
+/** The same approval, worded for Cleaner Core. Its scope opens only /mcp/cleaner-core. */
+function cleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }): string {
+  const decision = p.hosted
+    ? `${p.firstClaim ? "<p>Approving this first connection will make this Grok Bot the owner of this Cleaner Core.</p>" : ""}
+          <p><button type="button" class="primary" id="oauth-allow" data-code="${escape(p.matchCode)}">Allow</button></p>`
+    : `<p><strong>Approve on the Cleaner Core computer.</strong> Open <em>Connect Grok</em> there, check it shows this code, then choose Allow:</p>`;
+  return shell(
+    "Connect your Grok Bot to Cleaner Core",
+    `        <h1>Connect your Grok Bot to Cleaner Core</h1>
+        <p><strong>${escape(p.clientName)}</strong> is asking to run your cleaning schedule.</p>
+        <p class="hint">After you decide, you'll be sent back to ${escape(p.redirectHost)}.</p>
+        <p>It will be able to:</p>
+        <ul>
+          <li>save your property, calendars, people and schedule</li>
+          <li>read new bookings</li>
+          <li>text your cleaner when you say so</li>
+          <li>tell you what your cleaner says</li>
+        </ul>
+        <p>It will <strong>not</strong> be able to:</p>
+        <ul>
+          <li>read back your door code</li>
+          <li>send the door code before you say the guests have left</li>
+          <li>read Tour Core or its tours</li>
+          <li>read provider secrets</li>
+        </ul>
+        <div class="card highlight">
+          ${decision}
+          <p class="match-code">${escape(p.matchCode)}</p>
+          <p id="oauth-status" class="muted" data-request="${escape(p.requestId)}">Waiting for approval…</p>
         </div>
         <button type="button" id="oauth-deny">Deny</button>`,
     `\n    <script type="module" src="/oauth.js"></script>`,

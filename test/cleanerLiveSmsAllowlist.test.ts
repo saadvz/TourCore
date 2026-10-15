@@ -54,12 +54,12 @@ async function readyDesk(env: NodeJS.ProcessEnv) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-allow-"));
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
   const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-  expect(desk.getState("2").ok).toBe(true);
-  expect(desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-  expect(desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER }).ok).toBe(true);
-  expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
-  expect(desk.saveDoorCode({ code: DOOR }, pinKey).ok).toBe(true);
-  expect(desk.setUpTexting().ok).toBe(true);
+  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+  expect((await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER })).ok).toBe(true);
+  expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
+  expect((await desk.saveDoorCode({ code: DOOR }, pinKey)).ok).toBe(true);
+  expect((await desk.setUpTexting()).ok).toBe(true);
   return {
     desk,
     close() {
@@ -84,10 +84,10 @@ describe("live texts with a blank or incomplete allowlist", () => {
       expect(checks.ok).toBe(false);
       const times = await desk.confirmTimes({ checkout: "10:30 AM", checkIn: "3:00 PM" });
       expect(times.ok).toBe(false);
-      const turns = desk.getTurns();
+      const turns = await desk.getTurns();
       expect(turns).toEqual({ ok: true, result: { turns: [] } });
       await desk.inbound({ id: "blank-yes", from: CLEANER, text: "YES" });
-      expect(desk.getTurns()).toEqual({ ok: true, result: { turns: [] } });
+      expect(await desk.getTurns()).toEqual({ ok: true, result: { turns: [] } });
       expect(client.sent).toEqual([]);
     } finally {
       close();
@@ -112,7 +112,7 @@ describe("live texts with a blank or incomplete allowlist", () => {
       expect(checks.ok).toBe(false);
       const times = await desk.confirmTimes({ checkout: "10:30 AM", checkIn: "3:00 PM" });
       expect(times.ok).toBe(false);
-      expect(desk.getTurns()).toEqual({ ok: true, result: { turns: [] } });
+      expect(await desk.getTurns()).toEqual({ ok: true, result: { turns: [] } });
       await desk.inbound({ id: "off-yes", from: CLEANER, text: "YES" });
       expect(client.sent.map((item) => ({ to: item.to, body: item.body }))).toEqual([
         { to: HOST, body: "checkout question" },

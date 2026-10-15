@@ -279,12 +279,12 @@ describe("group chat flag", () => {
     roots.push(root);
     const desk = liveDeskFor(root, () => env, () => new Date(NOW));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    expect(desk.getState("2").ok).toBe(true);
-    expect(desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-    expect(desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER }).ok).toBe(true);
-    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
-    expect(desk.saveDoorCode({ code: PIN }, pinKey).ok).toBe(true);
-    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+    expect((await desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER })).ok).toBe(true);
+    expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
+    expect((await desk.saveDoorCode({ code: PIN }, pinKey)).ok).toBe(true);
+    expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
     expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
     return sms.sent.map((text) => text.body);

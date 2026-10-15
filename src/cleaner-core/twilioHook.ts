@@ -4,10 +4,21 @@ import { parsePhone } from "../core/phone";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import { CLEANER_PIN_STATUS_PATH } from "./liveSms";
+import type { InboundMedia } from "./photos";
 import { formParams, verifyTwilioSignature } from "../messaging/twilio/signature";
 
 export const CLEANER_TWILIO_PATH = "/webhooks/twilio/cleaner-core";
 export const CLEANER_TWILIO_STATUS_PATH = CLEANER_PIN_STATUS_PATH;
+/** Twilio sends at most 10 attachments with one MMS. */
+const MAX_MEDIA = 10;
+
+/** An MMS's attachments: NumMedia (0 to 10), then MediaUrl{i} and MediaContentType{i}. Never logged. */
+function mediaOf(params: Record<string, string>): InboundMedia[] {
+  const count = Math.min(MAX_MEDIA, Math.max(0, Number.parseInt(params.NumMedia ?? "0", 10) || 0));
+  return Array.from({ length: count }, (_, index) => ({ url: params[`MediaUrl${index}`]?.trim() ?? "", contentType: params[`MediaContentType${index}`]?.trim() ?? "" })).filter(
+    (item) => item.url.length > 0,
+  );
+}
 
 export function textAddressedTo(raw: Buffer, number: string | undefined): boolean {
   if (!number) return false;
@@ -45,8 +56,9 @@ export async function handleCleanerTwilioWebhook(input: {
   const from = params.From ?? "";
   const text = params.Body ?? "";
   const id = params.MessageSid?.trim() || createHash("sha256").update(`${from}\n${text}`).digest("hex");
+  const media = mediaOf(params);
   const desk = liveDeskFor(input.root, input.env, input.now);
-  await desk.inbound({ id, from, text });
+  await desk.inbound({ id, from, text, ...(media.length > 0 ? { media } : {}) });
   return { status: 200, body: "{}" };
 }
 

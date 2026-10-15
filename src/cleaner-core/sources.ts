@@ -1,11 +1,15 @@
 import { interpretFeed, isCalendarBlock, type FeedBlock, type FeedRead, type Turnover } from "./calendar";
 
-export type BookingSourceKind = "guesty-lite" | "google-calendar" | "notion";
+export type BookingSourceKind = "guesty-lite" | "ical" | "google-calendar" | "notion";
 
 export type SourcePermission = "granted" | "missing" | "insufficient";
 
 export interface SourceSnapshot {
   kind: BookingSourceKind;
+  /** `guesty-lite`, `google-calendar`, `notion`, or `ical:<slug>` for one of several saved calendar links. */
+  sourceId: string;
+  /** A hash of the calendar link this was read from, never the link. Ties the snapshot to the link, not the name. */
+  origin?: string;
   tenantId: string;
   turnovers: Turnover[];
   blocks: FeedBlock[];
@@ -49,7 +53,7 @@ export interface NormalizedSources {
   provenance: JobProvenance[];
 }
 
-export const BOOKING_SOURCE_KINDS = ["guesty-lite", "google-calendar", "notion"] as const satisfies readonly BookingSourceKind[];
+export const BOOKING_SOURCE_KINDS = ["guesty-lite", "ical", "google-calendar", "notion"] as const satisfies readonly BookingSourceKind[];
 
 const SOURCE_ORDER: BookingSourceKind[] = [...BOOKING_SOURCE_KINDS];
 
@@ -63,7 +67,18 @@ export function guestyLiteSource(ical: string, tenantId: string): BookingSource 
     kind: "guesty-lite",
     async read() {
       const feed = interpretFeed(ical);
-      return { kind: "guesty-lite", tenantId, turnovers: feed.turnovers, blocks: feed.blocks };
+      return { kind: "guesty-lite", sourceId: "guesty-lite", tenantId, turnovers: feed.turnovers, blocks: feed.blocks };
+    },
+  };
+}
+
+/** One read of one saved calendar link. `sourceId` is `ical:<slug>`, so several links sit side by side. */
+export function icalSource(body: string, tenantId: string, sourceId: string): BookingSource {
+  return {
+    kind: "ical",
+    async read() {
+      const feed = interpretFeed(body);
+      return { kind: "ical", sourceId, tenantId, turnovers: feed.turnovers, blocks: feed.blocks };
     },
   };
 }
@@ -129,6 +144,7 @@ export function readGoogleCalendarFixture(body: string): SourceSnapshot {
   }
   return {
     kind: "google-calendar",
+    sourceId: "google-calendar",
     tenantId: record.tenantId,
     turnovers: linkStays(stays),
     blocks,
@@ -136,22 +152,23 @@ export function readGoogleCalendarFixture(body: string): SourceSnapshot {
 }
 
 /**
- * Guesty Lite is the aggregator when it has the stay. Google, then Notion, follow.
+ * Guesty Lite is the aggregator when it has the stay. Saved calendar links follow in the order given,
+ * then Google, then Notion.
  * Same check-in or same checkout is one booking. A block never becomes a stay.
  * Dates on the merged job come from the earlier source. A later date disagreement
  * is a conflict and does not open a second job. Provenance lists every source uid.
  */
 export function normalizeSnapshots(snapshots: SourceSnapshot[]): NormalizedSources {
   const ordered = SOURCE_ORDER.flatMap((kind) => snapshots.filter((snapshot) => snapshot.kind === kind && snapshot.permission !== "missing" && snapshot.permission !== "insufficient"));
-  const tagged: { kind: BookingSourceKind; stay: Turnover }[] = [];
+  const tagged: { kind: BookingSourceKind; sourceId: string; stay: Turnover }[] = [];
   for (const snapshot of ordered) {
-    for (const stay of snapshot.turnovers) tagged.push({ kind: snapshot.kind, stay });
+    for (const stay of snapshot.turnovers) tagged.push({ kind: snapshot.kind, sourceId: snapshot.sourceId, stay });
   }
   const kept: { stay: Turnover; sources: SourceRef[] }[] = [];
   const used = new Set<string>();
   const conflicts: SourceConflict[] = [];
   for (const item of tagged) {
-    const key = `${item.kind}:${item.stay.id}`;
+    const key = `${item.sourceId}:${item.stay.id}`;
     if (used.has(key)) continue;
     used.add(key);
     const match = kept.find((other) => sameBooking(other.stay, item.stay));
@@ -200,6 +217,7 @@ export function readNotionFixture(body: string): SourceSnapshot {
   if (permission !== "granted") {
     return {
       kind: "notion",
+      sourceId: "notion",
       tenantId,
       turnovers: [],
       blocks: [],
@@ -234,6 +252,7 @@ export function readNotionFixture(body: string): SourceSnapshot {
   }
   return {
     kind: "notion",
+    sourceId: "notion",
     tenantId,
     turnovers: linkStays(stays),
     blocks,

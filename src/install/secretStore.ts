@@ -33,6 +33,10 @@ export const SETTINGS = {
   /** The cleaning Grok Bot's own routine webhook. A different routine from Tour Core's. */
   CLEANER_CORE_ROUTINE_URL: { secret: true },
   CLEANER_CORE_ROUTINE_KEY: { secret: true },
+  /** Signs the cleaner photo links Cleaner Core gives Grok. Made once when none is set. */
+  CLEANER_CORE_PHOTO_KEY: { secret: true },
+  /** Opens the sealed door code for a Grok Bot connected by OAuth, which sends no key header. Made once. */
+  CLEANER_CORE_PIN_KEY: { secret: true },
   /** Tour Core's own Google OAuth client secret. Never a landlord's Google password. */
   GOOGLE_OAUTH_CLIENT_SECRET: { secret: true },
   GOOGLE_OAUTH_REFRESH_TOKEN: { secret: true },

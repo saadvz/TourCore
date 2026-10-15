@@ -1,24 +1,28 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
 import { FileRuntimeStore } from "../storage/runtimeStore";
+import { ConfirmationBook } from "../operator/confirmations";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
-import { formatWhen, interpretFeed, zonedInstant } from "./calendar";
-import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
+import { formatWhen, zonedInstant } from "./calendar";
+import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
+import { publicBaseUrl } from "../messaging/publicUrl";
+import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
-import { openPin, sealPin, type PinSeal } from "./pinSeal";
+import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
+import { containsCodeToken } from "./redact";
 import { isScratchTestNumber } from "./scratch";
-import { googleCalendarSource, normalizeSnapshots, type GoogleEventList, type SourceSnapshot } from "./sources";
+import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
@@ -46,7 +50,14 @@ const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
 const CALENDAR_ASK = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
 const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
-const PEOPLE_ASK = "Who is the host and the cleaner? Send each phone number. An observer is optional.";
+const PROPERTY_ASK = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
+const PEOPLE_ASK =
+  "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
+const SCHEDULE_ASK =
+  "When should the cleaner get texts? The first cleaning text goes when you confirm the times, or a set number of days after check-in. The reminder goes the morning of checkout, or a set number of days before at a set time. Any quiet hours, and who should hear about problems? If the defaults are fine, save an empty schedule.";
+const PREFERENCES_ASK =
+  "Any cleaning preferences? A checklist, whether photos are required, whether the cleaner may send supply notes, and other instructions. If there are none, save empty preferences.";
+const REVIEW_ASK = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
 
@@ -60,12 +71,148 @@ const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
 const ROUTINE_NEEDED = "Send the routine's https address and its key.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
+const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
+const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
+const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
+const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
+const NO_PHOTO_JOB = "There's no cleaning with that day to get photos for.";
+const PHOTO_LINKS_OFF = "I can't make photo links until the server's public address is saved.";
+/** A kept message's text for an MMS photo. */
+const PHOTO_MARK = "[photo]";
+/** A host message is 1 to 600 characters, and at most 10 go out in any hour. */
+const MAX_HOST_MESSAGE = 600;
+const HOST_MESSAGES_PER_HOUR = 10;
+const HOUR_MS = 60 * 60_000;
+/** The approval action for a host message. Its target is the recipient, its fingerprint the recipient and the exact text. */
+const SEND_ACTION = "cleaner-message";
+const MESSAGE_NEEDED = `Write the message in 1 to ${MAX_HOST_MESSAGE} characters.`;
+const RECIPIENT_NEEDED = "Say who to text: the cleaner, the group, or a saved contact's name.";
+const NO_GROUP = "There's no group chat for this property.";
+const TOO_MANY = "That's a lot of messages this hour. Try again later.";
+const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
+/** Messages kept for Grok, newest last. */
+const MAX_MESSAGES = 200;
+const MAX_MESSAGE_TEXT = 300;
+/** The receive reasons that mean the engine did not take the text at all, so no message is kept. */
+const UNREAD_REASONS = new Set<ReceiveResult["reason"]>(["disabled", "duplicate", "scratch-only", "wrong-tenant"]);
+const MAX_CALENDARS = 8;
+const MAX_CONTACTS = 4;
+const MAX_NAME = 40;
+const MAX_LOCK_LOCATION = 80;
+const MAX_CHECKLIST = 12;
+const MAX_CHECKLIST_ITEM = 80;
+const MAX_INSTRUCTIONS = 300;
+const MIN_SCHEDULE_DAYS = 1;
+const MAX_SCHEDULE_DAYS = 14;
+/** A timed first cleaning text goes at this local time on its day. */
+const FIRST_TEXT_TIME = "09:00";
+const FIRST_TEXTS = ["when-confirmed", "days-after-check-in"] as const;
+const REMINDERS = ["morning-of", "days-before-checkout"] as const;
+/**
+ * The saved reminder's trigger id. It stays the same when its kind changes, so a reminder already
+ * sent is not sent again. A reminder sent under the engine's default id counts too.
+ */
+const SCHEDULED_REMINDER = "scheduled";
+const DEFAULT_REMINDER = "morning-of";
+const DEFAULT_SCHEDULE: Schedule = { firstText: "when-confirmed", reminder: "morning-of", reminderTime: "08:00" };
+const CONTACT_ROLES = ["co-host", "assistant", "observer"] as const;
+const GROUP_CHOICES = ["cleaner-only", "cleaner-and-host", "everyone"] as const;
+
+export type ContactRole = (typeof CONTACT_ROLES)[number];
+export type GroupChoice = (typeof GROUP_CHOICES)[number];
+
+interface Contact {
+  name: string;
+  role: ContactRole;
+  phone: string;
+}
+
+/** The messaging schedule. Times are "HH:MM". */
+interface Schedule {
+  firstText: (typeof FIRST_TEXTS)[number];
+  /** Days after check-in, for days-after-check-in. */
+  firstTextDays?: number;
+  reminder: (typeof REMINDERS)[number];
+  /** Days before checkout, for days-before-checkout. */
+  reminderDays?: number;
+  reminderTime: string;
+  quietFrom?: string;
+  quietUntil?: string;
+  /** Who should hear about problems. Recorded for the review; problems still go to the host. */
+  escalateTo?: string;
+}
+
+interface Preferences {
+  checklist: string[];
+  photosRequired: boolean;
+  supplyNotes: boolean;
+  instructions?: string;
+}
+/** The name a legacy single calendar link reads as. Its source id stays `guesty-lite`. */
+const LEGACY_CALENDAR = "Guesty Lite";
+
+/**
+ * An inbound text from the cleaner, the host in the group, or a saved contact, for Grok to read.
+ * A message the host approved and Cleaner Core sent is kept too, from host with handled sent.
+ */
+interface Message {
+  /** Letters only, so an id can never hold a run of digits like a door code. */
+  id: string;
+  from: "cleaner" | "host" | "contact";
+  name: string;
+  /** Who a sent host message went to, like Ana or the group. */
+  to?: string;
+  /** Trimmed to 300 characters, with every run of 4 or more digits redacted. */
+  text: string;
+  /** Local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
+  at: string;
+  handled: MessageHandled;
+}
+
+/** An inbound text or MMS. */
+interface Inbound {
+  id: string;
+  from: string;
+  text: string;
+  channel?: "group";
+  media?: InboundMedia[];
+}
 
 interface PinSend {
   sid: string;
   outcome: "accepted" | "undelivered" | "settled";
   notePending: boolean;
   delivered?: boolean;
+}
+
+interface PropertyInput {
+  address?: string;
+  business?: string;
+  timeZone?: string;
+  nickname?: string;
+  propertyType?: string;
+  checkoutTime?: string;
+  checkInTime?: string;
+}
+
+interface PeopleInput {
+  host?: string;
+  cleaner?: string;
+  observer?: string;
+  cleanerName?: string;
+  contacts?: { name?: string; role?: string; phone?: string }[];
+  groupChat?: string;
+}
+
+interface ScheduleInput {
+  firstText?: "when-confirmed" | "days-after-check-in";
+  firstTextDays?: number;
+  reminder?: "morning-of" | "days-before-checkout";
+  reminderDays?: number;
+  reminderTime?: string;
+  quietFrom?: string;
+  quietUntil?: string;
+  escalateTo?: string;
 }
 
 export interface ToolOk {
@@ -76,6 +223,8 @@ export interface ToolOk {
 export interface ToolNo {
   ok: false;
   error: string;
+  /** Details for Grok beside the refusal, such as the cleanings a save would call off. */
+  result?: Record<string, unknown>;
 }
 
 export type ToolReply = ToolOk | ToolNo;
@@ -83,13 +232,32 @@ export type ToolReply = ToolOk | ToolNo;
 interface LiveFile {
   choice?: "tours" | "cleaners";
   business?: string;
+  nickname?: string;
   address?: string;
+  propertyType?: string;
   timeZone?: string;
+  /** The usual checkout and check-in times, as "HH:MM". */
+  checkoutTime?: string;
+  checkInTime?: string;
   propertyId?: string;
   host?: string;
   cleaner?: string;
+  cleanerName?: string;
+  /** The legacy single observer from save_people. It reads as one contact named Observer. */
   observer?: string;
+  contacts?: Contact[];
+  /** Unset keeps every saved contact in the group, as before the choice existed. */
+  groupChat?: GroupChoice;
+  /** Where the lock is. Never digits that could be a code. */
+  lockLocation?: string;
+  /** Set once the host saved a messaging schedule, or kept the defaults. */
+  schedule?: Schedule;
+  /** Set once the host saved cleaning preferences or said there are none. */
+  preferences?: Preferences;
+  /** Legacy single link from save_calendar_link. It reads as one calendar named Guesty Lite. */
   calendarLink?: string;
+  /** Saved calendar links in dedupe order, after the legacy link. Each one is the source `ical:<slug>`. */
+  calendars?: { name: string; url: string }[];
   google?: boolean;
   pinSeal?: PinSeal;
   pinSend?: PinSend;
@@ -99,6 +267,12 @@ interface LiveFile {
   alertsShown?: string[];
   /** Ids of the host notes that already woke the cleaning routine. */
   alertsQueued?: string[];
+  /** The last 200 inbound messages, oldest first. */
+  messages?: Message[];
+  /** Ids of the messages `check_now` has already returned. */
+  messagesShown?: string[];
+  /** Ids of the finished cleanings `check_now` has already returned as completed. */
+  completedShown?: string[];
   released?: boolean;
   /** Ids of the jobs the host gave both times for through confirm_times. */
   timedJobs?: string[];
@@ -111,9 +285,21 @@ interface LiveFile {
 }
 
 interface CalendarRead {
+  /** The legacy Guesty Lite link did not read. */
   guestyFailed: boolean;
+  /** Why the first failed link did not read. Never the URL. */
   reason?: string;
   googleUnread: boolean;
+  /** Names of the calendar links that were not applied. Never a URL. */
+  unread: string[];
+}
+
+interface SavedCalendar {
+  name: string;
+  url: string;
+  sourceId: string;
+  /** A hash of the link, so a held snapshot follows the link and not the name. */
+  origin: string;
 }
 
 interface OutboxRow {
@@ -178,6 +364,74 @@ function statedClock(text: string): boolean {
   return Boolean(spokenTimes(normalize(text))[0]?.meridiem);
 }
 
+/** Lowercase, each run of other characters as one dash, at most 32 characters, and unique. */
+function calendarSlug(name: string, used: Set<string>): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "calendar";
+  for (let count = 1; ; count++) {
+    const suffix = count === 1 ? "" : `-${count}`;
+    const slug = `${base.slice(0, 32 - suffix.length).replace(/-+$/, "")}${suffix}`;
+    if (used.has(slug)) continue;
+    used.add(slug);
+    return slug;
+  }
+}
+
+function originOf(url: string): string {
+  return createHash("sha256").update(url).digest("hex").slice(0, 16);
+}
+
+/** The saved calendar links with their source ids. A legacy single link reads as Guesty Lite and comes first. */
+function calendarsOf(file: LiveFile): SavedCalendar[] {
+  const used = new Set<string>();
+  const legacy = file.calendarLink ? [{ name: LEGACY_CALENDAR, url: file.calendarLink, sourceId: "guesty-lite", origin: originOf(file.calendarLink) }] : [];
+  const named = (file.calendars ?? []).map((calendar) => ({
+    name: calendar.name,
+    url: calendar.url,
+    sourceId: `ical:${calendarSlug(calendar.name, used)}`,
+    origin: originOf(calendar.url),
+  }));
+  return [...legacy, ...named];
+}
+
+/** Every saved source in dedupe order, as the engine holds them. */
+function claimsOf(file: LiveFile): SourceClaim[] {
+  return [...calendarsOf(file).map((calendar) => ({ id: calendar.sourceId, origin: calendar.origin })), ...(file.google ? [{ id: "google-calendar" }] : [])];
+}
+
+function hasSources(file: LiveFile): boolean {
+  return calendarsOf(file).length > 0 || file.google === true;
+}
+
+/** Stamps a read with the hash of the link it came from. */
+function fromLink(source: BookingSource, origin: string): BookingSource {
+  return { kind: source.kind, read: async () => ({ ...(await source.read()), origin }) };
+}
+
+/** A stated clock time with AM or PM, like "10:30 AM", as "HH:MM". Anything else is undefined. */
+function usualTime(text: string): string | undefined {
+  const times = spokenTimes(normalize(text));
+  const time = times[0];
+  if (times.length !== 1 || !time?.meridiem) return undefined;
+  const hour = (time.hour % 12) + (time.meridiem === "PM" ? 12 : 0);
+  return `${String(hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
+}
+
+/** "HH:MM" as "10:30 AM". */
+function clockText(hm: string): string {
+  const [hour = 0, minute = 0] = hm.split(":").map(Number);
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+/** The saved extra contacts. A legacy observer reads as one contact named Observer and comes first. */
+function contactsOf(file: LiveFile): Contact[] {
+  return [...(file.observer ? [{ name: "Observer", role: "observer" as const, phone: file.observer }] : []), ...(file.contacts ?? [])];
+}
+
+/** A message id of 16 random lowercase letters. It never holds a digit. */
+function messageId(): string {
+  return `m-${[...randomBytes(16)].map((byte) => String.fromCharCode(97 + (byte % 26))).join("")}`;
+}
+
 function propertyIdFor(business: string): string {
   const slug = business.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "property";
   return `live-${slug}`;
@@ -203,12 +457,16 @@ export class LiveDesk {
   private file: LiveFile = {};
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
+  /** A setup save changed what the engine reads when it opens. The next serial step reopens it. */
+  private stale = false;
   private checking = false;
   private queue: Promise<void> = Promise.resolve();
   private inFlight = 0;
   private held = false;
   private readonly path: string;
   private readonly alerts: OperatorEventOutbox;
+  /** Approvals for host messages. They live only in this process, so a restart means asking again. */
+  private readonly approvals: ConfirmationBook;
 
   constructor(
     private readonly root: string,
@@ -216,7 +474,10 @@ export class LiveDesk {
     private readonly now: () => Date,
   ) {
     this.path = join(root, "cleaner-live.json");
+    this.approvals = new ConfirmationBook(10 * 60_000, () => this.now().getTime());
     this.load();
+    // With the server's key, a saved code opens at load, so a redeploy doesn't ask for it again.
+    this.openSeal();
     // The routine's address and key are read from the env on every delivery, never saved here.
     this.alerts = new OperatorEventOutbox(
       new FileRuntimeStore(join(root, "cleaner-alerts")),
@@ -238,11 +499,20 @@ export class LiveDesk {
     input: { url?: string; token?: string },
     save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
     pinKey?: Buffer,
+  ): Promise<ToolReply> {
+    return this.serial(async () => this.saveAlertRoutineNow(input, save, pinKey));
+  }
+
+  private saveAlertRoutineNow(
+    input: { url?: string; token?: string },
+    save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void,
+    pinKey: Buffer | undefined,
   ): ToolReply {
     const url = input.url?.trim() ?? "";
     const token = input.token?.trim() ?? "";
     if (!calendarUrlAllowed(url) || token.length < 8) return this.fail(ROUTINE_NEEDED);
     if (pinKey && token === pinKey.toString("base64")) return this.fail(ROUTINE_NEEDED);
+    if (this.isServerKey(token)) return this.fail(ROUTINE_NEEDED);
     save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
@@ -266,27 +536,68 @@ export class LiveDesk {
 
   /**
    * Wakes the cleaning routine once when a host note became visible since `before` and the host
-   * has not seen it yet. The event carries no content: Grok reads the notes with `check_now`.
+   * has not seen it yet, or when a new message was kept. The event carries no content: Grok reads
+   * the notes and the messages with `check_now`.
    */
-  private queueNewAlerts(before: Set<string>): void {
+  private queueNewAlerts(before: Set<string>, newMessage = false): void {
     const engine = this.engine;
-    if (!engine) return;
     const queued = new Set(this.file.alertsQueued ?? []);
     const shown = new Set(this.file.alertsShown ?? []);
-    const fresh = this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id));
-    if (fresh.length === 0) return;
-    // One waiting wake-up is enough: check_now returns every note that is new by then. Without a
-    // routine saved, a wake-up per note would arrive later as a backlog of identical wake-ups.
+    const fresh = engine ? this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id)) : [];
+    if (fresh.length === 0 && !newMessage) return;
+    // One waiting wake-up is enough: check_now returns every note and message that is new by then.
+    // Without a routine saved, a wake-up each would arrive later as a backlog of identical wake-ups.
     const waiting = this.alerts.records().some((record) => record.event.eventType === "cleaning.update" && record.status === "pending");
     if (!waiting) this.alerts.enqueue(cleaningUpdateEvent(this.now()));
-    this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
+    if (fresh.length > 0) this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
     this.persist();
     this.startDrain();
   }
 
-  /** True when `text` contains the saved door code. */
+  /** True when `text` contains the saved door code, or the server's door-code key. */
   leaks(text: string): boolean {
-    return Boolean(this.pin && text.includes(this.pin));
+    return Boolean(this.pin && text.includes(this.pin)) || this.isServerKey(text, true);
+  }
+
+  /** True when `text` is (or, with `inside`, holds) the server's door-code key. */
+  private isServerKey(text: string, inside = false): boolean {
+    const key = this.env().CLEANER_CORE_PIN_KEY?.trim();
+    if (!key) return false;
+    return inside ? text.includes(key) : text.trim() === key;
+  }
+
+  /** The request's key, or else the server's own key. Undefined when neither is there. */
+  private keyFor(pinKey: Buffer | undefined): Buffer | undefined {
+    return pinKey ?? serverPinKey(this.env());
+  }
+
+  /**
+   * Opens a sealed code that isn't open yet, with the request's key or else the server's key. A seal
+   * made with another key stays shut.
+   */
+  private openSeal(pinKey?: Buffer): void {
+    if (this.pin || !this.file.pinSeal) return;
+    const key = this.keyFor(pinKey);
+    if (key) this.unlock(key);
+  }
+
+  /**
+   * The one door-code check for host free text that is saved or sent: a message, checklist items,
+   * instructions, the lock location, who hears about problems, and contact, cleaner, and calendar
+   * names and links. It catches the saved code and `saving` (a code being saved now), also split by
+   * spaces, dots, or dashes, and the chat checks. While the code is sealed and this desk can't open
+   * it, any run of 4 or more digits might be it, so that is refused too.
+   */
+  private carriesCode(text: string, saving?: string): boolean {
+    const joined = joinSplitDigits(text);
+    if (saving && joined.includes(saving)) return true;
+    if (this.chatCarriesDoorCode(text) || this.chatCarriesDoorCode(joined)) return true;
+    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(joined);
+  }
+
+  /** True when a door code is saved, open in memory or only sealed. */
+  private codeSaved(): boolean {
+    return Boolean(this.pin || this.file.pinSeal);
   }
 
   chatCarriesDoorCode(text: string): boolean {
@@ -296,7 +607,11 @@ export class LiveDesk {
     return /\bdoor code\b/i.test(text) && /\b\d{4,8}\b/.test(text);
   }
 
-  getState(said?: string): ToolReply {
+  getState(said?: string): Promise<ToolReply> {
+    return this.serial(async () => this.getStateNow(said));
+  }
+
+  private getStateNow(said: string | undefined): ToolReply {
     if (this.file.choice === "cleaners") this.resume();
     const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
     if (!this.file.choice) {
@@ -311,7 +626,11 @@ export class LiveDesk {
     return this.withFailure(this.reply(this.cleaningState()), failure);
   }
 
-  saveProperty(input: { address?: string; business?: string; timeZone?: string }): ToolReply {
+  saveProperty(input: PropertyInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePropertyNow(input, pinKey));
+  }
+
+  private savePropertyNow(input: PropertyInput, pinKey: Buffer | undefined): ToolReply {
     if (this.file.choice !== "cleaners") return this.fail("Tell me which job you want help with first.");
     const address = input.address?.trim() ?? "";
     const business = input.business?.trim() ?? "";
@@ -319,16 +638,44 @@ export class LiveDesk {
     if (!address || !business || !timeZone.includes("/")) {
       return this.fail("I need the business name, the property address, and the time zone.");
     }
+    const nickname = input.nickname?.trim() ?? "";
+    const propertyType = input.propertyType?.trim() ?? "";
+    if (nickname.length > MAX_NAME || propertyType.length > MAX_NAME) return this.fail(`Keep the nickname and the property type under ${MAX_NAME} characters.`);
+    // The business name goes into the cleaner's opt-in text. The address is left out: it holds house numbers and ZIP codes.
+    this.openSeal(pinKey);
+    if ([business, nickname, propertyType].some((text) => text && this.carriesCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
+    const checkoutText = input.checkoutTime?.trim() ?? "";
+    const checkInText = input.checkInTime?.trim() ?? "";
+    const checkoutTime = checkoutText ? usualTime(checkoutText) : undefined;
+    const checkInTime = checkInText ? usualTime(checkInText) : undefined;
+    if ((checkoutText && !checkoutTime) || (checkInText && !checkInTime)) {
+      return this.fail("Send the usual checkout and check-in times like 11:00 AM and 3:00 PM.");
+    }
     this.file.business = business;
     this.file.address = address;
     this.file.timeZone = timeZone;
     this.file.propertyId = propertyIdFor(business);
+    this.keep("nickname", nickname || undefined);
+    this.keep("propertyType", propertyType || undefined);
+    if (checkoutTime) this.file.checkoutTime = checkoutTime;
+    if (checkInTime) this.file.checkInTime = checkInTime;
     this.persist();
-    return this.reply({ next: PEOPLE_ASK });
+    // The engine reads the usual times when it opens.
+    this.stale = true;
+    return this.reply({ next: this.setupNext() });
   }
 
-  savePeople(input: { host?: string; cleaner?: string; observer?: string }): ToolReply {
+  /**
+   * Saves the host, the cleaner (with an optional name), up to four extra contacts, and the
+   * group-chat choice. Each save replaces the saved people. The legacy observer counts as a contact.
+   */
+  savePeople(input: PeopleInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePeopleNow(input, pinKey));
+  }
+
+  private savePeopleNow(input: PeopleInput, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
+    this.openSeal(pinKey);
     const host = parsePhone(input.host ?? "");
     const cleaner = parsePhone(input.cleaner ?? "");
     const observerText = input.observer?.trim() ?? "";
@@ -340,55 +687,255 @@ export class LiveDesk {
     if (observer && (observer === host || observer === cleaner)) {
       return this.fail("The observer has to be a different phone number from the host and the cleaner.");
     }
+    const cleanerName = input.cleanerName?.trim() ?? "";
+    if (cleanerName.length > MAX_NAME) return this.fail(`Keep the cleaner's name under ${MAX_NAME} characters.`);
+    const groupChat = input.groupChat?.trim() ?? "";
+    if (groupChat && !(GROUP_CHOICES as readonly string[]).includes(groupChat)) {
+      return this.fail("Choose who gets the texts: cleaner-only, cleaner-and-host, or everyone.");
+    }
+    const contacts: Contact[] = [];
+    const used = new Set([host, cleaner, ...(observer ? [observer] : [])]);
+    for (const contact of input.contacts ?? []) {
+      const name = contact.name?.trim() ?? "";
+      const role = contact.role?.trim() ?? "";
+      const phone = parsePhone(contact.phone ?? "");
+      if (!name || name.length > MAX_NAME) return this.fail(`Give each contact a name under ${MAX_NAME} characters.`);
+      if (!(CONTACT_ROLES as readonly string[]).includes(role)) return this.fail("Each contact is a co-host, an assistant, or an observer.");
+      if (!phone) return this.fail(`Send ${name}'s phone number.`);
+      if (used.has(phone)) return this.fail("Each person needs a different phone number.");
+      if (this.carriesCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
+      used.add(phone);
+      contacts.push({ name, role: role as ContactRole, phone });
+    }
+    if (contacts.length + (observer ? 1 : 0) > MAX_CONTACTS) return this.fail(`I can keep up to ${MAX_CONTACTS} extra contacts.`);
+    if (this.carriesCode(cleanerName)) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.host = host;
     this.file.cleaner = cleaner;
     if (observer) this.file.observer = observer;
     else delete this.file.observer;
+    this.keep("cleanerName", cleanerName || undefined);
+    this.keep("contacts", contacts.length > 0 ? contacts : undefined);
+    this.keep("groupChat", (groupChat || undefined) as GroupChoice | undefined);
     this.persist();
-    this.engine = undefined;
-    return this.reply({ next: CALENDAR_ASK });
+    this.stale = true;
+    return this.reply({ next: this.setupNext() });
   }
 
-  saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
+  /**
+   * Saves the messaging schedule: when the first cleaning text goes, when the reminder goes, quiet
+   * hours, and who should hear about problems. A field left out keeps what was saved, and `{}` the
+   * first time keeps the defaults. Days run 1 to 14 and times are clock times like 8:00 AM. Empty
+   * quiet hours clear them. The schedule can only hold a text back. The first cleaning text still
+   * waits for the host's confirmed times, and the door code still waits for "guests have left".
+   */
+  saveSchedule(input: ScheduleInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveScheduleNow(input, pinKey));
+  }
+
+  private saveScheduleNow(input: ScheduleInput, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    this.openSeal(pinKey);
+    const saved = this.file.schedule ?? DEFAULT_SCHEDULE;
+    const firstText = input.firstText ?? saved.firstText;
+    const reminder = input.reminder ?? saved.reminder;
+    if (!(FIRST_TEXTS as readonly string[]).includes(firstText)) return this.fail("Send the first cleaning text when the times are confirmed, or a number of days after check-in.");
+    if (!(REMINDERS as readonly string[]).includes(reminder)) return this.fail("Send the reminder the morning of checkout, or a number of days before checkout.");
+    const days = (value: number | undefined) => (value !== undefined && Number.isInteger(value) && value >= MIN_SCHEDULE_DAYS && value <= MAX_SCHEDULE_DAYS ? value : undefined);
+    const dayRange = `${MIN_SCHEDULE_DAYS} to ${MAX_SCHEDULE_DAYS} days`;
+    const firstTextDays = firstText === "days-after-check-in" ? days(input.firstTextDays ?? saved.firstTextDays) : undefined;
+    if (firstText === "days-after-check-in" && firstTextDays === undefined) return this.fail(`Say how many days after check-in the first text goes, ${dayRange}.`);
+    const reminderDays = reminder === "days-before-checkout" ? days(input.reminderDays ?? saved.reminderDays) : undefined;
+    if (reminder === "days-before-checkout" && reminderDays === undefined) return this.fail(`Say how many days before checkout the reminder goes, ${dayRange}.`);
+    const reminderText = input.reminderTime?.trim();
+    const reminderTime = reminderText === undefined ? saved.reminderTime : usualTime(reminderText);
+    if (!reminderTime) return this.fail("Send the reminder time like 8:00 AM.");
+    let quiet = saved.quietFrom && saved.quietUntil ? { from: saved.quietFrom, until: saved.quietUntil } : undefined;
+    if (input.quietFrom !== undefined || input.quietUntil !== undefined) {
+      const fromText = input.quietFrom?.trim() ?? "";
+      const untilText = input.quietUntil?.trim() ?? "";
+      const from = fromText ? usualTime(fromText) : undefined;
+      const until = untilText ? usualTime(untilText) : undefined;
+      if (!fromText && !untilText) quiet = undefined;
+      else if (!from || !until || from === until) return this.fail("Send both quiet-hours times, like 9:00 PM and 8:00 AM.");
+      else quiet = { from, until };
+    }
+    const escalateTo = input.escalateTo === undefined ? saved.escalateTo : input.escalateTo.trim() || undefined;
+    if (escalateTo && escalateTo.length > MAX_NAME) return this.fail(`Keep who hears about problems under ${MAX_NAME} characters.`);
+    if (escalateTo && this.carriesCode(escalateTo)) return this.fail(DOOR_CODE_IN_CHAT);
+    this.file.schedule = {
+      firstText,
+      ...(firstTextDays !== undefined ? { firstTextDays } : {}),
+      reminder,
+      ...(reminderDays !== undefined ? { reminderDays } : {}),
+      reminderTime,
+      ...(quiet ? { quietFrom: quiet.from, quietUntil: quiet.until } : {}),
+      ...(escalateTo ? { escalateTo } : {}),
+    };
+    this.persist();
+    // The engine reads the schedule when it opens.
+    this.stale = true;
+    return this.reply({ next: this.setupNext() });
+  }
+
+  saveCalendarLink(input: { url?: string; google?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveCalendarLinkNow(input, pinKey));
+  }
+
+  private saveCalendarLinkNow(input: { url?: string; google?: boolean }, pinKey: Buffer | undefined): ToolReply {
+    if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
+    this.openSeal(pinKey);
+    if (url && this.carriesCode(url)) return this.fail(DOOR_CODE_IN_CHAT);
+    // Replaces only the Guesty Lite link. Every other saved calendar stays.
     if (url) this.file.calendarLink = url;
     if (input.google) this.file.google = true;
     this.persist();
-    return this.reply({ next: "What's the door code? I'll save it and I won't repeat it." });
+    return this.reply({ next: this.setupNext() });
   }
 
-  saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
+  /**
+   * Saves the booking sources: the calendar links in the order given, and whether Google Calendar is
+   * used. A calendars list replaces every saved link, the legacy one too. Leaving calendars or google
+   * out keeps what was saved. A link that is not public https is refused, and the reply never repeats
+   * a link. When the change would call off an upcoming cleaning that only a dropped source lists, it
+   * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
+   */
+  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveSourcesNow(input, pinKey));
+  }
+
+  private saveSourcesNow(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey: Buffer | undefined): ToolReply {
+    if (!this.file.address) return this.fail("Save the property first.");
+    this.openSeal(pinKey);
+    const next: LiveFile = { ...this.file };
+    if (input.calendars !== undefined) {
+      const calendars = input.calendars.map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
+      if (calendars.length > MAX_CALENDARS) return this.fail(`I can keep up to ${MAX_CALENDARS} calendar links.`);
+      for (const calendar of calendars) {
+        if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
+        if (this.carriesCode(calendar.name) || this.carriesCode(calendar.url)) return this.fail(DOOR_CODE_IN_CHAT);
+        if (!calendarUrlAllowed(calendar.url)) {
+          return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
+        }
+      }
+      if (calendars.length > 0) next.calendars = calendars;
+      else delete next.calendars;
+      delete next.calendarLink;
+    }
+    if (input.google === true) next.google = true;
+    if (input.google === false) delete next.google;
+    if (!hasSources(next)) return this.fail("Send at least one calendar link, or say you use Google Calendar.");
+    if (input.dropJobs !== true) {
+      this.resume();
+      const lost = this.engine?.wouldCancel(claimsOf(next)) ?? [];
+      if (lost.length > 0) {
+        const count = `${lost.length} upcoming ${lost.length === 1 ? "cleaning" : "cleanings"}`;
+        return this.failWith(`Removing that calendar would call off ${count}. Ask the host, then save again with dropJobs: true.`, { wouldCancel: lost });
+      }
+    }
+    this.file = next;
+    this.persist();
+    return this.reply({ next: this.setupNext() });
+  }
+
+  /**
+   * Seals the door code. lockLocation names where the lock is, for the private code text. Leaving it
+   * out keeps the saved one, and an empty one clears it. It may not carry a run of 4 or more digits.
+   */
+  saveDoorCode(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    return this.serial(async () => this.saveDoorCodeNow(input, pinKey));
+  }
+
+  private saveDoorCodeNow(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
-    if (!this.file.calendarLink && !this.file.google && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
+    if (!hasSources(this.file) && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
-    if (!pinKey) return this.fail(PIN_KEY_MISSING);
+    const lockLocation = input.lockLocation?.trim();
+    this.openSeal(pinKey);
+    // No run of 4 or more digits, even split like "80 88", and never the saved code or the one being saved.
+    if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(joinSplitDigits(lockLocation)) || this.carriesCode(lockLocation, code))) {
+      return this.fail(`Say where the lock is in under ${MAX_LOCK_LOCATION} characters, with no code or long number in it.`);
+    }
+    const key = this.keyFor(pinKey);
+    if (!key) return this.fail(PIN_KEY_MISSING);
     const previousPin = this.pin;
     const previousSeal = this.file.pinSeal;
+    const previousLock = this.file.lockLocation;
     this.pin = code;
+    if (lockLocation !== undefined) this.keep("lockLocation", lockLocation || undefined);
     for (let attempt = 0; attempt < 8; attempt++) {
-      this.file.pinSeal = sealPin(code, pinKey);
+      this.file.pinSeal = sealPin(code, key);
       const json = `${JSON.stringify(this.file)}\n`;
-      if (json.includes(code) || json.includes(pinKey.toString("base64"))) continue;
+      // The code as its own token (an id that only holds the digits is fine); the key anywhere.
+      if (containsCodeToken(json, code) || json.includes(key.toString("base64"))) continue;
       this.writeFile(json);
+      // The engine names the lock in the private code text, so it reopens with the new location.
+      if (this.file.lockLocation !== previousLock) this.stale = true;
       return this.reply({
         next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
       });
     }
     this.pin = previousPin;
     this.file.pinSeal = previousSeal;
+    this.keep("lockLocation", previousLock);
     return this.fail("Could not seal the door code.");
   }
 
-  setUpTexting(): ToolReply {
-    if (!this.pin) return this.fail("Save the door code first.");
+  /**
+   * Saves the cleaning preferences. A field left out keeps what was saved, and `{}` the first time
+   * means there are none, which still moves setup on to the review.
+   */
+  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePreferencesNow(input, pinKey));
+  }
+
+  private savePreferencesNow(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }, pinKey: Buffer | undefined): ToolReply {
+    if (!this.codeSaved()) return this.fail("Save the door code first.");
+    // The checklist and the instructions go to the cleaner, so the code is checked open when it can be.
+    this.openSeal(pinKey);
+    const saved = this.file.preferences ?? { checklist: [], photosRequired: false, supplyNotes: false };
+    const checklist = input.checklist === undefined ? saved.checklist : input.checklist.map((item) => item.trim()).filter((item) => item.length > 0);
+    if (checklist.length > MAX_CHECKLIST) return this.fail(`I can keep up to ${MAX_CHECKLIST} checklist items.`);
+    if (checklist.some((item) => item.length > MAX_CHECKLIST_ITEM)) return this.fail(`Keep each checklist item under ${MAX_CHECKLIST_ITEM} characters.`);
+    const instructions = input.instructions === undefined ? saved.instructions : input.instructions.trim() || undefined;
+    if (instructions && instructions.length > MAX_INSTRUCTIONS) return this.fail(`Keep the other instructions under ${MAX_INSTRUCTIONS} characters.`);
+    if ([...checklist, instructions ?? ""].some((text) => text && this.carriesCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
+    this.file.preferences = {
+      checklist,
+      photosRequired: input.photosRequired ?? saved.photosRequired,
+      supplyNotes: input.supplyNotes ?? saved.supplyNotes,
+      ...(instructions ? { instructions } : {}),
+    };
+    this.persist();
+    // The engine reads the checklist, the photo rule, supply notes, and the offer note when it opens.
+    this.stale = true;
+    return this.reply({ next: this.setupNext() });
+  }
+
+  setUpTexting(): Promise<ToolReply> {
+    return this.serial(async () => this.setUpTextingNow());
+  }
+
+  private setUpTextingNow(): ToolReply {
+    if (!this.codeSaved()) return this.fail("Save the door code first.");
     this.file.texting = true;
     this.persist();
     return this.reply({
       next: "Texting is saved. The cleaner gets one text asking them to reply YES, and only after you confirm the checkout and the next check-in.",
+    });
+  }
+
+  /** Review & Activate: saves texting, then runs the checks. Takes the same input as run_checks. */
+  activate(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    return this.serial(async () => {
+      if (!this.file.preferences) return this.fail("Save the cleaning preferences first, or save empty ones if there are none.");
+      // Already inside the serial queue, so the inner steps, never runChecks.
+      const texting = this.setUpTextingNow();
+      if (!texting.ok) return texting;
+      return this.runChecksNow(input);
     });
   }
 
@@ -400,6 +947,7 @@ export class LiveDesk {
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const now = (): Promise<T> => {
       try {
+        this.beginStep();
         return work();
       } catch (err) {
         return Promise.reject(err);
@@ -417,6 +965,18 @@ export class LiveDesk {
       },
     );
     return run;
+  }
+
+  /**
+   * The start of every serial step: a setup save since the last step reopens the engine now, never
+   * while another step still holds it, and a sealed code opens with the server's key.
+   */
+  private beginStep(): void {
+    if (this.stale) {
+      this.stale = false;
+      this.engine = undefined;
+    }
+    this.openSeal();
   }
 
   runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
@@ -438,40 +998,57 @@ export class LiveDesk {
     const read = await this.readCalendars(input.googleEvents);
     await engine.runReminders();
     this.syncHold();
+    this.nudgeCheckout(engine);
     const shown = new Set(this.file.alertsShown ?? []);
     const fresh = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].filter((note) => !shown.has(note.id));
     this.file.alertsShown = [...shown, ...fresh.map((note) => note.id)];
+    const messages = this.file.messages ?? [];
+    const seen = new Set(this.file.messagesShown ?? []);
+    const newMessages = messages.filter((message) => !seen.has(message.id));
+    // Only ids still kept, so the list stays as short as the messages.
+    this.file.messagesShown = messages.map((message) => message.id);
+    const jobs = engine.jobs();
+    const shownDone = new Set(this.file.completedShown ?? []);
+    const finished = jobs.filter((job) => job.doneAt && !shownDone.has(job.id));
+    this.file.completedShown = [...shownDone, ...finished.map((job) => job.id)];
+    prunePhotos(this.root, jobs, this.now());
     this.persist();
     return this.reply({
       alerts: fresh.map((note) => note.body),
+      messages: newMessages,
+      ...(finished.length > 0 ? { completed: finished.map((job) => this.completedFacts(job)) } : {}),
       turns: this.turns(),
       ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
+      ...(read.unread.length > 0 ? { unread: read.unread } : {}),
+      // Kept for one release beside `unread`, for Grok setups that still read it.
       ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
       ...(read.googleUnread ? { googleUnread: true as const } : {}),
     });
   }
 
   private async runChecksNow(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
-    if (!this.file.texting || !(this.file.calendarLink || this.file.google) || !this.pin) return this.fail("Set up texting first.");
+    if (!this.file.texting || !hasSources(this.file) || !this.codeSaved()) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
     }
     if (this.file.google && !input.googleEvents) return this.fail("Read Google Calendar and pass its events.");
     const before = this.engine;
-    this.engine = this.openEngine();
+    const engine = this.openEngine();
+    this.engine = engine;
     this.checking = true;
     let read: CalendarRead;
     try {
-      read = await this.readCalendars(input.googleEvents, { skipGoogleOnGuestyFailure: true });
+      read = await this.readCalendars(input.googleEvents, { allOrNothing: true });
     } catch (err) {
       this.engine = before;
       throw err;
     } finally {
       this.checking = false;
     }
-    if (read.guestyFailed) {
+    if (read.reason) {
       this.engine = before;
-      return this.fail(read.reason ?? "I couldn't read that calendar.");
+      if (read.guestyFailed) return this.fail(read.reason);
+      return this.fail(`I couldn't read the calendar link for ${read.unread.join(", ")}. Each link has to be a public https address, and not a private network.`);
     }
     if (read.googleUnread) {
       this.engine = before;
@@ -479,7 +1056,7 @@ export class LiveDesk {
     }
     this.file.checked = true;
     // run_checks' own reply already asks for the times, so its new-booking alert counts as shown too.
-    const seen = [...this.visibleNotes(this.engine), ...this.newBookingAlert(this.engine)].map((note) => note.id);
+    const seen = [...this.visibleNotes(engine), ...this.newBookingAlert(engine)].map((note) => note.id);
     this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
@@ -493,24 +1070,26 @@ export class LiveDesk {
   }
 
   /**
-   * Reads every saved booking source into the engine. Guesty Lite first, then Google. A failed
-   * Guesty read does not stop Google, unless the caller says so. An unread Google source is reported.
+   * Reads every saved booking source into the engine as one read: the calendar links in saved order,
+   * then Google. The engine saves each source's last snapshot, so after a restart a link that fails
+   * keeps its snapshot and its jobs. A link that fails is not applied, and is named in `unread`.
    *
-   * Each read is a full snapshot of its source, and the engine calls off a job that no loaded source
-   * lists. Its loaded sources live in memory only, so after a restart a read of one source alone would
-   * call off the other source's jobs. So with both sources saved, a source is applied alone only when
-   * the engine already holds the other one, and the first read of both is applied as one.
+   * A saved source the engine holds no snapshot of (never read, or saved before snapshots were kept)
+   * and that is not read now would make the others look like they removed its stays, so then nothing
+   * is applied. With `allOrNothing` (run_checks), any failed link applies nothing.
    */
-  private async readCalendars(googleEvents?: GoogleEventList, options: { skipGoogleOnGuestyFailure?: boolean } = {}): Promise<CalendarRead> {
+  private async readCalendars(googleEvents?: GoogleEventList, options: { allOrNothing?: boolean } = {}): Promise<CalendarRead> {
     const engine = this.engine;
     const file = this.file;
-    if (!engine) throw new Error("Setup is incomplete.");
-    const loaded = new Set(engine.lastSync().sources);
+    const tenantId = file.propertyId;
+    if (!engine || !tenantId) throw new Error("Setup is incomplete.");
+    const calendars = calendarsOf(file);
+    const held = new Set(engine.keepSources(claimsOf(file)));
     let googleUnread = false;
     let google: SourceSnapshot | undefined;
     // Google events count only when the host saved Google as a source.
-    if (googleEvents && file.google && file.propertyId) {
-      google = await googleCalendarSource(googleEvents, file.propertyId).read();
+    if (googleEvents && file.google) {
+      google = await googleCalendarSource(googleEvents, tenantId).read();
       // Events that are there but none of which reads as a stay or a block are a shape this reader
       // doesn't know. Applying them would remove every Google stay, so the read counts as unread.
       if (googleEvents.items.length > 0 && google.turnovers.length === 0 && google.blocks.length === 0) {
@@ -518,33 +1097,35 @@ export class LiveDesk {
         googleUnread = true;
       }
     }
-    let guestyFailed = false;
-    let reason: string | undefined;
-    let guesty: string | undefined;
-    const googleMissing = Boolean(file.google) && !google && !loaded.has("google-calendar");
-    if (file.calendarLink && !googleMissing) {
-      const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
-      if (read.ok) guesty = read.body;
-      else {
-        guestyFailed = true;
-        reason = read.reason;
-      }
+    if (file.google && !google && !held.has("google-calendar")) return { guestyFailed: false, googleUnread, unread: [] };
+    const reads = await Promise.all(calendars.map(async (calendar) => ({ calendar, read: await readPublicCalendar(calendar.url, calendarFetch ?? fetch) })));
+    const failed = reads.flatMap(({ calendar, read }) => (read.ok ? [] : [{ calendar, reason: read.reason }]));
+    const result: CalendarRead = {
+      guestyFailed: failed.some((item) => item.calendar.sourceId === "guesty-lite"),
+      ...(failed[0] ? { reason: failed[0].reason } : {}),
+      googleUnread,
+      unread: failed.map((item) => item.calendar.name),
+    };
+    if (failed.length > 0 && (options.allOrNothing || failed.some((item) => !held.has(item.calendar.sourceId)))) return result;
+    const sources: BookingSource[] = [];
+    const applied: string[] = [];
+    for (const { calendar, read } of reads) {
+      if (!read.ok) continue;
+      const source = calendar.sourceId === "guesty-lite" ? guestyLiteSource(read.body, tenantId) : icalSource(read.body, tenantId, calendar.sourceId);
+      sources.push(fromLink(source, calendar.origin));
+      applied.push(calendar.name);
     }
-    const guestyMissing = Boolean(file.calendarLink) && guesty === undefined && !loaded.has("guesty-lite");
-    if (guesty !== undefined && google && (!loaded.has("guesty-lite") || !loaded.has("google-calendar"))) {
-      // The first read of both sources: apply them together once, so neither one's jobs look removed.
-      const feed = interpretFeed(guesty);
-      const both = normalizeSnapshots([{ kind: "guesty-lite", tenantId: google.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, google]).feed;
-      const merged: SourceSnapshot = { kind: "google-calendar", tenantId: google.tenantId, turnovers: both.turnovers, blocks: both.blocks };
-      await engine.readSource({ kind: "google-calendar", read: async () => merged });
-    }
-    if (guesty !== undefined) await engine.pollFeed(guesty);
-    if (google && !(guestyFailed && (options.skipGoogleOnGuestyFailure || guestyMissing))) {
+    if (google) {
       const snapshot = google;
-      const applied = await engine.readSource({ kind: "google-calendar", read: async () => snapshot });
-      googleUnread = !applied.polled;
+      sources.push({ kind: "google-calendar", read: async () => snapshot });
     }
-    return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
+    if (sources.length === 0) return result;
+    const polled = (await engine.readSources(sources)).polled;
+    if (!polled) {
+      result.unread.push(...applied);
+      if (google) result.googleUnread = true;
+    }
+    return result;
   }
 
   /**
@@ -554,16 +1135,108 @@ export class LiveDesk {
    * already timed is left to needsTimes.
    */
   private newBookingAlert(engine: CleanerCore): { id: string; body: string }[] {
-    if (!groupChatEnabled(this.env()) || !this.file.address || !this.file.timeZone) return [];
+    if (!this.groupOn() || !this.file.address || !this.file.timeZone) return [];
     const job = timesTarget(engine);
     if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
     const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
-    return [{ id: `new-booking:${job.id}`, body: `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?` }];
+    const body = engine.newBookingAsk(job.id) ?? `New booking at ${this.file.address}, checking out ${day}. What are the checkout time and the next check-in time?`;
+    return [{ id: `new-booking:${job.id}`, body }];
   }
 
-  getTurns(): ToolReply {
+  /**
+   * At a confirmed cleaning's checkout time, with no departure recorded yet, keeps one host note
+   * asking whether the guests have left. It sends nothing: the door code still waits for the host.
+   */
+  private nudgeCheckout(engine: CleanerCore): void {
+    // A cleaning on hold won't get the code, so the host is not asked.
+    if (this.held) return;
+    const now = this.now().getTime();
+    const name = this.file.nickname ?? this.file.address ?? "the property";
+    for (const job of engine.jobs()) {
+      if (job.status !== "confirmed" && job.status !== "awaiting_departure") continue;
+      if (!job.checkoutAt || Date.parse(job.checkoutAt) > now) continue;
+      engine.keepHostNote(`nudge:${job.id}`, `Checkout time at ${name}. Have the guests left?`);
+    }
+  }
+
+  /**
+   * A finished cleaning's facts, for Grok to summarize in its own words. Times are local at the
+   * property. Notes were redacted when they were kept, and the reply's leak check still runs.
+   */
+  private completedFacts(job: JobView): Record<string, unknown> {
+    const zone = this.file.timeZone ?? "UTC";
+    const local = (iso: string | undefined) => {
+      if (!iso) return null;
+      const when = formatWhen(iso, zone);
+      return `${when.day}, ${when.time}`;
+    };
+    return {
+      nickname: this.file.nickname ?? this.file.address ?? "the property",
+      day: formatWhen(zonedInstant(job.checkoutDate, "12:00", zone), zone).day,
+      arrivalTime: job.arrivalTime ?? null,
+      startedAt: local(job.startedAt),
+      doneAt: local(job.doneAt),
+      checklist: job.checklist ?? [],
+      photos: job.photos ?? 0,
+      // Photos that came in but couldn't be downloaded, so get_job_photos can't show them.
+      ...((job.photos ?? 0) > (job.photosSaved ?? 0) ? { photosMissing: (job.photos ?? 0) - (job.photosSaved ?? 0) } : {}),
+      notes: job.notes ?? [],
+    };
+  }
+
+  /**
+   * Links to the cleaner's photos for one job, each good for one hour. `job` is a checkout date like
+   * 2026-10-18 or the day check_now named, like Sunday, Oct 18. Without it, the latest job with
+   * photos. The signing key is CLEANER_CORE_PHOTO_KEY, or one made once and saved through `save`.
+   */
+  getJobPhotos(input: { job?: string }, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): Promise<ToolReply> {
+    return this.serial(async () => this.getJobPhotosNow(input, save));
+  }
+
+  private getJobPhotosNow(input: { job?: string }, save: ((values: { CLEANER_CORE_PHOTO_KEY: string }) => void) | undefined): ToolReply {
+    this.resume();
+    const engine = this.engine;
+    if (!this.file.checked || !engine) return this.fail("Run the checks first.");
+    const wanted = input.job?.trim().toLowerCase() ?? "";
+    const zone = this.file.timeZone ?? "UTC";
+    const dayOf = (job: JobView) => formatWhen(zonedInstant(job.checkoutDate, "12:00", zone), zone).day.toLowerCase();
+    const jobs = engine.jobs();
+    const job = wanted
+      ? jobs.find((item) => item.checkoutDate === wanted || dayOf(item) === wanted || item.id.toLowerCase() === wanted)
+      : [...jobs].reverse().find((item) => photoCount(this.root, item.id) > 0);
+    if (wanted && !job) return this.fail(NO_PHOTO_JOB);
+    if (!job) return this.reply({ photos: [] });
+    const base = publicBaseUrl(this.env());
+    const key = base ? photoKey(this.env(), save) : undefined;
+    if (!base || !key) return this.fail(PHOTO_LINKS_OFF);
+    return this.reply({ photos: photoLinks(this.root, job.id, base, key, this.now()) });
+  }
+
+  getTurns(): Promise<ToolReply> {
+    return this.serial(async () => this.getTurnsNow());
+  }
+
+  private getTurnsNow(): ToolReply {
     this.resume();
     return this.reply({ turns: this.turns(), ...(this.held ? { held: true } : {}) });
+  }
+
+  /**
+   * Saves the cleaner's arrival time, which Grok read in their message, on the open job's checkout
+   * day. The time needs AM or PM. The server never reads an arrival time from a text itself.
+   */
+  saveArrival(input: { time?: string }): Promise<ToolReply> {
+    return this.serial(async () => this.saveArrivalNow(input));
+  }
+
+  private saveArrivalNow(input: { time?: string }): ToolReply {
+    const time = input.time?.trim() ?? "";
+    const hm = statedClock(time) ? usualTime(time) : undefined;
+    if (!hm) return this.fail(ARRIVAL_NEEDED);
+    this.resume();
+    const [hour = 0, minute = 0] = hm.split(":").map(Number);
+    if (!this.file.checked || !this.engine?.saveArrival(hour * 60 + minute)) return this.fail(NO_OPEN_CLEANING);
+    return this.reply({ next: ARRIVAL_SAVED, turns: this.turns() });
   }
 
   confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
@@ -581,7 +1254,7 @@ export class LiveDesk {
     const engine = this.engine;
     const target = timesTarget(engine);
     const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
-    if (groupChatEnabled(this.env())) {
+    if (this.groupOn()) {
       await engine.confirmHostTimes({ checkout, checkIn });
     } else {
       await engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
@@ -625,8 +1298,9 @@ export class LiveDesk {
     const said = input.said?.trim() ?? "";
     const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) return this.fail("Say that the guests have left. I won't guess from the calendar.");
-    if (!pinKey) return this.fail(PIN_KEY_MISSING);
-    if (this.unlock(pinKey) !== "ready") return this.fail(PIN_REENTER);
+    const key = this.keyFor(pinKey);
+    if (!key) return this.fail(PIN_KEY_MISSING);
+    if (this.unlock(key) !== "ready") return this.fail(PIN_REENTER);
     this.resume();
     if (this.pin) this.engine?.rememberPin(this.pin);
     if (!this.engine) return this.fail("Run the checks first.");
@@ -643,12 +1317,12 @@ export class LiveDesk {
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
-    if (groupChatEnabled(this.env()) && this.engine.groupPinSettled() && !sentNow) {
+    if (this.groupOn() && this.engine.groupPinSettled() && !sentNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "", outcome: "settled", notePending: false };
       this.persist();
       return this.reply({ next: "A text failed to send. I saved it for your review and did not count it as delivered." });
     }
-    if (sentNow && groupChatEnabled(this.env()) && !privateNow) {
+    if (sentNow && this.groupOn() && !privateNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
@@ -671,6 +1345,90 @@ export class LiveDesk {
     return this.reply({ next: resumeNote(this.file.address) });
   }
 
+  /**
+   * Sends the host's own message to the cleaner, the group, or a saved contact. Without a
+   * confirmation it only checks the message and returns the exact text with an approval code.
+   * With the code it sends through the engine, and only when the recipient and the text are the
+   * ones the host approved. The door code never goes out this way.
+   */
+  sendMessage(input: { to?: string; text?: string; confirmation?: string }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(() => this.sendMessageNow(input, pinKey));
+  }
+
+  private async sendMessageNow(input: { to?: string; text?: string; confirmation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    const text = input.text?.trim() ?? "";
+    if (!text || text.length > MAX_HOST_MESSAGE) return this.fail(MESSAGE_NEEDED);
+    this.openSeal(pinKey);
+    if (this.carriesCode(text)) return this.fail(DOOR_CODE_IN_CHAT);
+    const to = input.to?.trim() ?? "";
+    if (!to) return this.fail(RECIPIENT_NEEDED);
+    const recipient = this.recipientOf(to);
+    if ("error" in recipient) return this.fail(recipient.error);
+    const cant = `I can't text ${recipient.name} right now.`;
+    this.resume();
+    const engine = this.engine;
+    if (this.pin) engine?.rememberPin(this.pin);
+    if (!this.file.checked || !engine || !this.reachable(recipient.send, engine)) return this.fail(cant);
+    // The engine's outbox counts them, so this desk saves no timestamp that could hold the door code's digits.
+    if (engine.hostMessagesSince(new Date(this.now().getTime() - HOUR_MS)) >= HOST_MESSAGES_PER_HOUR) return this.fail(TOO_MANY);
+    // A group approval also binds who is in the group, so a join or a leave before the yes voids it.
+    const bound = recipient.send === "group" ? `group:${engine.groupMembers().join(",")}` : recipient.key;
+    const fingerprint = createHash("sha256").update(`${bound}|${text}`).digest("hex");
+    const code = input.confirmation?.trim() ?? "";
+    if (!code) {
+      const question = `Send to ${recipient.name}: "${text}"?`;
+      return this.reply({ preview: { to: recipient.name, text }, confirmation: this.approvals.issue(SEND_ACTION, recipient.key, fingerprint, question) });
+    }
+    try {
+      this.approvals.redeem(code, SEND_ACTION, recipient.key, fingerprint);
+    } catch {
+      return this.fail(APPROVAL_STALE);
+    }
+    let sent: CleanerText | null;
+    try {
+      sent = await engine.sendHostMessage({ to: recipient.send, body: text });
+    } catch {
+      sent = null;
+    }
+    if (!sent) return this.fail(cant);
+    this.keepSent(recipient.name, text);
+    return this.reply({ next: `Sent to ${recipient.name}.` });
+  }
+
+  /**
+   * The saved person or thread a host message goes to: "cleaner" (or the cleaner's saved name),
+   * "group", or a saved contact's name. `key` binds an approval to that exact person's phone.
+   */
+  private recipientOf(to: string): { key: string; send: string; name: string } | { error: string } {
+    const wanted = to.toLowerCase();
+    const cleanerName = this.file.cleanerName;
+    if (wanted === "cleaner" || (cleanerName && wanted === cleanerName.toLowerCase())) {
+      if (!this.file.cleaner) return { error: "I can't text the cleaner right now." };
+      return { key: `cleaner:${this.file.cleaner}`, send: this.file.cleaner, name: cleanerName ?? "the cleaner" };
+    }
+    if (wanted === "group") {
+      if (!this.groupOn()) return { error: NO_GROUP };
+      return { key: "group", send: "group", name: "the group" };
+    }
+    const contact = contactsOf(this.file).find((item) => item.name.toLowerCase() === wanted);
+    if (!contact) return { error: `I can't text ${to.slice(0, MAX_NAME)} right now.` };
+    return { key: `contact:${contact.phone}`, send: contact.phone, name: contact.name };
+  }
+
+  /** The engine holds consent, STOP, and the group's members. A one-to-one text also needs the allowlist now. */
+  private reachable(send: string, engine: CleanerCore): boolean {
+    if (send === "group") return this.groupOn() && engine.canSendHostMessage("group");
+    return isAllowlisted(this.env(), send) && engine.canSendHostMessage(send);
+  }
+
+  /** Keeps a sent host message in the history. Grok sent it, so check_now doesn't return it as new. */
+  private keepSent(to: string, text: string): void {
+    const message: Message = { id: messageId(), from: "host", name: "Host", to, text: this.messageText(text), at: this.messageAt(), handled: "sent" };
+    this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
+    this.file.messagesShown = [...(this.file.messagesShown ?? []), message.id];
+    this.persist();
+  }
+
   resetScratch(): Promise<ToolReply> {
     return this.serial(async () => this.resetScratchNow());
   }
@@ -690,13 +1448,21 @@ export class LiveDesk {
     delete this.file.localSends;
     delete this.file.alertsShown;
     delete this.file.alertsQueued;
+    delete this.file.messages;
+    delete this.file.messagesShown;
+    delete this.file.completedShown;
     delete this.file.timedJobs;
+    this.approvals.clear();
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
   }
 
-  readInbox(): ToolReply {
+  readInbox(): Promise<ToolReply> {
+    return this.serial(async () => this.readInboxNow());
+  }
+
+  private readInboxNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
@@ -707,7 +1473,11 @@ export class LiveDesk {
     return this.reply({ lines });
   }
 
-  readOutbox(): ToolReply {
+  readOutbox(): Promise<ToolReply> {
+    return this.serial(async () => this.readOutboxNow());
+  }
+
+  private readOutboxNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.resume();
@@ -739,7 +1509,7 @@ export class LiveDesk {
   private async addTestTurnNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     const guard = this.testTurnGuard();
     if (guard) return this.fail(guard);
-    if (!this.file.texting || !this.pin || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
+    if (!this.file.texting || !this.codeSaved() || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
     const checkout = input.checkout?.trim() ?? "";
     const checkIn = input.checkIn?.trim() ?? "";
     if (!statedClock(checkout) || !statedClock(checkIn)) {
@@ -807,20 +1577,25 @@ export class LiveDesk {
     await this.applyPinReport(pinId, input.status.toLowerCase());
   }
 
-  /** A text from the host, the cleaner, or the group. Grok does not see it, so a new host note wakes the routine. */
-  inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  /**
+   * A text from the host, the cleaner, or the group. Grok does not see it, so a new host note or a
+   * new message wakes the routine. `media` is an MMS's attachments: during a cleaning, the cleaner's
+   * photos are downloaded and kept under the job. A media URL is never saved or returned.
+   */
+  inbound(input: Inbound): Promise<{ sent: CleanerText[] }> {
     return this.serial(() => this.inboundSerial(input));
   }
 
   /** The body of `inbound`, for a caller already inside the serial queue. */
-  private async inboundSerial(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  private async inboundSerial(input: Inbound): Promise<{ sent: CleanerText[] }> {
     const before = this.visibleNoteIds();
+    const lastBefore = this.file.messages?.at(-1)?.id;
     const result = await this.inboundNow(input);
-    this.queueNewAlerts(before);
+    this.queueNewAlerts(before, this.file.messages?.at(-1)?.id !== lastBefore);
     return result;
   }
 
-  private async inboundNow(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  private async inboundNow(input: Inbound): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -830,27 +1605,92 @@ export class LiveDesk {
     }
     this.claiming.add(input.id);
     try {
-      if (from === this.file.host) return await this.hostText(input.id, from, input.text);
-      this.resume();
-      const keyword = messagingKeyword(input.text);
-      if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
-      const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
-      const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
-      this.noteCleanerYes(offered);
-      this.noteSeen(input.id);
-      this.syncHold();
-      return { sent: result.sent };
+      const routed = await this.routeInbound(input, from);
+      if (routed.handled) this.keepMessage(from, input, routed.handled);
+      return { sent: routed.sent };
     } finally {
       this.claiming.delete(input.id);
     }
   }
 
+  /** Handles one inbound text. `handled` is what Cleaner Core did, or undefined when the text was not taken. */
+  private async routeInbound(input: Inbound, from: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
+    if (from === this.file.host) return this.hostText(input.id, from, input.text);
+    this.resume();
+    const keyword = messagingKeyword(input.text);
+    // One engine for the whole text, so it is taken, counted, and seen by the engine that started it.
+    const engine = this.engine;
+    if (!engine) {
+      const sent = await this.inboundBeforeJob(input.id, from, keyword);
+      return { sent, handled: keyword === "stop" || keyword === "start" ? keyword : "none" };
+    }
+    const offered = new Set(engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
+    const media = input.media ?? [];
+    const photoJob = media.length > 0 ? engine.photoJobFor({ id: input.id, from }) : undefined;
+    const photos = photoJob ? await savePhotos(this.root, photoJob, media, cleanerPhotoFetch(), this.env()) : 0;
+    const result = await engine.receive({
+      id: input.id,
+      from,
+      text: input.text,
+      ...(input.channel ? { channel: input.channel } : {}),
+      ...(media.length > 0 ? { media: media.length, photos } : {}),
+    });
+    this.noteCleanerYes(engine, offered);
+    this.noteSeen(input.id);
+    // Every setup save runs in the queue, so this is only a guard: reopen from the saved store.
+    if (this.engine !== engine) {
+      this.engine = undefined;
+      this.resume();
+    }
+    this.syncHold();
+    return { sent: result.sent, ...this.handledBy(result) };
+  }
+
+  /** The message label from the engine's result. A text the engine did not take is not kept. */
+  private handledBy(result: ReceiveResult): { handled?: MessageHandled } {
+    if (UNREAD_REASONS.has(result.reason)) return {};
+    return { handled: result.outcome ?? "none" };
+  }
+
+  /**
+   * Keeps a text from the cleaner or a saved contact, or from the host in the group, for Grok to
+   * read. Every run of 4 or more digits is redacted, even split like "80-88", so the door code never
+   * reaches a message even when this desk doesn't hold it in memory. The last 200 are kept.
+   */
+  private keepMessage(from: string, input: Inbound, handled: MessageHandled): void {
+    const who = this.speaker(from, input.channel);
+    if (!who) return;
+    const words = this.messageText(input.text);
+    // An MMS shows as [photo], after its words when it has any. Its media URL is never kept.
+    const text = (input.media?.length ?? 0) > 0 ? (words ? `${words} ${PHOTO_MARK}` : PHOTO_MARK).slice(0, MAX_MESSAGE_TEXT) : words;
+    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: this.messageAt(), handled };
+    this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
+    this.persist();
+  }
+
+  /** A kept message's text: every run of 4 or more digits redacted, split or not, trimmed to 300 characters. */
+  private messageText(text: string): string {
+    return redactDigitRuns(this.hideCode(text)).trim().slice(0, MAX_MESSAGE_TEXT);
+  }
+
+  /** Now, as local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
+  private messageAt(): string {
+    const when = formatWhen(this.now().toISOString(), this.file.timeZone ?? "UTC");
+    return `${when.day}, ${when.time}`;
+  }
+
+  /** Who sent a text Grok reads. The host counts only in the group thread. */
+  private speaker(from: string, channel: "group" | undefined): { from: Message["from"]; name: string } | undefined {
+    if (from === this.file.cleaner) return { from: "cleaner", name: this.file.cleanerName ?? "Cleaner" };
+    if (from === this.file.host) return channel === "group" ? { from: "host", name: "Host" } : undefined;
+    const contact = contactsOf(this.file).find((item) => item.phone === from);
+    return contact ? { from: "contact", name: contact.name } : undefined;
+  }
+
   private readonly claiming = new Set<string>();
 
   /** The engine tells the host nothing when the cleaner accepts. One note per job, the first time it is confirmed. */
-  private noteCleanerYes(offered: Set<string>): void {
-    const engine = this.engine;
-    if (!engine) return;
+  private noteCleanerYes(engine: CleanerCore, offered: Set<string>): void {
     for (const job of engine.jobs()) {
       if (!offered.has(job.id) || job.status !== "confirmed") continue;
       engine.keepHostNote(`cleaner-yes:${job.id}`, `The cleaner said YES to the turnover at ${this.file.address ?? "the property"}.`);
@@ -892,31 +1732,169 @@ export class LiveDesk {
     }
   }
 
+  /**
+   * The setup steps follow the diagram: property, sources, people, door code, preferences, then
+   * review. At review the saved choices come back as `setup` for Grok to summarize in its own words.
+   */
   private cleaningState(): Record<string, unknown> {
     const done: string[] = [];
     if (this.file.address) done.push("Property saved.");
-    if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
-    if (this.file.calendarLink) done.push("Calendar link saved.");
+    if (this.file.cleaner) done.push(this.peopleLine());
+    if (this.file.schedule) done.push("Schedule saved.");
+    const calendars = calendarsOf(this.file).length;
+    if (calendars === 1) done.push("Calendar link saved.");
+    if (calendars > 1) done.push(`${calendars} calendar links saved.`);
     if (this.file.google) done.push("Google Calendar saved.");
-    if (this.pin) done.push("Door code saved.");
-    if (this.file.texting) done.push("Texting saved.");
-    if (this.file.texting && groupChatEnabled(this.env())) {
-      done.push(this.file.observer ? "Group chat set up with you, the cleaner, and the observer." : "Group chat set up with you and the cleaner.");
+    if (this.codeSaved()) done.push("Door code saved.");
+    const preferences = this.file.preferences;
+    if (preferences) {
+      const any = preferences.checklist.length > 0 || preferences.photosRequired || preferences.supplyNotes || Boolean(preferences.instructions);
+      done.push(any ? "Preferences saved." : "No cleaning preferences.");
     }
+    if (this.file.texting) done.push("Texting saved.");
+    if (this.file.texting && this.groupOn()) done.push(this.groupLine());
     if (this.file.checked) done.push("Checks finished.");
-    let next = "What's the property address, and what should I call the business?";
-    if (!this.file.address) next = "What's the property address, and what should I call the business?";
+    let next: string;
+    if (!this.file.address) next = PROPERTY_ASK;
+    else if (!hasSources(this.file)) next = CALENDAR_ASK;
     else if (!this.file.cleaner) next = PEOPLE_ASK;
-    else if (!this.file.calendarLink && !this.file.google) next = CALENDAR_ASK;
-    else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
-    else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
+    // Setups that saved texting before the schedule step existed skip it.
+    else if (!this.file.schedule && !this.file.texting) next = SCHEDULE_ASK;
+    else if (!this.codeSaved()) next = DOOR_CODE_ASK;
+    else if (!this.file.texting) next = preferences ? REVIEW_ASK : PREFERENCES_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+    const review = next === REVIEW_ASK;
     if (this.held) next = this.holdLine();
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
-    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
+    return {
+      done,
+      next,
+      ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
+      ...(this.file.checked ? { turns: this.turns() } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
+    };
+  }
+
+  /** The next setup step, for a save tool's reply. */
+  private setupNext(): string {
+    return String(this.cleaningState().next);
+  }
+
+  private peopleLine(): string {
+    const contacts = contactsOf(this.file).length;
+    if (contacts === 0) return "Cleaner saved.";
+    if (this.file.observer && !this.file.contacts) return "Cleaner and observer saved.";
+    return `Cleaner and ${contacts} extra ${contacts === 1 ? "contact" : "contacts"} saved.`;
+  }
+
+  private groupLine(): string {
+    const extra = this.groupExtras();
+    if (extra.length === 0) return "Group chat set up with you and the cleaner.";
+    if (this.file.observer && extra.length === 1) return "Group chat set up with you, the cleaner, and the observer.";
+    return "Group chat set up with you, the cleaner, and your contacts.";
+  }
+
+  /**
+   * The saved choices, for Grok's review summary. Phones show their last 4 digits only. The door
+   * code is never here, and access holds the lock location alone.
+   */
+  private reviewSetup(): Record<string, unknown> {
+    const file = this.file;
+    const last4 = (phone: string | undefined) => {
+      const four = phone?.replace(/\D/g, "").slice(-4) ?? "";
+      return four && !this.leaks(four) ? { phoneLast4: four } : {};
+    };
+    return {
+      property: {
+        business: file.business,
+        ...(file.nickname ? { nickname: file.nickname } : {}),
+        address: file.address,
+        ...(file.propertyType ? { propertyType: file.propertyType } : {}),
+        timeZone: file.timeZone,
+        ...(file.checkoutTime ? { checkoutTime: clockText(file.checkoutTime) } : {}),
+        ...(file.checkInTime ? { checkInTime: clockText(file.checkInTime) } : {}),
+      },
+      sources: { calendars: calendarsOf(file).map((calendar) => calendar.name), google: file.google === true },
+      people: {
+        host: last4(file.host),
+        cleaner: { ...(file.cleanerName ? { name: file.cleanerName } : {}), ...last4(file.cleaner) },
+        contacts: contactsOf(file).map((contact) => ({ name: contact.name, role: contact.role, ...last4(contact.phone) })),
+        groupChat: file.groupChat ?? "everyone",
+        groupThread: this.groupOn(),
+      },
+      ...(file.schedule ? { schedule: this.reviewSchedule(file.schedule) } : {}),
+      access: file.lockLocation ? { lockLocation: file.lockLocation } : {},
+      preferences: file.preferences,
+    };
+  }
+
+  /** The saved schedule with clock times like 8:00 AM. Problems go to the host unless someone else was named. */
+  private reviewSchedule(schedule: Schedule): Record<string, unknown> {
+    return {
+      firstText: schedule.firstText,
+      ...(schedule.firstTextDays !== undefined ? { firstTextDays: schedule.firstTextDays } : {}),
+      reminder: schedule.reminder,
+      ...(schedule.reminderDays !== undefined ? { reminderDays: schedule.reminderDays } : {}),
+      reminderTime: clockText(schedule.reminderTime),
+      ...(schedule.quietFrom && schedule.quietUntil ? { quietFrom: clockText(schedule.quietFrom), quietUntil: clockText(schedule.quietUntil) } : {}),
+      escalateTo: schedule.escalateTo ?? "host",
+    };
+  }
+
+  /** The engine options for the saved schedule. Without one, the engine keeps its defaults. */
+  private scheduleOptions(): Partial<Parameters<typeof openCleanerCore>[0]> {
+    const schedule = this.file.schedule;
+    if (!schedule) return {};
+    const reminderDays = schedule.reminder === "days-before-checkout" ? schedule.reminderDays : undefined;
+    return {
+      offerTrigger:
+        schedule.firstText === "days-after-check-in" && schedule.firstTextDays !== undefined
+          ? { kind: "days-after-check-in", days: schedule.firstTextDays, localTime: FIRST_TEXT_TIME }
+          : { kind: "when-confirmed" },
+      triggers: [
+        {
+          id: SCHEDULED_REMINDER,
+          kind: schedule.reminder,
+          localTime: schedule.reminderTime,
+          replaces: [DEFAULT_REMINDER],
+          ...(reminderDays !== undefined ? { days: reminderDays } : {}),
+        },
+      ],
+      // The saved schedule is the only source of quiet hours, so clearing them takes effect.
+      quietHours: schedule.quietFrom && schedule.quietUntil ? { from: schedule.quietFrom, until: schedule.quietUntil } : null,
+    };
+  }
+
+  /** The engine options for the saved preferences. The offer note is set only when instructions are saved. */
+  private preferenceOptions(): Partial<Parameters<typeof openCleanerCore>[0]> {
+    const preferences = this.file.preferences;
+    if (!preferences) return {};
+    return {
+      ...(preferences.checklist.length > 0 ? { checklist: { name: this.file.nickname ?? this.file.address ?? "the property", items: [...preferences.checklist] } } : {}),
+      ...(preferences.photosRequired ? { photosRequired: true } : {}),
+      ...(preferences.supplyNotes ? { supplyNotes: true } : {}),
+      ...(preferences.instructions ? { offerNote: preferences.instructions } : {}),
+    };
+  }
+
+  /** Group texts are on when the server allows them and the host didn't choose cleaner-only. */
+  private groupOn(): boolean {
+    return groupChatEnabled(this.env()) && this.file.groupChat !== "cleaner-only";
+  }
+
+  /** The contacts who join the group. cleaner-and-host leaves them all out. */
+  private groupExtras(): { phone: string; name: string }[] {
+    if (this.file.groupChat === "cleaner-and-host") return [];
+    return contactsOf(this.file).map((contact) => ({ phone: contact.phone, name: contact.name }));
+  }
+
+  /** Sets a saved field, or removes it when the value is undefined. */
+  private keep<K extends keyof LiveFile>(key: K, value: LiveFile[K] | undefined): void {
+    if (value === undefined) delete this.file[key];
+    else this.file[key] = value;
   }
 
   /**
@@ -944,14 +1922,16 @@ export class LiveDesk {
       nextCheckInDate: job.nextCheckInDate,
       checkoutTime: job.checkoutTime,
       nextCheckInTime: job.nextCheckInTime,
+      ...(job.arrivalTime ? { arrivalTime: job.arrivalTime } : {}),
       status: job.status,
       ...(this.held ? { held: true } : {}),
     }));
   }
 
   private resume(): void {
+    this.openSeal();
     if (this.engine || !this.file.checked) return;
-    if (!this.pin && !this.file.pinSeal) return;
+    if (!this.codeSaved()) return;
     this.engine = this.openEngine();
     this.syncHold();
   }
@@ -975,14 +1955,26 @@ export class LiveDesk {
     }
     const env = () => this.env();
     const dataDir = join(this.root, "cleaner-job");
-    const observer = parsePhone(file.observer ?? "");
+    const extra = this.groupExtras();
     mkdirSync(dataDir, { recursive: true });
     return openCleanerCore({
       enabled: true,
-      property: { id: file.propertyId, address: file.address, timeZone: file.timeZone },
+      property: {
+        id: file.propertyId,
+        address: file.address,
+        timeZone: file.timeZone,
+        ...(file.checkoutTime ? { defaultCheckout: file.checkoutTime } : {}),
+        ...(file.checkInTime ? { defaultCheckIn: file.checkInTime } : {}),
+      },
+      ...(file.checkoutTime && file.checkInTime ? { usualTimesName: file.nickname ?? file.address } : {}),
+      ...this.scheduleOptions(),
+      reminderAsksArrival: true,
+      grokReadsMessages: true,
+      ...this.preferenceOptions(),
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),
+      ...(file.lockLocation ? { lockLocation: file.lockLocation } : {}),
       hostName: file.business,
       consented: file.texting === true,
       allowlist: smsAllowlist(env()),
@@ -998,12 +1990,12 @@ export class LiveDesk {
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
       pinFailedBody: PIN_FAILED,
-      ...(groupChatEnabled(env())
+      ...(this.groupOn()
         ? {
             groupChat: {
               hostName: "Cory",
-              cleanerName: "Maria",
-              ...(observer ? { extra: [{ phone: observer, name: "Observer" }] } : {}),
+              cleanerName: file.cleanerName ?? "Maria",
+              ...(extra.length > 0 ? { extra } : {}),
             },
           }
         : {}),
@@ -1054,7 +2046,7 @@ export class LiveDesk {
     if (!scratchToolsOn(this.env())) return SCRATCH_PROPERTY_REFUSAL;
     if (from !== undefined && !isScratchTestNumber(from)) return SCRATCH_NUMBER_REFUSAL;
     if (!isScratchPropertyAddress(this.file.address)) return SCRATCH_PROPERTY_REFUSAL;
-    const saved = [this.file.host, this.file.cleaner, this.file.observer].filter((phone): phone is string => Boolean(phone));
+    const saved = [this.file.host, this.file.cleaner, ...contactsOf(this.file).map((contact) => contact.phone)].filter((phone): phone is string => Boolean(phone));
     if (saved.some((phone) => !isScratchTestNumber(phone))) return SCRATCH_NUMBER_REFUSAL;
     if (from !== undefined) {
       const parsed = parsePhone(from);
@@ -1125,6 +2117,11 @@ export class LiveDesk {
     return { ok: false, error };
   }
 
+  private failWith(error: string, result: Record<string, unknown>): ToolReply {
+    if (this.leaks(error) || this.leaks(JSON.stringify(result))) return { ok: false, error: "That didn't work. Try again." };
+    return { ok: false, error, result };
+  }
+
   private load(): void {
     if (!existsSync(this.path)) return;
     const parsed = JSON.parse(readFileSync(this.path, "utf8")) as LiveFile;
@@ -1134,7 +2131,8 @@ export class LiveDesk {
 
   private persist(): void {
     const json = `${JSON.stringify(this.file)}\n`;
-    if (this.pin && json.includes(this.pin)) throw new Error("Could not seal the door code.");
+    // The code as its own token. An id that only holds the digits (a SID, a UUID, a booking UID) is fine.
+    if (this.pin && containsCodeToken(json, this.pin)) throw new Error("Could not seal the door code.");
     this.writeFile(json);
   }
 
@@ -1161,7 +2159,7 @@ export class LiveDesk {
   }
 
   private privateCodeWaiting(): boolean {
-    if (!groupChatEnabled(this.env()) || !this.engine) return false;
+    if (!this.groupOn() || !this.engine) return false;
     const tracked = this.file.pinSend;
     if (tracked?.delivered === true && tracked.outcome !== "undelivered") return false;
     if (tracked?.outcome === "undelivered") return true;
@@ -1174,9 +2172,11 @@ export class LiveDesk {
     return this.reply({ ...reply.result, next: failure });
   }
 
-  async runReminders(): Promise<void> {
-    this.resume();
-    await this.engine?.runReminders();
+  runReminders(): Promise<void> {
+    return this.serial(async () => {
+      this.resume();
+      await this.engine?.runReminders();
+    });
   }
 
   private holdLine(): string {
@@ -1215,31 +2215,31 @@ export class LiveDesk {
     await this.engine?.reportPin(id, status);
   }
 
-  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[] }> {
+  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
     this.noteSeen(id);
     const keyword = messagingKeyword(text);
     if (keyword === "stop" || keyword === "start" || isInjuryReport(text)) {
       this.resume();
       if (!this.engine) {
-        if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword) };
-        return { sent: [] };
+        if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword), handled: keyword };
+        return { sent: [], handled: "none" };
       }
       const result = await this.engine.receive({ id, from, text });
       this.syncHold();
-      return { sent: result.sent };
+      return { sent: result.sent, ...this.handledBy(result) };
     }
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) {
-      if (!groupChatEnabled(this.env())) return { sent: [] };
+      if (!this.groupOn()) return { sent: [], handled: "none" };
       this.resume();
-      if (!this.engine) return { sent: [] };
+      if (!this.engine) return { sent: [], handled: "none" };
       const result = await this.engine.receive({ id, from, text });
       this.syncHold();
-      return { sent: result.sent };
+      return { sent: result.sent, ...this.handledBy(result) };
     }
     this.resume();
     this.engine?.keepHostNote("host:direct-left", DIRECT_TEXT_REPLY);
     if (this.scratchCapture()) this.noteLocal(from, "held");
-    return { sent: [] };
+    return { sent: [], handled: "none" };
   }
 }

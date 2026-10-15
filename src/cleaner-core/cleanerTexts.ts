@@ -50,10 +50,37 @@ export function offerBody(
   return `Turnover at ${address} on ${checkout.day}. Checkout ${checkout.time}${guest}. ${OFFER_ASK}`;
 }
 
-/** Offer copies drop the YES ask. The cleaner is the only person who can confirm. */
-export function offerForOthers(body: string): string {
-  return body.endsWith(OFFER_ASK) ? `${body.slice(0, -OFFER_ASK.length)}${OFFER_WAIT}` : body;
+const HOST_NOTE = " Note from the host: ";
+
+/** The first offer with the host's saved other instructions at the end. Without any, the offer is unchanged. */
+export function withHostNote(body: string, instructions: string | undefined): string {
+  const note = instructions?.trim();
+  return note ? `${body}${HOST_NOTE}${note}` : body;
 }
+
+/** The text an offer adds after Cleaner Core's own words: the host's note, or nothing. */
+export function hostNoteOf(body: string): string {
+  const index = body.indexOf(HOST_NOTE);
+  return index < 0 ? "" : body.slice(index);
+}
+
+/**
+ * Offer copies drop the YES ask. The cleaner is the only person who can confirm. The host's note,
+ * when there is one, stays after it.
+ */
+export function offerForOthers(body: string): string {
+  const note = hostNoteOf(body);
+  const own = body.slice(0, body.length - note.length);
+  return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${OFFER_WAIT}${note}` : body;
+}
+
+/** The checklist, after the private code. Each item loses a trailing period or semicolon. */
+export function checklistBody(name: string, items: readonly string[]): string {
+  const list = items.map((item) => item.trim().replace(/[.;]+$/, "")).join("; ");
+  return `Checklist for ${name}: ${list}. Send photos, then reply DONE when finished.`;
+}
+
+export const PHOTO_FIRST = "Please send a photo of the finished rooms, then reply DONE.";
 
 export function reminderBody(address: string, when: { day: string; time: string }, privateTurn: boolean): string {
   return privateTurn
@@ -61,8 +88,19 @@ export function reminderBody(address: string, when: { day: string; time: string 
     : `Reminder: checkout at ${address} is ${when.day} at ${when.time}. Reply STOP to opt out.`;
 }
 
-export function doorCodeBody(address: string, code: string): string {
-  return `Guests have left ${address}. Door code: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
+/** The scheduled reminder. It names the checkout and asks the cleaner when they plan to arrive. */
+export function arrivalReminderBody(address: string, when: { day: string; time: string }): string {
+  return `Reminder: cleaning at ${address} on ${when.day}. Checkout is ${when.time}. What time do you plan to arrive?`;
+}
+
+/** The new-booking question for the host when the property's usual times are saved. */
+export function usualTimesAsk(name: string, checkInDay: string, checkoutDay: string, checkout: string, checkIn: string): string {
+  return `New booking at ${name}: check-in ${checkInDay}, checkout ${checkoutDay}. Use the usual ${checkout} checkout and ${checkIn} check-in?`;
+}
+
+export function doorCodeBody(address: string, code: string, lockLocation?: string): string {
+  const label = lockLocation ? `Door code for the ${lockLocation}` : "Door code";
+  return `Guests have left ${address}. ${label}: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
 }
 
 export function holdNote(address: string): string {
