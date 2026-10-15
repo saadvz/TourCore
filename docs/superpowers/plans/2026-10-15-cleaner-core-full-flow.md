@@ -8,8 +8,8 @@
 - sources keyed by id, persisted across a restart;
 - an offer trigger;
 - arrival time;
-- media counts, notes, and timestamps;
-- a summary line.
+- photos Grok can see, notes, and timestamps;
+- a completed record that Grok summarizes.
 
 New `cleaner-template/` files and a `CLEANER_CORE_BOOTSTRAP.md` let a Grok Bot set itself up from the repo.
 
@@ -33,7 +33,7 @@ New `cleaner-template/` files and a `CLEANER_CORE_BOOTSTRAP.md` let a Grok Bot s
 
 1. A Tour Core token is sent to `/mcp/cleaner-core`, or a cleaner token to `/mcp`. Expected: 401 with that path's resource metadata, and no tool runs. The test is in Task 1.
 2. A host saves a group-chat choice of `cleaner-only` while the server flag `CLEANER_CORE_GROUP_CHAT` is on. Expected: no group thread for this property, and texts go one-to-one. The test is in Task 3.
-3. A cleaner replies with a time that is ambiguous or out of range ("around 3", "at 25:00"). Expected: the arrival is read near checkout or ignored, the host is never told a nonsense time, and the job is never released. The test is in Task 5.
+3. A cleaner reply the server could misread: a time with no AM/PM, or a text that holds the door code. Expected: it is relayed to Grok as-is (with the code redacted), and the server never guesses a time. The test is in Task 5.
 4. An MMS photo arrives with no text body. Expected: it is counted, it never triggers the generic guide reply, and it is never treated as a keyword. The test is in Task 6.
 5. After a restart, one of two iCal links fails. Expected: the jobs from that source are not cancelled; the source is unread. The test is in Task 2.
 
@@ -120,13 +120,14 @@ Behavior:
 - Produces: `saveDoorCode` accepts optional `lockLocation` (max 80 characters, no digits run of 4 or more). It is saved and passed to the engine, which puts it in the private code text: `Door code for the {lockLocation}: {code}`.
 - Produces: `savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): ToolReply`, and the tool `save_preferences`. Max 12 checklist items of 80 characters; instructions max 300 characters. No item may carry the door code (`chatCarriesDoorCode`).
 - Produces: `cleaningState` next steps follow the diagram order: property → sources → people → schedule (Task 4) → door code → preferences → review.
-  - The review `next` is a summary line built from the saved fields, followed by `Reply Activate to start.`
-  - It holds no door code and no phone digits except the last 4.
+  - At review, `get_state` returns `setup`: structured saved fields. Phones show the last 4 digits only. It has no door code, and `lockLocation` only.
+  - `next` is `Summarize this setup for the host in your own words, then ask them to reply Activate.`
+  - Grok writes the summary. The server builds no summary text.
 - Produces: the `activate` tool, which runs `setUpTexting()` and then `runChecks(input)`. It takes the same input as `run_checks`.
 
 - [ ] **Step 1: Write the failing tests.**
   - Each tool saves its fields and `get_state` advances in diagram order.
-  - The review summary lists every saved choice and contains neither the door code nor a full phone number.
+  - At review, `setup` lists every saved choice and contains neither the door code nor a full phone number.
   - `activate` gives `Checks finished.`
   - Review Focus 2: `cleaner-only` with the flag on means one-to-one texts and no Conversations calls.
   - `everyone` puts the contacts in the group.
@@ -166,60 +167,94 @@ Behavior:
 - [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerGrokDemo.test.ts test/cleanerCore.test.ts test/cleanerCoreGroup.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures.
 - [ ] **Step 5: Commit** `feat(cleaner-core): messaging schedule and checkout nudge`.
 
-### Task 5: Arrival time
+### Task 5: Cleaner replies reach Grok, and Grok saves the arrival time
 
 **Files:**
-- Modify: `src/cleaner-core/core.ts`: `answer`/`quietOrGuide` (~1388), `groupTimeReply` (~2047), `clockMinutes` (~2901), `Job`, `JobView`
+- Modify: `src/cleaner-core/core.ts`: `answer`/`quietOrGuide` (~1388), `groupTimeReply` (~2047), `Job`, `JobView`
 - Modify: `src/cleaner-core/liveDesk.ts`
+- Modify: `src/cleaner-core/mcp.ts`
 - Test: `test/cleanerFullSetup.test.ts`
 
 **Interfaces:**
-- Produces: `arrivalMinutes(text: string, checkoutMinutes: number): number | undefined`.
-  - With AM or PM, it uses the stated time.
-  - Without, it takes the reading (AM or PM) that falls in [checkout, checkout + 10 h], else undefined.
-  - Hours above 12 with AM or PM, minutes of 60 or more, and hours of 24 or more give undefined.
-- Produces: a confirmed cleaner's (one-to-one or group) text with a readable time sets `job.arrivalAt` (ISO) and adds a host note: `{cleanerName} plans to arrive around {time}.` Its id is `arrival:{jobId}:{minutes}`. The cleaner gets `Thanks, I'll let the host know.` once per job.
-- `JobView.arrivalTime` is shown in `turns`.
+- Produces: a confirmed cleaner's text that is not a keyword (YES, NO, STOP, START, DONE, HELP, injury, a code-only text), one-to-one or in the group, adds a host note `{cleanerName}: "{text}"`.
+  - The text is trimmed to 300 characters and the door code is redacted.
+  - The id is `relay:{inboundId}`.
+  - This wakes the Alerts routine through the existing `queueNewAlerts`.
+  - The cleaner's existing guide reply is not sent for a relayed text, and the cleaner gets no other automatic reply.
+- Produces: `LiveDesk.saveArrival(input: { time?: string }): ToolReply` and the tool `save_arrival`.
+  - `time` is "11:30 AM" style and must have AM or PM (`statedClock`).
+  - It sets `job.arrivalAt` (ISO, property time zone, on the open job's checkout day). If no job is open, it fails: `There's no open cleaning to save an arrival time for.`
+  - Tool description: `Saves the cleaner's arrival time after you read it in their message. Use AM or PM.`
+- Produces: `JobView.arrivalTime` ("11:30 AM") is shown in `turns`.
+- Produces: the `initialize` instructions add: `When an alert quotes the cleaner, tell the host what they said in your own words. If it gives an arrival time, call save_arrival.`
+- The server parses no arrival time.
 
-- [ ] **Step 1: Write the failing tests.** Review Focus 3:
-  - "around 11:30" with a 10:00 AM checkout gives 11:30 AM.
-  - "around 3" gives 3:00 PM.
-  - "at 25:00" gives no arrival and no host note.
-  - A YES with a time still confirms.
-  - The group-chat time reply records the arrival.
+- [ ] **Step 1: Write the failing tests.** Review Focus 3 now means a reply the server must not misread:
+  - "Yes I'll be there around 11:30" from a confirmed cleaner is relayed verbatim to the host, and nothing else changes.
+  - A YES still confirms and is not relayed.
+  - A text holding the door code is relayed redacted.
+  - `save_arrival "11:30 AM"` sets `arrivalTime`, `save_arrival "11:30"` fails, and with no open job it fails.
+  - A group-chat time reply is relayed.
+  - The relay wakes the routine once.
 - [ ] **Step 2: Run** `npx vitest run test/cleanerFullSetup.test.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerCoreGroup.test.ts test/cleanerCore.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures.
-- [ ] **Step 5: Commit** `feat(cleaner-core): pass the cleaner's arrival time to the host`.
+- [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerCoreGroup.test.ts test/cleanerCore.test.ts test/cleanerGrokDemo.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures. Update any existing test that pinned the guide reply for a non-keyword cleaner text, and say so in the report.
+- [ ] **Step 5: Commit** `feat(cleaner-core): relay cleaner replies to Grok and save the arrival time`.
 
-### Task 6: Checklist, photos, notes, summary
+### Task 6: Checklist, photos Grok can see, and the completed record
 
 **Files:**
+- Create: `src/cleaner-core/photos.ts` (download, store, sign, serve)
 - Modify: `src/cleaner-core/twilioHook.ts`
-- Modify: `src/cleaner-core/liveDesk.ts`: `inbound`
-- Modify: `src/cleaner-core/core.ts`: `receive`, `finish` (~1344), `tellHostDone` (~1393), the start branch (~2209), `Job`
+- Modify: `src/cleaner-core/liveDesk.ts`: `inbound`, `checkNow`
+- Modify: `src/cleaner-core/core.ts`: `receive`, `finish` (~1344), the start branch (~2209), `Job`
+- Modify: `src/cleaner-core/mcp.ts`
+- Modify: `src/web/server.ts` (the photo GET route)
 - Modify: `src/cleaner-core/cleanerTexts.ts`
-- Test: `test/cleanerFullSetup.test.ts`
+- Test: `test/cleanerFullSetup.test.ts`, `test/cleanerPhotos.test.ts` (new)
 
 **Interfaces:**
-- Produces: `twilioHook` reads `NumMedia` (0–10) and passes `media: number` through `LiveDesk.inbound` to `engine.receive`. It never fetches `MediaUrl`.
-- Produces: after the private code is sent, the cleaner gets the checklist when one is saved: `Checklist for {nickname}: {item}; {item}. Reply DONE when finished.` Kind `checklist`, sent once per job.
-- Produces: while a job is in progress (code delivered, not done), media from the cleaner adds to `job.photos`. Non-keyword text adds to `job.notes` (max 5 notes, 200 characters each, door code redacted) when `supplyNotes` is on. A photo with no body never gets the guide reply (Review Focus 4).
-- Produces: `job.startedAt` is set on START, or on the first in-progress message. `job.doneAt` is set on DONE.
+- Produces: `twilioHook` reads `NumMedia` (0–10) and `MediaUrl{i}` / `MediaContentType{i}`, and passes `media: { url: string; contentType: string }[]` to `LiveDesk.inbound`. Media URLs are never logged and never stored in `cleaner-live.json`.
+- Produces: `photos.ts`:
+  - `savePhoto(root, jobId, media, fetchImpl)`. It is skipped unless `contentType` starts with `image/`. It downloads with Basic auth `CLEANER_CORE_TWILIO_ACCOUNT_SID:CLEANER_CORE_TWILIO_AUTH_TOKEN`, only from `https://api.twilio.com/`. The limits are 5 MB, 10 s, and 10 photos per job. It writes `cleaner-job/photos/<jobId>/<n>.<ext>`.
+  - `photoLinks(root, jobId, baseUrl, key, now): { url: string; expiresAt: string }[]`. The url is `/cleaner-core/photos/<token>`. The token is an HMAC-SHA256 over `jobId|n|expiry` with a server key, and expires after 1 hour.
+  - `servePhoto(token)`, which checks the token and returns the file with `Cache-Control: no-store`.
+  - The key comes from `CLEANER_CORE_PHOTO_KEY`, or else from a random key saved once in the secret store.
+  - `setCleanerPhotoFetch(fetchImpl | undefined)` is there for tests.
+- Produces: `GET /cleaner-core/photos/<token>` in `server.ts`, public and behind `CLEANER_CORE_ENABLED`. A bad or expired token gives 404.
+- Produces: after the private code is sent, the cleaner gets the checklist when one is saved: `Checklist for {nickname}: {item}; {item}. Send photos, then reply DONE when finished.` Kind `checklist`, once per job.
+- Produces: while a job is in progress (code delivered, not done):
+  - photos are saved and counted in `job.photos`;
+  - the non-keyword text is relayed (Task 5) and also kept in `job.notes` (max 5 notes, 200 characters each, redacted) when `supplyNotes` is on;
+  - a photo with no body is never relayed as text and never gets a guide reply (Review Focus 4).
+- Produces: `job.startedAt` is set on START or on the first in-progress message, and `job.doneAt` on DONE.
 - Produces: with `photosRequired` and `photos === 0`, DONE replies `Please send a photo of the finished rooms, then reply DONE.` and the job stays open.
-- Produces: `tellHostDone` uses `hostSummaryLine`: `Cleaning complete at {nickname}, {day}. Arrived {time|"—"}, done {time}. Checklist {sent|not used}. {n} photo(s). Notes: {notes joined by "; "}.` The Notes part is omitted when there are none.
+- Produces: `check_now` returns `completed: { nickname, day, arrivalTime, startedAt, doneAt, checklist: string[], photos: number, notes: string[] }[]` for jobs done since the last check. They are tracked by id, the same way as `alertsShown`.
+- Produces: `LiveDesk.getJobPhotos(input: { job?: string }): ToolReply` and the tool `get_job_photos`. It returns `{ photos: { url, expiresAt }[] }` for the latest job, or the job given.
+  - Tool description: `Gets expiring links to the cleaner's photos for a job. Look at them, compare with the checklist, and show them to the host.`
+- Produces: the `initialize` instructions add: `When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.`
+- Produces: `reset_scratch` deletes `cleaner-job/photos`. Photos older than 30 days after `doneAt` are deleted on `check_now`.
 
 - [ ] **Step 1: Write the failing tests.**
-  - A photo-only MMS on the cleaner hook is counted, with no guide reply.
-  - The checklist goes to the cleaner after the code, once.
-  - DONE is blocked without a photo when photos are required, then accepted after one.
-  - The summary has the exact counts and times.
-  - Notes are redacted.
-  - The summary and notes never contain the door code.
-- [ ] **Step 2: Run** `npx vitest run test/cleanerFullSetup.test.ts`. Expected: FAIL.
+  - In `test/cleanerPhotos.test.ts`, with a stubbed Twilio media fetch:
+    - an MMS photo on the cleaner hook is saved, and its body is image bytes;
+    - a non-image type is skipped;
+    - more than 10 photos are capped;
+    - a non-Twilio media host is refused;
+    - a link works within 1 hour and 404s after;
+    - a tampered token 404s;
+    - the URL and the file path hold no phone number and no door code;
+    - nothing is served with the flag off.
+  - In `test/cleanerFullSetup.test.ts`:
+    - the checklist goes after the code, once;
+    - a photo-only MMS has no guide reply and no relay;
+    - DONE is blocked without a photo when photos are required;
+    - `completed` has exact counts and times, appears once, and holds no door code;
+    - `get_job_photos` returns working links.
+- [ ] **Step 2: Run** `npx vitest run test/cleanerPhotos.test.ts test/cleanerFullSetup.test.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerDone.test.ts test/cleanerCoreWiring.test.ts test/cleanerCore.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures.
-- [ ] **Step 5: Commit** `feat(cleaner-core): checklist, photos, notes, and the final summary`.
+- [ ] **Step 4: Run** `npx vitest run test/cleanerPhotos.test.ts test/cleanerFullSetup.test.ts test/cleanerDone.test.ts test/cleanerCoreWiring.test.ts test/cleanerCore.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures.
+- [ ] **Step 5: Commit** `feat(cleaner-core): checklist, photos Grok can see, and the completed record`.
 
 ### Task 7: The paste-in prompt, setup guide, and bot template
 
@@ -274,10 +309,10 @@ Content decisions:
   4. A booking appears in Google; the alert names the usual times; the host says yes (`confirm_times`).
   5. The first text waits for `days-after-check-in` 1.
   6. Cleaner YES (invite and offer).
-  7. The reminder 1 day before carries the arrival question; the cleaner replies "around 11:30"; the host alert.
+  7. The reminder 1 day before carries the arrival question; the cleaner replies "around 11:30"; the reply is relayed; `save_arrival 11:30 AM`.
   8. The checkout nudge; "guests have left"; the private code with lock location to the cleaner only.
   9. The checklist; one photo; the note "need paper towels"; DONE.
-  10. The summary alert.
+  10. `check_now` returns `completed`, and `get_job_photos` returns a working link.
 
   After every step, recipients are Scratch numbers only and no file, reply, or log holds the door code.
 - [ ] **Step 2: Run** `npx vitest run test/cleanerFullSetup.test.ts`. Expected: PASS. Fix code, not the test.

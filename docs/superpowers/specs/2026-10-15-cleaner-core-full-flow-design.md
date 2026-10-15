@@ -163,3 +163,24 @@ Each change is the smallest one that does the job.
 ## Host
 
 - `hostedCleanerCoreUrl` is `https://tourcore-production-72ec.up.railway.app`, the dedicated Cleaner Core Railway project.
+
+## Grok-first revision (Saad, 2026-10-15)
+
+Grok does whatever its own abilities can do. These points replace the matching parts above.
+
+- **Review & Activate.** `get_state` returns the saved setup as structured data (`setup`). Grok writes the review summary in its own words. The server builds no summary text.
+- **Cleaner replies.**
+  - A confirmed cleaner's text that isn't a keyword (YES, NO, STOP, START, DONE, HELP, an injury) is relayed to the host as an alert: `{cleanerName}: "{text}"`, with the door code redacted.
+  - Grok reads it. When it holds an arrival time, Grok tells the host and calls `save_arrival({ time })`, which stores `arrivalAt` on the open job.
+  - The server parses no arrival times.
+- **Final summary.**
+  - On DONE, `check_now` returns the job's facts: `completed: { nickname, day, arrivalTime, startedAt, doneAt, checklist, photos, notes }`.
+  - Grok writes the "Cleaning complete" summary.
+  - The host still gets the existing done text.
+- **Photos Grok can see.**
+  - Cleaner Core downloads each MMS photo from Twilio with its own Cleaner Core credentials: image types only, at most 10 per job, 5 MB each. It stores the photos under the job.
+  - `get_job_photos({ job? })` returns links that expire after one hour. Each link carries a signed token and serves exactly one photo. The link never contains a phone number or the door code.
+  - Grok looks at the photos, checks them against the checklist, and shows them in the summary.
+  - Photos are deleted by `reset_scratch`, and 30 days after the job is done.
+- **Texting stays with Cleaner Core.** Grok decides when, and Cleaner Core sends. The safety rules live at that one send point, and the Twilio keys stay out of Grok.
+- **Not now:** Notion.
