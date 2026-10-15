@@ -801,7 +801,7 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     const text = String((await rpc("initialize")).instructions);
     expect(text.startsWith("Call get_state first and follow its next step.")).toBe(true);
     for (const line of [
-      "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it. Post each alert in your own short words. Collect secrets only with your secure card.",
+      "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
       "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
       "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
     ]) {
@@ -1899,7 +1899,7 @@ describe("Cleaner Core Grok demo: alert upload link", () => {
     const { link } = await issueLink(wired);
     wired.setEnv({ CLEANER_CORE_ENABLED: undefined });
     const off = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: UPLOAD_KEY }));
-    expect([404, 503]).toContain(off.status);
+    expect(off.status).toBe(404);
     expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
     expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
   });
@@ -1920,5 +1920,85 @@ describe("Cleaner Core Grok demo: alert upload link", () => {
     const refused = await call(wired, "save_alert_routine", { url: "**********", token: "**********" });
     expect(refused.isError).toBe(true);
     expect(refused.text).toBe(ROUTINE_NEEDED);
+  });
+
+  it("refuses a real address with a masked key, and a masked address, on both paths", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const masked = [
+      { url: UPLOAD_URL, token: "**********" },
+      { url: UPLOAD_URL, token: "••••••••••" },
+      { url: UPLOAD_URL, token: "●●●●●●●●●●" },
+      { url: UPLOAD_URL, token: "xxxxxxxxxx" },
+      { url: UPLOAD_URL, token: "XXXXXXXXXX" },
+      { url: UPLOAD_URL, token: "aaaaaaaaaa" },
+      { url: UPLOAD_URL, token: "k-test-****-key" },
+      { url: "https://routine.example/****", token: UPLOAD_KEY },
+      { url: "https://routine.example/••••", token: UPLOAD_KEY },
+    ];
+    for (const args of masked) {
+      const refused = await call(wired, "save_alert_routine", args);
+      expect(refused.isError, JSON.stringify(args)).toBe(true);
+      expect(refused.text).toBe(ROUTINE_NEEDED);
+    }
+    const { link } = await issueLink(wired);
+    for (const body of masked) expect((await upload(wired, link, JSON.stringify(body))).status, JSON.stringify(body)).toBe(400);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
+    await drain(wired);
+    expect(posts).toEqual([]);
+  });
+
+  it("refuses a key that holds the door code, or is the door-code key in base64url, on both paths", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    // A door-code key whose base64 and base64url spellings differ.
+    const pinKey = Buffer.alloc(32, 0xfb);
+    const asBase64 = pinKey.toString("base64");
+    const asBase64Url = pinKey.toString("base64url");
+    expect(asBase64Url).not.toBe(asBase64);
+    const withKey = (name: string, args: Record<string, unknown> = {}) => wired.tool(PATH, CLEANER_TOKEN, name, args, { pinKey: asBase64 });
+    await withKey("get_state", { said: "2" });
+    expect((await withKey("save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE })).isError).toBe(false);
+    expect((await withKey("save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
+    expect((await withKey("save_calendar_link", { google: true })).isError).toBe(false);
+    const code = await withKey("save_door_code", { code: DOOR_CODE });
+    expect(code.isError, code.text).toBe(false);
+    const holding = `k-test-${DOOR_CODE}-key`;
+    for (const token of [holding, asBase64, asBase64Url]) {
+      const refused = await withKey("save_alert_routine", { url: UPLOAD_URL, token });
+      expect(refused.isError, token).toBe(true);
+      expect(refused.raw).not.toContain(DOOR_CODE);
+    }
+    const issued = await withKey("save_alert_routine", {});
+    expect(issued.isError, issued.text).toBe(false);
+    const link = String(issued.structured?.uploadUrl);
+    for (const token of [holding, asBase64, asBase64Url]) {
+      const refused = await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token }));
+      expect(refused.status, token).toBe(400);
+      expect(refused.raw).not.toContain(DOOR_CODE);
+    }
+    // After a restart the issuing key is gone from memory, and the saved code still catches base64url.
+    resetLiveDesks();
+    expect((await upload(wired, link, JSON.stringify({ url: UPLOAD_URL, token: asBase64Url }))).status).toBe(400);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+    await drain(wired);
+    expect(posts).toEqual([]);
+  });
+
+  it("refuses to make a link without the server's public address, even on Railway", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-upload-"));
+    try {
+      const desk = liveDeskFor(root, () => ({ ...deskEnv(), RAILWAY_PUBLIC_DOMAIN: "cleaner.example" }), () => new Date(FROZEN));
+      const saved: unknown[] = [];
+      const reply = await desk.saveAlertRoutine({}, (values) => saved.push(values), undefined);
+      expect(reply.ok).toBe(false);
+      expect(reply.ok ? "" : reply.error).toBe("I can't make an upload link until the server's public address is saved.");
+      expect(saved).toEqual([]);
+      expect(existsSync(join(root, "cleaner-live.json")) ? readFileSync(join(root, "cleaner-live.json"), "utf8") : "").not.toContain("alertUpload");
+    } finally {
+      resetLiveDesks();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

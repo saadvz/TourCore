@@ -13,7 +13,6 @@ import { formatWhen, zonedInstant } from "./calendar";
 import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
-import { resolveHostedPublicUrl } from "../install/hostedRuntime";
 import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -393,6 +392,14 @@ function calendarSlug(name: string, used: Set<string>): string {
   }
 }
 
+/** Characters a secure card shows in place of a value it hides. */
+const MASK_MARK = /[*\u2022\u25cf\u00b7]/;
+
+/** True when a key is a masked placeholder: mask characters, or one character repeated. */
+function maskedValue(token: string): boolean {
+  return MASK_MARK.test(token) || /^(.)\1*$/su.test(token) || /^[xX]+$/.test(token);
+}
+
 function uploadHash(code: string): string {
   return createHash("sha256").update(code).digest("hex");
 }
@@ -547,25 +554,33 @@ export class LiveDesk {
     return this.reply({ next: ROUTINE_SAVED });
   }
 
-  /** True when the address isn't a safe https one, the key is short, or the key is a door-code key. */
+  /**
+   * True when the address isn't a safe https one, either value is a masked placeholder, the key is
+   * short, or the key holds the door code or is a door-code key.
+   */
   private routineRefused(url: string, token: string, pinKey: Buffer | undefined): boolean {
-    if (!calendarUrlAllowed(url) || token.length < 8) return true;
-    if (pinKey && token === pinKey.toString("base64")) return true;
-    if (this.isServerKey(token)) return true;
+    if (!calendarUrlAllowed(url) || MASK_MARK.test(url)) return true;
+    if (token.length < 8 || maskedValue(token)) return true;
+    if (pinKey && (token === pinKey.toString("base64") || token === pinKey.toString("base64url"))) return true;
+    if (this.isServerKey(token) || this.leaks(token)) return true;
     return this.opensSavedCode(token);
   }
 
-  /** True when `token`, read as a key, opens the sealed door code. */
+  /** True when `token`, read as a base64 or base64url key, opens the sealed door code. */
   private opensSavedCode(token: string): boolean {
-    if (!this.file.pinSeal) return false;
-    const key = Buffer.from(token, "base64");
-    if (key.length !== 32) return false;
-    try {
-      openPin(this.file.pinSeal, key);
-      return true;
-    } catch {
-      return false;
+    const seal = this.file.pinSeal;
+    if (!seal) return false;
+    for (const encoding of ["base64", "base64url"] as const) {
+      const key = Buffer.from(token, encoding);
+      if (key.length !== 32) continue;
+      try {
+        openPin(seal, key);
+        return true;
+      } catch {
+        // Not this key.
+      }
     }
+    return false;
   }
 
   /** Saves the routine through the secret store, ends any upload link, and queues the test wake-up. */
@@ -585,7 +600,7 @@ export class LiveDesk {
    * expiry are kept, and a new link replaces the last one.
    */
   private issueUpload(pinKey: Buffer | undefined): ToolReply {
-    const base = publicBaseUrl(this.env()) ?? resolveHostedPublicUrl(this.env()).url;
+    const base = publicBaseUrl(this.env());
     if (!base) return this.fail(UPLOAD_LINK_OFF);
     const origin = new URL(base).origin;
     for (let attempt = 0; attempt < 8; attempt++) {

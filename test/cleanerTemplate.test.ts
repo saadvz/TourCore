@@ -120,6 +120,10 @@ describe("Cleaner Core template manifest", () => {
     for (const prompt of m.suggestedPrompts) expect(profile).toContain(`- ${prompt}`);
     expect(profile).toMatch(/one question at a time/i);
     expect(profile).toMatch(/secure card/);
+    expect(profile).toMatch(/only\s+the\s+calendar\s+the\s+host\s+named\s+for\s+bookings/);
+    expect(profile).toMatch(/use\s+your\s+secure\s+card\s+for\s+the\s+door\s+code/i);
+    expect(profile).toMatch(/only\s+to\s+the\s+one-time\s+upload\s+link,\s+from\s+your\s+own\s+computer/);
+    expect(profile).not.toMatch(/webhook\s+addresses, or door codes\. Use your secure card\./);
   });
 
   it("leaves the Tour Core template alone", () => {
