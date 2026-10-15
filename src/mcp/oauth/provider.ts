@@ -30,6 +30,8 @@ import { hashSecret, newSecret, type OAuthGrantStore } from "./store";
  */
 
 export const OPERATOR_SCOPE = "tourcore.operator";
+/** Cleaner Core's own scope. Its grants open only /mcp/cleaner-core. */
+export const CLEANER_SCOPE = "cleanercore.operator";
 export const ACCESS_TOKEN_SECONDS = 60 * 60;
 export const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
 export const APPROVAL_MAX_SECONDS = 90 * 24 * 60 * 60;
@@ -51,13 +53,35 @@ export function endpointsFor(publicBaseUrl: string, mcpPath: string): OAuthEndpo
   return { issuer: origin, resource: `${origin}${mcpPath}`, resourceMetadataUrl: `${origin}/.well-known/oauth-protected-resource${mcpPath}` };
 }
 
-/** Accepts the canonical URI (case-insensitive scheme/host, optional trailing slash) or the bare origin. */
-function sameResource(given: string | URL, ep: OAuthEndpoints): boolean {
+export type ResourceLabel = "Tour Core" | "Cleaner Core";
+
+/** One protected MCP resource on this authorization server, with its own scope. */
+export interface OAuthResource {
+  path: string;
+  scope: string;
+  label: ResourceLabel;
+  /** Unset means always on. Off means no metadata, no approvals and no tokens for it. */
+  enabled?: () => boolean;
+}
+
+/** The endpoints of one active resource. */
+export interface ResourceEndpoints extends OAuthEndpoints {
+  path: string;
+  scope: string;
+  label: ResourceLabel;
+}
+
+/**
+ * Accepts the canonical URI (case-insensitive scheme/host, optional trailing
+ * slash). The bare origin also names the default resource (Tour Core's /mcp),
+ * never another one.
+ */
+function sameResource(given: string | URL, ep: OAuthEndpoints, isDefault: boolean): boolean {
   try {
     const url = new URL(given.toString());
     if (url.hash || url.search) return false;
     const normalized = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-    return normalized === ep.resource || normalized === ep.issuer;
+    return normalized === ep.resource || (isDefault && normalized === ep.issuer);
   } catch {
     return false;
   }
@@ -71,6 +95,8 @@ export interface ApprovalRequestView {
   redirectHost: string;
   createdAt: number;
   expiresAt: number;
+  /** Which resource the client asked for. */
+  label: ResourceLabel;
 }
 
 interface ApprovalRequest extends ApprovalRequestView {
@@ -80,6 +106,7 @@ interface ApprovalRequest extends ApprovalRequestView {
   scopes: string[];
   issuer: string;
   resource: string;
+  resourcePath: string;
   status: "pending" | "approved" | "denied";
 }
 
@@ -98,17 +125,18 @@ interface CodeEntry {
 
 export interface ProviderOptions {
   store: OAuthGrantStore;
-  endpoints: () => OAuthEndpoints | undefined;
+  /** One per active resource; the first is the default (Tour Core's /mcp). Undefined without a public address. */
+  endpoints: () => ResourceEndpoints[] | undefined;
   redirectPolicy: () => RedirectPolicy;
   now?: () => number;
   /** Fetches a Client ID Metadata Document. Tests replace the network here. */
   fetchClientMetadata?: (clientId: string) => Promise<unknown>;
   /** A new approval is waiting. */
   onApprovalRequest?: (request: ApprovalRequestView) => void;
-  /** HOSTED_RAILWAY_P0 refuses a second operator client. Other modes allow everyone through. */
-  tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
-  /** Called once when the owner approves. Used to bind the demo tenant. */
-  onOwnerApproved?: (clientId: string) => void;
+  /** HOSTED_RAILWAY_P0 refuses a second operator client, per resource. Other modes allow everyone through. */
+  tenantPolicy?: (clientId: string, resourcePath: string) => { allowed: true } | { allowed: false; message: string };
+  /** Called once when the owner approves. Used to bind that resource's hosted owner. */
+  onOwnerApproved?: (clientId: string, resourcePath: string) => void;
   /** Where the human clicks Allow. */
   approvalPlace?: () => "computer" | "hosted";
   /**
@@ -116,9 +144,9 @@ export interface ProviderOptions {
    * client when the demo is unclaimed, or when this client is already the owner.
    * Unrelated clients are refused. Other deployment modes leave this unset.
    */
-  publicApproval?: (clientId: string) => boolean;
-  /** True after the first hosted Allow has bound an owner client. */
-  hostedClaimed?: () => boolean;
+  publicApproval?: (clientId: string, resourcePath: string) => boolean;
+  /** True after the first hosted Allow has bound an owner client for that resource. */
+  hostedClaimed?: (resourcePath: string) => boolean;
   log?: (line: string) => void;
 }
 
@@ -163,6 +191,27 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     this.log = options.log ?? (() => {});
   }
 
+  /** The default resource's endpoints (Tour Core's /mcp). Its issuer is every resource's issuer. */
+  private defaultEndpoints(): ResourceEndpoints | undefined {
+    return this.options.endpoints()?.[0];
+  }
+
+  /**
+   * Which active resource a request names. No resource: the one whose scope
+   * was asked for, else the default. The bare origin is the default only.
+   * Undefined when it names nothing this server protects.
+   */
+  private resourceFor(given: string | URL | undefined, scopes: string[] = []): ResourceEndpoints | undefined {
+    const all = this.options.endpoints() ?? [];
+    if (given === undefined) return all.find((ep) => scopes.includes(ep.scope)) ?? all[0];
+    return all.find((ep, i) => sameResource(given, ep, i === 0));
+  }
+
+  /** The active resource a code or grant was issued for, matched exactly. */
+  private resourceOf(issuer: string, resource: string): ResourceEndpoints | undefined {
+    return this.options.endpoints()?.find((ep) => ep.issuer === issuer && ep.resource === resource);
+  }
+
   get clientsStore(): OAuthRegisteredClientsStore {
     return {
       getClient: (clientId) => this.getClient(clientId),
@@ -173,7 +222,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
   private async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
     if (typeof clientId !== "string" || !clientId || clientId.length > 2000) return undefined;
     if (isMetadataDocumentClientId(clientId)) return this.metadataDocumentClient(clientId);
-    const ep = this.options.endpoints();
+    const ep = this.defaultEndpoints();
     const stored = this.options.store.getClient(clientId);
     // Registrations belong to one authorization server: a new tunnel address means registering again.
     if (!stored || !ep || stored.issuer !== ep.issuer) return undefined;
@@ -197,7 +246,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
 
   /** Called by the SDK's registration handler after Tour Core's metadata checks. The secret is stored hashed and returned once. */
   private async registerClient(client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> {
-    const ep = this.options.endpoints();
+    const ep = this.defaultEndpoints();
     if (!ep) throw new ServerError("Tour Core's public address isn't set.");
     const secret = client.client_secret;
     this.options.store.putClient({
@@ -221,8 +270,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
   // ---- Authorization: an approval request the owner answers on the Tour Core computer ----
 
   async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
-    const ep = this.options.endpoints();
-    if (!ep) throw new TemporarilyUnavailableError("Tour Core's public address isn't set.");
+    if (!this.defaultEndpoints()) throw new TemporarilyUnavailableError("Tour Core's public address isn't set.");
     // Registered redirect URIs are re-checked here too, in case the allowed hosts changed since registration.
     const redirectProblem = checkRedirectUri(params.redirectUri, this.options.redirectPolicy());
     if (redirectProblem) {
@@ -233,11 +281,13 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     }
     // The SDK requires S256 but accepts any string; a real S256 challenge is 43 base64url characters.
     if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge)) throw new InvalidRequestError("code_challenge must be an S256 challenge.");
-    if (params.resource && !sameResource(params.resource, ep)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
-    const tenant = this.options.tenantPolicy?.(client.client_id);
+    const ep = this.resourceFor(params.resource, params.scopes);
+    if (!ep) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    const tenant = this.options.tenantPolicy?.(client.client_id, ep.path);
     if (tenant && !tenant.allowed) {
-      this.log("Refused a connection from a second account. This hosted demo is single-tenant.");
-      res.status(403).set(PAGE_HEADERS).type("html").send(problemPage("This Tour Core demo is already in use", tenant.message));
+      const cleaner = ep.label === "Cleaner Core";
+      this.log(cleaner ? "Refused a Cleaner Core connection from a second Grok Bot. This hosted Cleaner Core has one owner." : "Refused a connection from a second account. This hosted demo is single-tenant.");
+      res.status(403).set(PAGE_HEADERS).type("html").send(problemPage(cleaner ? "This Cleaner Core is already in use" : "This Tour Core demo is already in use", tenant.message));
       return;
     }
     this.prune();
@@ -254,16 +304,18 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       redirectUri: params.redirectUri,
       state: params.state,
       codeChallenge: params.codeChallenge,
-      // One scope today. Other requested scopes are ignored, never granted (RFC 6749 §3.3); the token response says what was granted.
-      scopes: [OPERATOR_SCOPE],
+      // One scope per resource. Other requested scopes are ignored, never granted (RFC 6749 §3.3); the token response says what was granted.
+      scopes: [ep.scope],
       issuer: ep.issuer,
       resource: ep.resource,
+      resourcePath: ep.path,
+      label: ep.label,
       createdAt: t,
       expiresAt: t + REQUEST_SECONDS * 1000,
       status: "pending",
     };
     this.requests.set(request.id, request);
-    this.log(`Authorization request from ${request.clientName}: will return to ${redirectForLog(request.redirectUri)}.`);
+    this.log(`Authorization request from ${request.clientName}${ep.label === "Tour Core" ? "" : ` for ${ep.label}`}: will return to ${redirectForLog(request.redirectUri)}.`);
     this.options.onApprovalRequest?.(this.view(request));
     const hosted = this.options.approvalPlace?.() === "hosted";
     res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({
@@ -272,7 +324,8 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       clientName: request.clientName,
       redirectHost: request.redirectHost,
       hosted,
-      firstClaim: hosted && !(this.options.hostedClaimed?.() ?? false),
+      firstClaim: hosted && !(this.options.hostedClaimed?.(ep.path) ?? false),
+      label: ep.label,
     }));
   }
 
@@ -284,7 +337,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     this.prune();
     const request = this.requests.get(id);
     if (!request || request.status !== "pending") return false;
-    if (!this.options.publicApproval?.(request.clientId)) return false;
+    if (!this.options.publicApproval?.(request.clientId, request.resourcePath)) return false;
     if (!codesMatch(matchCodeGiven, request.matchCode)) return false;
     return this.decide(id, "approved");
   }
@@ -301,7 +354,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
   }
 
   private view(r: ApprovalRequest): ApprovalRequestView {
-    return { id: r.id, matchCode: r.matchCode, clientName: r.clientName, clientId: r.clientId, redirectHost: r.redirectHost, createdAt: r.createdAt, expiresAt: r.expiresAt };
+    return { id: r.id, matchCode: r.matchCode, clientName: r.clientName, clientId: r.clientId, redirectHost: r.redirectHost, createdAt: r.createdAt, expiresAt: r.expiresAt, label: r.label };
   }
 
   private prune(): void {
@@ -322,8 +375,8 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const r = this.requests.get(id);
     if (!r || r.status !== "pending") return false;
     r.status = decision;
-    if (decision === "approved") this.options.onOwnerApproved?.(r.clientId);
-    this.log(decision === "approved" ? `Approved ${r.clientName}'s access to Tour Core.` : `Denied ${r.clientName}'s request to connect to Tour Core.`);
+    if (decision === "approved") this.options.onOwnerApproved?.(r.clientId, r.resourcePath);
+    this.log(decision === "approved" ? `Approved ${r.clientName}'s access to ${r.label}.` : `Denied ${r.clientName}'s request to connect to ${r.label}.`);
     return true;
   }
 
@@ -399,10 +452,10 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     // The SDK has already checked the PKCE verifier against challengeForAuthorizationCode.
     const entry = this.liveCode(client, authorizationCode);
     entry.used = true;
-    const ep = this.options.endpoints();
+    const ep = this.resourceOf(entry.issuer, entry.resource);
     if (redirectUri !== undefined && redirectUri !== entry.redirectUri) throw new InvalidGrantError("redirect_uri doesn't match the authorization request.");
-    if (!ep || ep.issuer !== entry.issuer || ep.resource !== entry.resource) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
-    if (resource && !sameResource(resource, ep)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    if (!ep) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
+    if (resource && !sameResource(resource, ep, ep === this.defaultEndpoints())) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
     const t = this.now();
     const access = newSecret("tca_");
     const refresh = client.grant_types?.includes("refresh_token") ? newSecret("tcr_") : undefined;
@@ -438,9 +491,9 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       this.options.store.revokeGrant(grant.id);
       throw new InvalidGrantError("The refresh token has expired; connect again.");
     }
-    const ep = this.options.endpoints();
-    if (!ep || ep.issuer !== grant.issuer || ep.resource !== grant.resource) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
-    if (resource && !sameResource(resource, ep)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    const ep = this.resourceOf(grant.issuer, grant.resource);
+    if (!ep) throw new InvalidGrantError("Tour Core's public address changed; connect again.");
+    if (resource && !sameResource(resource, ep, ep === this.defaultEndpoints())) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
     if (scopes?.length && scopes.some((s) => !grant.scopes.includes(s))) throw new InvalidScopeError("A refresh can't add scopes.");
     const access = newSecret("tca_");
     const refresh = newSecret("tcr_");
@@ -458,12 +511,17 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     return { access_token: access, token_type: "Bearer", expires_in: expiresIn, scope: scopes.join(" "), ...(refresh ? { refresh_token: refresh } : {}) };
   }
 
-  /** Every /mcp request. Unknown, revoked, expired or wrong-audience tokens are all "invalid_token" (401). */
-  async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const ep = this.options.endpoints();
+  /**
+   * Every protected request. The grant must be for exactly this resource, so
+   * a Tour Core token never opens Cleaner Core and the other way round. Unknown, revoked, expired or wrong-audience tokens are
+   * all "invalid_token" (401). Without `expected` this is Tour Core's /mcp.
+   */
+  async verifyAccessToken(token: string, expected?: ResourceEndpoints): Promise<AuthInfo> {
+    const ep = expected ?? this.defaultEndpoints();
     if (!ep) throw new InvalidTokenError("Tour Core's public address isn't set.");
     const grant = this.options.store.findByAccessHash(hashSecret(token));
     if (!grant) throw new InvalidTokenError("The access token isn't valid.");
+    // The scope is checked by the gate (requiredScopes): a right-resource grant without it gets 403 insufficient_scope.
     if (grant.issuer !== ep.issuer || grant.resource !== ep.resource) throw new InvalidTokenError("The access token was issued for a different Tour Core address.");
     if (grant.accessExpiresAt <= this.now()) throw new InvalidTokenError("The access token has expired.");
     return { token, clientId: grant.clientId, scopes: grant.scopes, expiresAt: Math.floor(grant.accessExpiresAt / 1000), resource: new URL(grant.resource) };

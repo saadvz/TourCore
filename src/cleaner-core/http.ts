@@ -8,9 +8,14 @@ import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioSta
 
 export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
 
+/** The response was already written (an OAuth 401/403/503). The caller sends nothing more. */
+export const ANSWERED = { answered: true } as const;
+
 /**
  * Cleaning scheduler chat. Its own credential. It lists none of the touring tools.
- * Off unless cleaning texts are turned on and a credential is set.
+ * Off unless cleaning texts are turned on and a credential is set: the fixed
+ * CLEANER_CORE_MCP_TOKEN, or OAuth with a grant for this path and the
+ * cleanercore.operator scope. A Tour Core grant never opens it.
  */
 export async function handleCleanerMcpHttp(input: {
   method: string;
@@ -24,19 +29,30 @@ export async function handleCleanerMcpHttp(input: {
   now: () => Date;
   /** Writes to the secret store. Only `save_alert_routine` uses it. */
   saveSecrets: SaveSecrets;
-}): Promise<{ status: number; body: string; headers?: Record<string, string> }> {
+  /**
+   * OAuth for /mcp/cleaner-core. True when the bearer is a live cleaner grant;
+   * false after it has answered the request itself.
+   */
+  oauth?: { authenticate(): Promise<boolean> };
+}): Promise<{ status: number; body: string; headers?: Record<string, string> } | typeof ANSWERED> {
   const env = input.env();
   if (!cleanerCoreEnabled(env)) {
     return { status: 503, body: JSON.stringify({ error: { message: "Cleaning texts aren't turned on." } }) };
   }
   const token = env.CLEANER_CORE_MCP_TOKEN?.trim();
-  if (!token) return { status: 503, body: JSON.stringify({ error: { message: "The cleaning scheduler chat is off." } }) };
-  if (!authorized(input.authorization, token)) {
-    return {
-      status: 401,
-      body: JSON.stringify({ error: { message: "Missing or wrong cleaning scheduler credential." } }),
-      headers: { "WWW-Authenticate": 'Bearer realm="cleaning"' },
-    };
+  // The fixed token is checked first. Anything else goes to OAuth when it is on.
+  if (!(token && authorized(input.authorization, token))) {
+    if (input.oauth) {
+      if (!(await input.oauth.authenticate())) return ANSWERED;
+    } else if (!token) {
+      return { status: 503, body: JSON.stringify({ error: { message: "The cleaning scheduler chat is off." } }) };
+    } else {
+      return {
+        status: 401,
+        body: JSON.stringify({ error: { message: "Missing or wrong cleaning scheduler credential." } }),
+        headers: { "WWW-Authenticate": 'Bearer realm="cleaning"' },
+      };
+    }
   }
   if (input.method !== "POST") {
     return { status: 405, body: JSON.stringify({ error: { message: "Send requests with POST." } }), headers: { Allow: "POST" } };
