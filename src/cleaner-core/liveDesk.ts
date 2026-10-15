@@ -204,6 +204,7 @@ export class LiveDesk {
   private engine: CleanerCore | undefined;
   private checking = false;
   private queue: Promise<void> = Promise.resolve();
+  private inFlight = 0;
   private held = false;
   private readonly path: string;
   private readonly alerts: OperatorEventOutbox;
@@ -273,7 +274,10 @@ export class LiveDesk {
     const shown = new Set(this.file.alertsShown ?? []);
     const fresh = this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id));
     if (fresh.length === 0) return;
-    this.alerts.enqueue(cleaningUpdateEvent(this.now()));
+    // One waiting wake-up is enough: check_now returns every note that is new by then. Without a
+    // routine saved, a wake-up per note would arrive later as a backlog of identical wake-ups.
+    const waiting = this.alerts.records().some((record) => record.event.eventType === "cleaning.update" && record.status === "pending");
+    if (!waiting) this.alerts.enqueue(cleaningUpdateEvent(this.now()));
     this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
     this.persist();
     this.startDrain();
@@ -386,12 +390,29 @@ export class LiveDesk {
     });
   }
 
-  /** Runs `work` after every earlier serial job has settled, so two checks never overlap. */
+  /**
+   * Runs `work` after every earlier serial job has settled, so a check never overlaps a text or a
+   * tool step that is still sending. Work already inside the queue calls the inner steps, never a
+   * serial entry point, or it would wait on itself. With nothing in flight, `work` starts at once.
+   */
   private serial<T>(work: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(work, work);
+    const now = (): Promise<T> => {
+      try {
+        return work();
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    };
+    const idle = this.inFlight === 0;
+    this.inFlight += 1;
+    const run = idle ? now() : this.queue.then(now, now);
     this.queue = run.then(
-      () => undefined,
-      () => undefined,
+      () => {
+        this.inFlight -= 1;
+      },
+      () => {
+        this.inFlight -= 1;
+      },
     );
     return run;
   }
@@ -543,7 +564,11 @@ export class LiveDesk {
     return this.reply({ turns: this.turns(), ...(this.held ? { held: true } : {}) });
   }
 
-  async confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+  confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+    return this.serial(() => this.confirmTimesNow(input));
+  }
+
+  private async confirmTimesNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
     this.resume();
     if (!this.file.checked || !this.engine || !this.file.host) return this.fail("Run the checks first.");
     const checkout = input.checkout?.trim() ?? "";
@@ -589,7 +614,11 @@ export class LiveDesk {
     });
   }
 
-  async markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+  markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    return this.serial(() => this.markGuestsLeftNow(input, pinKey));
+  }
+
+  private async markGuestsLeftNow(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
     if (!this.file.host || !this.file.checked) return this.fail("Run the checks first.");
     const said = input.said?.trim() ?? "";
     const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
@@ -627,7 +656,11 @@ export class LiveDesk {
     return this.reply({ next: PIN_FAILED });
   }
 
-  async resumeCleaning(): Promise<ToolReply> {
+  resumeCleaning(): Promise<ToolReply> {
+    return this.serial(() => this.resumeCleaningNow());
+  }
+
+  private async resumeCleaningNow(): Promise<ToolReply> {
     this.resume();
     if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
     await this.engine.resumeJob();
@@ -636,7 +669,11 @@ export class LiveDesk {
     return this.reply({ next: resumeNote(this.file.address) });
   }
 
-  resetScratch(): ToolReply {
+  resetScratch(): Promise<ToolReply> {
+    return this.serial(async () => this.resetScratchNow());
+  }
+
+  private resetScratchNow(): ToolReply {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     this.engine = undefined;
@@ -678,16 +715,25 @@ export class LiveDesk {
     });
   }
 
-  async sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
+  sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
+    return this.serial(() => this.sendTestTextNow(input));
+  }
+
+  private async sendTestTextNow(input: { from?: string; text?: string }): Promise<ToolReply> {
     const guard = this.scratchGuard(input.from ?? "");
     if (guard) return this.fail(guard);
     const text = input.text?.trim() ?? "";
     if (!text) return this.fail(SCRATCH_TEXT_NEEDED);
-    await this.inbound({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
+    // Already inside the serial queue, so this calls the inner step, not `inbound`.
+    await this.inboundSerial({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
     return this.reply({ next: SCRATCH_TEST_WENT_THROUGH });
   }
 
-  async reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
+  reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
+    return this.serial(() => this.reportDeliveryNow(input));
+  }
+
+  private async reportDeliveryNow(input: { which?: string; status?: string }): Promise<ToolReply> {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     const status = input.status?.trim().toLowerCase() ?? "";
@@ -709,10 +755,12 @@ export class LiveDesk {
   }
 
   /** Records a Twilio delivery status. Does not unseal the door code. A failure tells the host once. */
-  async notePinDelivery(input: { sid: string; status: string }): Promise<void> {
-    const before = this.visibleNoteIds();
-    await this.pinDeliveryNow(input);
-    this.queueNewAlerts(before);
+  notePinDelivery(input: { sid: string; status: string }): Promise<void> {
+    return this.serial(async () => {
+      const before = this.visibleNoteIds();
+      await this.pinDeliveryNow(input);
+      this.queueNewAlerts(before);
+    });
   }
 
   private async pinDeliveryNow(input: { sid: string; status: string }): Promise<void> {
@@ -725,7 +773,12 @@ export class LiveDesk {
   }
 
   /** A text from the host, the cleaner, or the group. Grok does not see it, so a new host note wakes the routine. */
-  async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+    return this.serial(() => this.inboundSerial(input));
+  }
+
+  /** The body of `inbound`, for a caller already inside the serial queue. */
+  private async inboundSerial(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const before = this.visibleNoteIds();
     const result = await this.inboundNow(input);
     this.queueNewAlerts(before);

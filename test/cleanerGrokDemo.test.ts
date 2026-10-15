@@ -25,6 +25,7 @@ import {
   CLEANER_TOKEN,
   DOOR_CODE,
   FROZEN,
+  fakeSms,
   HOST,
   OBSERVER,
   startWiredApp,
@@ -1139,6 +1140,53 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     expect(turnsOf(empty).every((turn) => turn.status === "canceled")).toBe(true);
   });
 
+  it("a check that runs while the door code is sending opens no review", async () => {
+    const wired = await app();
+    await confirmedJob(wired, TODAY_STAY);
+    const slow = fakeSms();
+    let sending: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      sending = resolve;
+    });
+    setCleanerTwilioClient({
+      ...slow,
+      async sendSms(input) {
+        sending();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return slow.sendSms(input);
+      },
+    });
+    const left = call(wired, "mark_guests_left", { said: "guests have left" });
+    // The check starts while the door-code text is still on its way.
+    await started;
+    const checked = call(wired, "check_now", { googleEvents: withNext(TODAY_STAY) });
+    const [leftReply, checkReply] = await Promise.all([left, checked]);
+    expect(leftReply.isError).toBe(false);
+    expect(leftReply.text).toContain(PIN_SENT);
+    expect(checkReply.isError).toBe(false);
+    const desk = liveDeskFor(wired.root, wired.env, () => new Date(FROZEN)) as unknown as { engine: CleanerCore };
+    expect(desk.engine.reviews().map((item) => item.kind)).not.toContain("uncertain-sms");
+    const notes = ((await call(wired, "get_state")).structured?.notes as string[] | undefined) ?? [];
+    for (const line of [...alertsOf(checkReply), ...notes]) expect(line).not.toMatch(/may not have gone out|didn't go out/);
+    expect(slow.sent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.to)).toEqual([CLEANER]);
+  });
+
+  it("queues one wake while an earlier one is still waiting", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    await readyForYes(wired);
+    await yes(wired, "SM-backlog-yes-1");
+    await yes(wired, "SM-backlog-yes-2");
+    expect(cleaningUpdates(wired).map((record) => record.status)).toEqual(["pending"]);
+    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    await cleanerSays(wired, "DONE", "SM-backlog-done");
+    expect(cleaningUpdates(wired).map((record) => record.status)).toEqual(["pending"]);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
+    await drain(wired);
+    expect(posts.map((post) => JSON.parse(post.body).eventType).filter((type) => type === "cleaning.update")).toHaveLength(1);
+    const checked = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    expect(alertsOf(checked)).toEqual(expect.arrayContaining([YES_NOTE, `The cleaner marked the cleaning at ${ADDRESS} done.`]));
+  });
 });
 
 const LANE = SCRATCH_TENANTS[0];

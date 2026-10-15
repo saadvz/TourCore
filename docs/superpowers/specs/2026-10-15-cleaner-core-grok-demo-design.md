@@ -70,7 +70,7 @@ The routine instructions live in `grok-template/routines/`. The tool description
 
 1. **`check_now`.** This is the main new tool. Input: an optional `googleEvents` object in the Google Calendar API `events.list` shape (`timeZone`, `items`), passed through as Grok received it. The tool does these steps in order:
    - Re-reads the saved Guesty Lite link with `readPublicCalendar`, when one is saved.
-   - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, behind a thin `googleCalendarSource` wrapper). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed.
+   - Applies the Google events through the existing Google reader (`readGoogleCalendarFixture`, behind a thin `googleCalendarSource` wrapper). The server stamps the tenant id. Grok does not choose it. Each call is a full snapshot, so a stay missing from the list is removed. A job is kept when its cleaning started or finished, its door code was sent, or its checkout day has passed. Those stays only left the read window.
    - Merges the sources through the existing `readSource` path. A stay in both calendars is one job.
    - Runs `runReminders()`.
    - Returns the host alerts added since the last `check_now`, and marks them shown.
@@ -94,19 +94,28 @@ No new flag. Everything sits behind `CLEANER_CORE_ENABLED`. The Scratch tools st
 
 Property: 12 Scratch Lane. Host `+15555550100`. Cleaner `+15555550101`. The Google calendar is one Saad owns for the demo. The door code is made up.
 
+**Before the first booking**
+- Enter each stay in Google as a timed event, from the check-in time to the checkout time. An all-day Google event ends on the day after its last day, so the checkout would read a day late.
+- The Check routine reads Google from 7 days ago to 60 days ahead. A stay that ends today stays in the read.
+- Create the Check routine and the Alerts routine, and save the alert routine, before Grok asks for the times. `get_state` asks for the routines right after the checks.
+
 **Happy turnover**
 1. Grok setup. Grok confirms the group chat.
-2. Saad adds a stay in Google that checks out today and says "check my calendars." Grok reports the new booking and asks for the checkout and check-in times.
-3. Saad answers. The cleaner's offer goes out, and Grok shows its wording.
-4. Saad sends the cleaner's YES with `send_test_text`. Grok shows the host alert.
-5. The reminder goes out on the next check. The default trigger is 8 AM on the cleaning day. To verify: whether `triggerDue` sends a trigger that is already past due. If it does not, add the smallest fix.
+2. Saad adds a stay in Google that checks out today and says "check my calendars." Grok reports the new booking and asks for the checkout and check-in times. A next stay is optional. With no next stay, only the checkout time is saved.
+3. Saad answers. With group chat on, the cleaner first gets the invite to the cleaning group.
+4. The cleaner replies YES twice. The first YES accepts the invite, and the offer goes out. The second YES takes the offer. In the rehearsal, Saad sends each YES with `send_test_text`. Grok shows the host alert.
+5. The reminder goes out on the first check at or after 8 AM on the cleaning day.
 6. "Guests have left." The private door code goes to the cleaner. The cleaner sends DONE, and the host gets the ready note.
 
 **Booking changes**
-1. After the YES, Saad moves the stay in Google and checks. The cleaner and the host get the new time.
-2. Saad deletes the stay and checks. The job is called off.
 
-The exact texts come from the existing engine. The rehearsal records them.
+These run on the same property after the first job is done. Nothing is reset.
+1. Saad adds a later stay in Google and checks. Grok reports the new booking and asks for the times. The finished job stays done.
+2. Saad answers. The cleaner already joined, so the offer goes out at once. The cleaner replies YES once.
+3. Saad moves the later stay in Google and checks. Grok asks for the times again. Saad answers, and the cleaner gets the new time.
+4. Saad deletes the later stay and checks. The cleaner gets one text that the job is called off. Nothing goes out about the finished job.
+
+The exact texts come from the existing engine. The rehearsal records them. `reset_scratch` is only for starting the rehearsal over.
 
 ## Real-phone run
 
@@ -114,7 +123,11 @@ This runs after the Scratch rehearsal passes. Before it:
 
 - Run the verify-cleanercore preflight: the Railway connector, the Twilio inbound webhook, and the carrier STOP block.
 - Put both phones on the texting allowlist.
-- Connect the Cleaner Core Alerts routine.
+- Create the Check routine and the Alerts routine, and save the alert routine, before Grok asks for the times.
+- Enter each stay in Google as a timed event, from check-in to checkout. A next stay is optional.
+- The Check routine reads Google from 7 days ago to 60 days ahead.
+
+The run follows the demo script on one property. In group mode, the cleaner's phone replies YES twice for the first job: once to the invite, then once to the offer. The booking changes run after the first job is done, on a later stay, with no reset.
 
 Saad runs the demo. Each live text to a real person waits for Saad's okay. No agent sends one.
 
