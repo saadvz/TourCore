@@ -1,14 +1,17 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
+import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { zonedInstant } from "../src/cleaner-core/calendar";
 import { privateCodeLine } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
-import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, OBSERVER, startWiredApp, TEST_PIN_KEY, type SentSms, type WiredApp } from "./wiringProof";
 
 const PATH = "/mcp/cleaner-core";
@@ -18,6 +21,7 @@ afterEach(async () => {
   setCleanerTwilioClient(undefined);
   setCleanerGroupFetch(undefined);
   setCleanerCalendarFetch(undefined);
+  setCleanerAlertFetch(undefined);
   resetLiveDesks();
   while (open.length > 0) {
     const app = open.pop();
@@ -547,5 +551,159 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     expect(wired.cleanerSent.slice(sms).map(textKind)).toEqual(["cancel-update"]);
     expect(stub.posts).toHaveLength(posts);
     expect(turnsOf(removed).every((turn) => turn.status === "canceled")).toBe(true);
+  });
+});
+
+const ROUTINE_URL = "https://routine.example/hook";
+const ROUTINE_KEY = "k-test-123456";
+const CONNECTED = "Alerts are connected. I queued a test alert for the routine.";
+const YES_NOTE = `The cleaner said YES to the turnover at ${ADDRESS}.`;
+
+interface AlertPost {
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+/** A fake routine webhook. It records each POST and answers with the status the test picks. */
+function alertStub(status: () => number): AlertPost[] {
+  const posts: AlertPost[] = [];
+  setCleanerAlertFetch(async (url, init) => {
+    posts.push({ url, headers: init.headers, body: init.body });
+    return { status: status() };
+  });
+  return posts;
+}
+
+function drain(wired: WiredApp, now: () => Date = () => new Date(FROZEN)): Promise<void> {
+  return drainCleanerAlerts(wired.root, wired.env, now);
+}
+
+function cleaningUpdates(wired: WiredApp) {
+  const outbox = new OperatorEventOutbox(new FileRuntimeStore(join(wired.root, "cleaner-alerts")), () => new NoopOperatorNotificationSink());
+  return outbox.records().filter((record) => record.event.eventType === "cleaning.update");
+}
+
+function liveFile(wired: WiredApp): string {
+  const path = join(wired.root, "cleaner-live.json");
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+const WAKE_STAY = { id: "g1", start: "2026-10-10", end: "2026-10-15" };
+
+/** Google setup, one stay and the next, times confirmed. The cleaner has not answered yet. */
+async function readyForYes(wired: WiredApp) {
+  await setUpGoogle(wired);
+  expect((await call(wired, "run_checks", { googleEvents: withNext(WAKE_STAY) })).isError).toBe(false);
+  expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+}
+
+describe("Cleaner Core Grok demo: instant alerts", () => {
+  it("save_alert_routine stores without echoing", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    await call(wired, "get_state", { said: "2" });
+    const saved = await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY });
+    expect(saved.isError).toBe(false);
+    expect(saved.structured?.next).toBe(CONNECTED);
+    for (const secret of [ROUTINE_URL, ROUTINE_KEY]) {
+      expect(saved.raw).not.toContain(secret);
+      expect(liveFile(wired)).not.toContain(secret);
+    }
+    await drain(wired);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toBe(ROUTINE_URL);
+    expect(posts[0]?.headers.Authorization).toBe(`Bearer ${ROUTINE_KEY}`);
+    expect(JSON.parse(posts[0]?.body ?? "{}").eventType).toBe("installation.test");
+    const logs = wired.logs.join("\n");
+    expect(logs).not.toContain(ROUTINE_KEY);
+    expect(logs).not.toContain(ROUTINE_URL);
+  });
+
+  it("refuses a non-https routine", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    const refused = await call(wired, "save_alert_routine", { url: "http://x", key: ROUTINE_KEY });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("Send the routine's https address and its key.");
+    const short = await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: "short" });
+    expect(short.isError).toBe(true);
+    expect(short.text).toBe("Send the routine's https address and its key.");
+    await drain(wired);
+    expect(posts).toEqual([]);
+    expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
+  });
+
+  it("cleaner YES wakes the routine", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY })).isError).toBe(false);
+    await drain(wired);
+    expect(posts).toHaveLength(1);
+    await readyForYes(wired);
+    await drain(wired);
+    // Grok caused those steps and already heard the replies, so nothing wakes the routine for them.
+    expect(posts).toHaveLength(1);
+    await yes(wired, "SM-wake-yes-1");
+    await drain(wired);
+    // The opt-in YES leaves no host note, so the notes from Grok's own steps don't wake it either.
+    expect(posts).toHaveLength(1);
+    await yes(wired, "SM-wake-yes-2");
+    await drain(wired);
+    const wakes = posts.slice(1);
+    expect(wakes).toHaveLength(1);
+    const raw = wakes[0]?.body ?? "";
+    const body = JSON.parse(raw) as Record<string, unknown>;
+    expect(Object.keys(body)).toEqual(["schemaVersion", "eventId", "eventType", "occurredAt"]);
+    expect(body.eventType).toBe("cleaning.update");
+    expect(raw).not.toContain("+1");
+    expect(raw).not.toContain(DOOR_CODE);
+    const checked = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    expect(checked.isError).toBe(false);
+    const alerts = alertsOf(checked);
+    expect(alerts).toContain(YES_NOTE);
+    for (const line of alerts) expect(raw).not.toContain(line);
+    expect(liveFile(wired)).not.toContain(ROUTINE_KEY);
+  });
+
+  it("routine down keeps the event", async () => {
+    let now = new Date(FROZEN);
+    let status = 200;
+    const wired = await app({ now: () => now });
+    const posts = alertStub(() => status);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, key: ROUTINE_KEY })).isError).toBe(false);
+    await drain(wired, () => now);
+    expect(posts).toHaveLength(1);
+    status = 503;
+    await readyForYes(wired);
+    await yes(wired, "SM-down-yes-1");
+    await yes(wired, "SM-down-yes-2");
+    await drain(wired, () => now);
+    expect(posts.length).toBeGreaterThan(1);
+    const pending = cleaningUpdates(wired);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.status).toBe("pending");
+    const checked = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    expect(alertsOf(checked)).toContain(YES_NOTE);
+    status = 200;
+    const tried = posts.length;
+    now = new Date(now.getTime() + 60 * 60_000);
+    await drain(wired, () => now);
+    expect(posts).toHaveLength(tried + 1);
+    expect(JSON.parse(posts[tried]?.body ?? "{}").eventType).toBe("cleaning.update");
+    expect(cleaningUpdates(wired)[0]?.status).toBe("delivered");
+  });
+
+  it("no routine saved", async () => {
+    const wired = await app();
+    const posts = alertStub(() => 200);
+    await readyForYes(wired);
+    await yes(wired, "SM-none-yes-1");
+    await yes(wired, "SM-none-yes-2");
+    await expect(drain(wired)).resolves.toBeUndefined();
+    expect(posts).toEqual([]);
+    const queued = cleaningUpdates(wired);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.status).toBe("pending");
   });
 });

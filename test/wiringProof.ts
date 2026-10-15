@@ -70,6 +70,8 @@ export interface ToolResult {
 export interface WiredApp {
   port: number;
   root: string;
+  /** The server's merged environment, including values saved in the secret store. */
+  env: () => NodeJS.ProcessEnv;
   tourSent: SentSms[];
   cleanerSent: SentSms[];
   close: () => Promise<void>;
@@ -220,7 +222,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers, body: rawBody });
     return { status: res.status, raw: await res.text() };
   };
-  return { port, root, tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
+  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

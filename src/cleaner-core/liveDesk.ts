@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
+import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
+import { FileRuntimeStore } from "../storage/runtimeStore";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
-import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
+import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
@@ -51,6 +54,8 @@ const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
 export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
+const ROUTINE_NEEDED = "Send the routine's https address and its key.";
 
 interface PinSend {
   sid: string;
@@ -88,6 +93,8 @@ interface LiveFile {
   checked?: boolean;
   /** Ids of the host notes `check_now` has already returned, or that the host saw before it. */
   alertsShown?: string[];
+  /** Ids of the host notes that already woke the cleaning routine. */
+  alertsQueued?: string[];
   released?: boolean;
   cleanerOut?: boolean;
   seenInbound?: string[];
@@ -117,14 +124,32 @@ export function setCleanerCalendarFetch(fetchImpl: CalendarFetch | undefined): v
   calendarFetch = fetchImpl;
 }
 
+type AlertFetch = NonNullable<NonNullable<ConstructorParameters<typeof GrokRoutineWebhookSink>[1]>["fetch"]>;
+
+let alertFetch: AlertFetch | undefined;
+
+/** Tests stub the routine webhook. Unset uses the platform fetch. */
+export function setCleanerAlertFetch(fetchImpl: AlertFetch | undefined): void {
+  alertFetch = fetchImpl;
+}
+
 const desks = new Map<string, LiveDesk>();
 
+/** One desk per state folder. Each lookup hands it the caller's env, so a secret saved later is seen. */
 export function liveDeskFor(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): LiveDesk {
   const existing = desks.get(root);
-  if (existing) return existing;
+  if (existing) {
+    existing.useEnv(env);
+    return existing;
+  }
   const desk = new LiveDesk(root, env, now);
   desks.set(root, desk);
   return desk;
+}
+
+/** Delivers the cleaning routine's pending wake-ups. The server's retry timer calls this. */
+export function drainCleanerAlerts(root: string, env: () => NodeJS.ProcessEnv, now: () => Date): Promise<void> {
+  return liveDeskFor(root, env, now).drainAlerts();
 }
 
 export function resetLiveDesks(): void {
@@ -157,14 +182,75 @@ export class LiveDesk {
   private queue: Promise<void> = Promise.resolve();
   private held = false;
   private readonly path: string;
+  private readonly alerts: OperatorEventOutbox;
 
   constructor(
     private readonly root: string,
-    private readonly env: () => NodeJS.ProcessEnv,
+    private env: () => NodeJS.ProcessEnv,
     private readonly now: () => Date,
   ) {
     this.path = join(root, "cleaner-live.json");
     this.load();
+    // The routine's address and key are read from the env on every delivery, never saved here.
+    this.alerts = new OperatorEventOutbox(
+      new FileRuntimeStore(join(root, "cleaner-alerts")),
+      () =>
+        new GrokRoutineWebhookSink(
+          { url: () => this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined, key: () => this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined },
+          alertFetch ? { fetch: alertFetch } : {},
+        ),
+      { now: () => this.now().getTime() },
+    );
+  }
+
+  useEnv(env: () => NodeJS.ProcessEnv): void {
+    this.env = env;
+  }
+
+  /**
+   * Saves the cleaning routine's webhook address and key through `save` (the secret store) and
+   * queues a test wake-up. Neither value is kept in this desk's file or repeated in the reply.
+   */
+  saveAlertRoutine(input: { url?: string; key?: string }, save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void): ToolReply {
+    const url = input.url?.trim() ?? "";
+    const key = input.key?.trim() ?? "";
+    if (!calendarUrlAllowed(url) || key.length < 8) return this.fail(ROUTINE_NEEDED);
+    save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: key });
+    this.alerts.enqueue(testEvent(this.now()));
+    this.startDrain();
+    return this.reply({ next: ROUTINE_SAVED });
+  }
+
+  /** Delivers every pending wake-up that is due. A routine that is down or not saved leaves them pending. */
+  async drainAlerts(): Promise<void> {
+    await this.alerts.drain();
+  }
+
+  private startDrain(): void {
+    void this.drainAlerts().catch(() => undefined);
+  }
+
+  /** Ids of the host notes visible now. Taken before a path Grok doesn't see, so only that path's notes wake the routine. */
+  private visibleNoteIds(): Set<string> {
+    this.resume();
+    return new Set(this.engine ? this.visibleNotes(this.engine).map((note) => note.id) : []);
+  }
+
+  /**
+   * Wakes the cleaning routine once when a host note became visible since `before` and the host
+   * has not seen it yet. The event carries no content: Grok reads the notes with `check_now`.
+   */
+  private queueNewAlerts(before: Set<string>): void {
+    const engine = this.engine;
+    if (!engine) return;
+    const queued = new Set(this.file.alertsQueued ?? []);
+    const shown = new Set(this.file.alertsShown ?? []);
+    const fresh = this.visibleNotes(engine).filter((note) => !before.has(note.id) && !queued.has(note.id) && !shown.has(note.id));
+    if (fresh.length === 0) return;
+    this.alerts.enqueue(cleaningUpdateEvent(this.now()));
+    this.file.alertsQueued = [...queued, ...fresh.map((note) => note.id)];
+    this.persist();
+    this.startDrain();
   }
 
   /** True when `text` contains the saved door code. */
@@ -475,6 +561,7 @@ export class LiveDesk {
     delete this.file.deliveries;
     delete this.file.localSends;
     delete this.file.alertsShown;
+    delete this.file.alertsQueued;
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
@@ -530,6 +617,12 @@ export class LiveDesk {
 
   /** Records a Twilio delivery status. Does not unseal the door code. A failure tells the host once. */
   async notePinDelivery(input: { sid: string; status: string }): Promise<void> {
+    const before = this.visibleNoteIds();
+    await this.pinDeliveryNow(input);
+    this.queueNewAlerts(before);
+  }
+
+  private async pinDeliveryNow(input: { sid: string; status: string }): Promise<void> {
     const tracked = this.file.pinSend;
     if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
     this.resume();
@@ -538,7 +631,15 @@ export class LiveDesk {
     await this.applyPinReport(pinId, input.status.toLowerCase());
   }
 
+  /** A text from the host, the cleaner, or the group. Grok does not see it, so a new host note wakes the routine. */
   async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+    const before = this.visibleNoteIds();
+    const result = await this.inboundNow(input);
+    this.queueNewAlerts(before);
+    return result;
+  }
+
+  private async inboundNow(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -552,7 +653,9 @@ export class LiveDesk {
       this.resume();
       const keyword = messagingKeyword(input.text);
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
+      const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
       const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
+      this.noteCleanerYes(offered);
       this.noteSeen(input.id);
       this.syncHold();
       return { sent: result.sent };
@@ -562,6 +665,16 @@ export class LiveDesk {
   }
 
   private readonly claiming = new Set<string>();
+
+  /** The engine tells the host nothing when the cleaner accepts. One note per job, the first time it is confirmed. */
+  private noteCleanerYes(offered: Set<string>): void {
+    const engine = this.engine;
+    if (!engine) return;
+    for (const job of engine.jobs()) {
+      if (!offered.has(job.id) || job.status !== "confirmed") continue;
+      engine.keepHostNote(`cleaner-yes:${job.id}`, `The cleaner said YES to the turnover at ${this.file.address ?? "the property"}.`);
+    }
+  }
 
   private async inboundBeforeJob(id: string, from: string, keyword: ReturnType<typeof messagingKeyword>): Promise<CleanerText[]> {
     if (keyword !== "stop" && keyword !== "start") return [];
@@ -672,7 +785,7 @@ export class LiveDesk {
     if (!file.host || !file.cleaner || !file.address || !file.timeZone || !file.propertyId || !file.business) {
       throw new Error("Setup is incomplete.");
     }
-    const env = this.env;
+    const env = () => this.env();
     const dataDir = join(this.root, "cleaner-job");
     const observer = parsePhone(file.observer ?? "");
     mkdirSync(dataDir, { recursive: true });

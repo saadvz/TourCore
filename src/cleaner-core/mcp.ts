@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SettingName } from "../install/secretStore";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
@@ -75,6 +76,12 @@ const TOOLS = [
     input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
+    name: "save_alert_routine",
+    title: "Connect alerts",
+    description: "Saves the alert routine's webhook address and key from the secure card. The reply never repeats them.",
+    input: z.object({ url: z.string().optional(), key: z.string().optional() }),
+  },
+  {
     name: "resume_job",
     title: "Resume the cleaning",
     description: "The host resumes a cleaning that was on hold. A text from the cleaner cannot do this.",
@@ -134,7 +141,15 @@ const Request = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, pinKey?: Buffer, scratchTools = false): Promise<{ status: number; body?: unknown }> {
+export type SaveSecrets = (values: Partial<Record<SettingName, string>>) => void;
+
+export async function handleCleanerMcpMessage(
+  desk: LiveDesk,
+  message: unknown,
+  pinKey?: Buffer,
+  scratchTools = false,
+  saveSecrets?: SaveSecrets,
+): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
   if (!parsed.success) return rpcError(null, -32600, "That isn't a valid request.");
@@ -168,7 +183,7 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, 
     }
     let reply: ToolReply;
     try {
-      reply = await callTool(desk, tool.name, args.data, pinKey);
+      reply = await callTool(desk, tool.name, args.data, pinKey, saveSecrets);
     } catch {
       reply = { ok: false, error: "That didn't work. Try again." };
     }
@@ -191,7 +206,7 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
   return false;
 }
 
-async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined): Promise<ToolReply> {
+async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined, saveSecrets: SaveSecrets | undefined): Promise<ToolReply> {
   switch (name) {
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
@@ -215,6 +230,9 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.runChecks(args as { googleEvents?: GoogleEventList });
     case "check_now":
       return desk.checkNow(args as { googleEvents?: GoogleEventList });
+    case "save_alert_routine":
+      if (!saveSecrets) return { ok: false, error: "I can't save the alert routine from here." };
+      return desk.saveAlertRoutine(args as { url?: string; key?: string }, saveSecrets);
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":

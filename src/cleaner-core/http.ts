@@ -1,7 +1,7 @@
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
-import { CLEANER_MCP_PATH, handleCleanerMcpMessage } from "./mcp";
+import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
@@ -21,6 +21,8 @@ export async function handleCleanerMcpHttp(input: {
   env: NodeJS.ProcessEnv;
   root: string;
   now: () => Date;
+  /** Writes to the secret store. Only `save_alert_routine` uses it. */
+  saveSecrets: SaveSecrets;
 }): Promise<{ status: number; body: string; headers?: Record<string, string> }> {
   if (!cleanerCoreEnabled(input.env)) {
     return { status: 503, body: JSON.stringify({ error: { message: "Cleaning texts aren't turned on." } }) };
@@ -47,7 +49,7 @@ export async function handleCleanerMcpHttp(input: {
     return { status: 400, body: JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }) };
   }
   const desk = liveDeskFor(input.root, () => input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader), scratchToolsOn(input.env));
+  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader), scratchToolsOn(input.env), input.saveSecrets);
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }
