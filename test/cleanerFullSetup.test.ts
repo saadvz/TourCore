@@ -517,6 +517,93 @@ describe("Cleaner Core full setup: the MCP door-code guard", () => {
   });
 });
 
+describe("Cleaner Core door-code check: every host free text", () => {
+  const REFUSED = { ok: false, error: DOOR_CODE_IN_CHAT };
+
+  /** Lake House up to the door code, saved as `code` (made up) when one is given. */
+  async function atDoorCode(code?: string) {
+    const opened = openDesk([HOST, CLEANER], "0");
+    const { desk } = opened;
+    ok(await desk.getState("2"));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    if (code) ok(await desk.saveDoorCode({ code }, PIN_KEY));
+    return opened;
+  }
+
+  const savedFile = (root: string) => readFileSync(join(root, "cleaner-live.json"), "utf8");
+
+  it("refuses instructions that hold the code after a restart, with the code sealed and with it opened", async () => {
+    const { root, env } = await atDoorCode("4827");
+    resetLiveDesks();
+    const restarted = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    const instructions = "Lockbox opens with 4827";
+    // No key opens the seal, so any run of 4 digits might be the code.
+    expect(await restarted.savePreferences({ instructions })).toEqual(REFUSED);
+    const viaChat = await handleCleanerMcpMessage(restarted, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "save_preferences", arguments: { instructions } } });
+    expect((viaChat.body as { result: { isError: boolean; content: { text: string }[] } }).result).toEqual(
+      expect.objectContaining({ isError: true, content: [{ type: "text", text: DOOR_CODE_IN_CHAT }] }),
+    );
+    // With the key, save_preferences opens the seal and finds the code itself.
+    expect(await restarted.savePreferences({ instructions }, PIN_KEY)).toEqual(REFUSED);
+    expect(savedFile(root).includes("4827")).toBe(false);
+    ok(await restarted.savePreferences({ instructions: "Leave the porch light on." }, PIN_KEY));
+  });
+
+  it("refuses a split code in instructions or a checklist item with the code in memory", async () => {
+    const { desk, root } = await atDoorCode("4827");
+    for (const text of ["Lockbox opens with 48 27", "Code 4-8-2-7 at the back", "It's 4.8.2.7 today"]) {
+      expect(await desk.savePreferences({ instructions: text }), text).toEqual(REFUSED);
+      expect(await desk.savePreferences({ checklist: ["Strip the beds", text] }), text).toEqual(REFUSED);
+    }
+    expect(JSON.parse(savedFile(root)).preferences).toBeUndefined();
+    ok(await desk.savePreferences({ checklist: ["Unit 12 towels"], instructions: "Gate 3 sticks." }));
+  });
+
+  it("refuses a lock location like 80 88 on the first save", async () => {
+    const { desk, root } = await atDoorCode();
+    for (const lockLocation of ["80 88", "lockbox 8-0-8-8", "box 4 4 1 7"]) {
+      expect((await desk.saveDoorCode({ code: DOOR_CODE, lockLocation }, PIN_KEY)).ok, lockLocation).toBe(false);
+    }
+    expect(savedFile(root)).not.toContain("pinSeal");
+    expect(savedFile(root)).not.toContain("80 88");
+    ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: "Unit 12 side gate" }, PIN_KEY));
+  });
+
+  it("refuses the code in a cleaner, contact, or calendar name, a calendar link, or who hears about problems", async () => {
+    const { desk, root, env } = await atDoorCode(DOOR_CODE);
+    const split = "80 88";
+    expect(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: `Ana ${split}` })).toEqual(REFUSED);
+    expect(await desk.savePeople({ host: HOST, cleaner: CLEANER, contacts: [{ name: `Sam ${split}`, role: "co-host", phone: OBSERVER }] })).toEqual(REFUSED);
+    expect(await desk.saveSchedule({ escalateTo: `Sam ${split}` })).toEqual(REFUSED);
+    expect(await desk.saveSources({ calendars: [{ name: `Airbnb ${split}`, url: CALENDAR_URL }] })).toEqual(REFUSED);
+    expect(await desk.saveSources({ calendars: [{ name: "Airbnb", url: `${CALENDAR_URL}?k=${DOOR_CODE}` }] })).toEqual(REFUSED);
+    expect(await desk.saveCalendarLink({ url: `${CALENDAR_URL}?k=${split}` })).toEqual(REFUSED);
+    // Sealed after a restart with no key: a run of 4 digits is refused, a name without one is kept.
+    resetLiveDesks();
+    const restarted = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(await restarted.saveSchedule({ escalateTo: "Sam 4417" })).toEqual(REFUSED);
+    ok(await restarted.saveSchedule({ escalateTo: "Sam" }));
+    for (const form of [split, DOOR_CODE, "4417"]) expect(savedFile(root).includes(form), form).toBe(false);
+  });
+
+  it("stores and returns a cleaner's split door code redacted", async () => {
+    const { desk, root } = await confirmedCleaner();
+    await desk.inbound({ id: "split-code", from: CLEANER, text: "the code 80-88 isn't working" });
+    await desk.inbound({ id: "spaced-code", from: CLEANER, text: "is it 8 0 8 8?" });
+    const reply = ok(await desk.checkNow());
+    expect(brief((reply.messages as Message[] | undefined) ?? []).slice(-2).map((message) => message.text)).toEqual([
+      "the code [redacted] isn't working",
+      "is it [redacted]?",
+    ]);
+    for (const form of ["80-88", "8 0 8 8", DOOR_CODE]) {
+      expect(JSON.stringify(reply).includes(form), form).toBe(false);
+      expect(savedFile(root).includes(form), form).toBe(false);
+    }
+  });
+});
+
 /** A clock the test moves by hand. */
 function testClock(start: string) {
   let at = new Date(start);

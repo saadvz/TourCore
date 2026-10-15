@@ -327,17 +327,17 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_property":
       return desk.saveProperty(args as Parameters<LiveDesk["saveProperty"]>[0]);
     case "save_people":
-      return desk.savePeople(args as Parameters<LiveDesk["savePeople"]>[0]);
+      return desk.savePeople(args as Parameters<LiveDesk["savePeople"]>[0], pinKey);
     case "save_calendar_link":
-      return desk.saveCalendarLink(args as { url?: string; google?: boolean });
+      return desk.saveCalendarLink(args as { url?: string; google?: boolean }, pinKey);
     case "save_sources":
-      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean });
+      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean }, pinKey);
     case "save_schedule":
-      return desk.saveSchedule(args as Parameters<LiveDesk["saveSchedule"]>[0]);
+      return desk.saveSchedule(args as Parameters<LiveDesk["saveSchedule"]>[0], pinKey);
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string; lockLocation?: string }, pinKey);
     case "save_preferences":
-      return desk.savePreferences(args as Parameters<LiveDesk["savePreferences"]>[0]);
+      return desk.savePreferences(args as Parameters<LiveDesk["savePreferences"]>[0], pinKey);
     case "activate":
       return desk.activate(args as { googleEvents?: GoogleEventList });
     case "set_up_texting":

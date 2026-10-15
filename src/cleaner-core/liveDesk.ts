@@ -10,7 +10,7 @@ import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { formatWhen, zonedInstant } from "./calendar";
-import { joinSplitDigits, openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
+import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
@@ -570,11 +570,28 @@ export class LiveDesk {
     return pinKey ?? serverPinKey(this.env());
   }
 
-  /** Opens a sealed code with the server's key when it isn't open yet. A seal made with another key stays shut. */
-  private openSeal(): void {
+  /**
+   * Opens a sealed code that isn't open yet, with the request's key or else the server's key. A seal
+   * made with another key stays shut.
+   */
+  private openSeal(pinKey?: Buffer): void {
     if (this.pin || !this.file.pinSeal) return;
-    const key = serverPinKey(this.env());
+    const key = this.keyFor(pinKey);
     if (key) this.unlock(key);
+  }
+
+  /**
+   * The one door-code check for host free text that is saved or sent: a message, checklist items,
+   * instructions, the lock location, who hears about problems, and contact, cleaner, and calendar
+   * names and links. It catches the saved code and `saving` (a code being saved now), also split by
+   * spaces, dots, or dashes, and the chat checks. While the code is sealed and this desk can't open
+   * it, any run of 4 or more digits might be it, so that is refused too.
+   */
+  private carriesCode(text: string, saving?: string): boolean {
+    const joined = joinSplitDigits(text);
+    if (saving && joined.includes(saving)) return true;
+    if (this.chatCarriesDoorCode(text) || this.chatCarriesDoorCode(joined)) return true;
+    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(joined);
   }
 
   /** True when a door code is saved, open in memory or only sealed. */
@@ -648,12 +665,13 @@ export class LiveDesk {
    * Saves the host, the cleaner (with an optional name), up to four extra contacts, and the
    * group-chat choice. Each save replaces the saved people. The legacy observer counts as a contact.
    */
-  savePeople(input: PeopleInput): Promise<ToolReply> {
-    return this.serial(async () => this.savePeopleNow(input));
+  savePeople(input: PeopleInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePeopleNow(input, pinKey));
   }
 
-  private savePeopleNow(input: PeopleInput): ToolReply {
+  private savePeopleNow(input: PeopleInput, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
+    this.openSeal(pinKey);
     const host = parsePhone(input.host ?? "");
     const cleaner = parsePhone(input.cleaner ?? "");
     const observerText = input.observer?.trim() ?? "";
@@ -681,12 +699,12 @@ export class LiveDesk {
       if (!(CONTACT_ROLES as readonly string[]).includes(role)) return this.fail("Each contact is a co-host, an assistant, or an observer.");
       if (!phone) return this.fail(`Send ${name}'s phone number.`);
       if (used.has(phone)) return this.fail("Each person needs a different phone number.");
-      if (this.chatCarriesDoorCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
+      if (this.carriesCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
       used.add(phone);
       contacts.push({ name, role: role as ContactRole, phone });
     }
     if (contacts.length + (observer ? 1 : 0) > MAX_CONTACTS) return this.fail(`I can keep up to ${MAX_CONTACTS} extra contacts.`);
-    if (this.chatCarriesDoorCode(cleanerName)) return this.fail(DOOR_CODE_IN_CHAT);
+    if (this.carriesCode(cleanerName)) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.host = host;
     this.file.cleaner = cleaner;
     if (observer) this.file.observer = observer;
@@ -706,12 +724,13 @@ export class LiveDesk {
    * quiet hours clear them. The schedule can only hold a text back. The first cleaning text still
    * waits for the host's confirmed times, and the door code still waits for "guests have left".
    */
-  saveSchedule(input: ScheduleInput): Promise<ToolReply> {
-    return this.serial(async () => this.saveScheduleNow(input));
+  saveSchedule(input: ScheduleInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveScheduleNow(input, pinKey));
   }
 
-  private saveScheduleNow(input: ScheduleInput): ToolReply {
+  private saveScheduleNow(input: ScheduleInput, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    this.openSeal(pinKey);
     const saved = this.file.schedule ?? DEFAULT_SCHEDULE;
     const firstText = input.firstText ?? saved.firstText;
     const reminder = input.reminder ?? saved.reminder;
@@ -738,7 +757,7 @@ export class LiveDesk {
     }
     const escalateTo = input.escalateTo === undefined ? saved.escalateTo : input.escalateTo.trim() || undefined;
     if (escalateTo && escalateTo.length > MAX_NAME) return this.fail(`Keep who hears about problems under ${MAX_NAME} characters.`);
-    if (escalateTo && this.chatCarriesDoorCode(escalateTo)) return this.fail(DOOR_CODE_IN_CHAT);
+    if (escalateTo && this.carriesCode(escalateTo)) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.schedule = {
       firstText,
       ...(firstTextDays !== undefined ? { firstTextDays } : {}),
@@ -754,15 +773,17 @@ export class LiveDesk {
     return this.reply({ next: this.setupNext() });
   }
 
-  saveCalendarLink(input: { url?: string; google?: boolean }): Promise<ToolReply> {
-    return this.serial(async () => this.saveCalendarLinkNow(input));
+  saveCalendarLink(input: { url?: string; google?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveCalendarLinkNow(input, pinKey));
   }
 
-  private saveCalendarLinkNow(input: { url?: string; google?: boolean }): ToolReply {
+  private saveCalendarLinkNow(input: { url?: string; google?: boolean }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
+    this.openSeal(pinKey);
+    if (url && this.carriesCode(url)) return this.fail(DOOR_CODE_IN_CHAT);
     // Replaces only the Guesty Lite link. Every other saved calendar stays.
     if (url) this.file.calendarLink = url;
     if (input.google) this.file.google = true;
@@ -777,18 +798,20 @@ export class LiveDesk {
    * a link. When the change would call off an upcoming cleaning that only a dropped source lists, it
    * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
    */
-  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): Promise<ToolReply> {
-    return this.serial(async () => this.saveSourcesNow(input));
+  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.saveSourcesNow(input, pinKey));
   }
 
-  private saveSourcesNow(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): ToolReply {
+  private saveSourcesNow(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
+    this.openSeal(pinKey);
     const next: LiveFile = { ...this.file };
     if (input.calendars !== undefined) {
       const calendars = input.calendars.map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
       if (calendars.length > MAX_CALENDARS) return this.fail(`I can keep up to ${MAX_CALENDARS} calendar links.`);
       for (const calendar of calendars) {
         if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
+        if (this.carriesCode(calendar.name) || this.carriesCode(calendar.url)) return this.fail(DOOR_CODE_IN_CHAT);
         if (!calendarUrlAllowed(calendar.url)) {
           return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
         }
@@ -827,7 +850,9 @@ export class LiveDesk {
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
     const lockLocation = input.lockLocation?.trim();
-    if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(lockLocation) || this.chatCarriesDoorCode(lockLocation))) {
+    this.openSeal(pinKey);
+    // No run of 4 or more digits, even split like "80 88", and never the saved code or the one being saved.
+    if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(joinSplitDigits(lockLocation)) || this.carriesCode(lockLocation, code))) {
       return this.fail(`Say where the lock is in under ${MAX_LOCK_LOCATION} characters, with no code or long number in it.`);
     }
     const key = this.keyFor(pinKey);
@@ -858,19 +883,21 @@ export class LiveDesk {
    * Saves the cleaning preferences. A field left out keeps what was saved, and `{}` the first time
    * means there are none, which still moves setup on to the review.
    */
-  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): Promise<ToolReply> {
-    return this.serial(async () => this.savePreferencesNow(input));
+  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePreferencesNow(input, pinKey));
   }
 
-  private savePreferencesNow(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): ToolReply {
-    if (!this.pin && !this.file.pinSeal) return this.fail("Save the door code first.");
+  private savePreferencesNow(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }, pinKey: Buffer | undefined): ToolReply {
+    if (!this.codeSaved()) return this.fail("Save the door code first.");
+    // The checklist and the instructions go to the cleaner, so the code is checked open when it can be.
+    this.openSeal(pinKey);
     const saved = this.file.preferences ?? { checklist: [], photosRequired: false, supplyNotes: false };
     const checklist = input.checklist === undefined ? saved.checklist : input.checklist.map((item) => item.trim()).filter((item) => item.length > 0);
     if (checklist.length > MAX_CHECKLIST) return this.fail(`I can keep up to ${MAX_CHECKLIST} checklist items.`);
     if (checklist.some((item) => item.length > MAX_CHECKLIST_ITEM)) return this.fail(`Keep each checklist item under ${MAX_CHECKLIST_ITEM} characters.`);
     const instructions = input.instructions === undefined ? saved.instructions : input.instructions.trim() || undefined;
     if (instructions && instructions.length > MAX_INSTRUCTIONS) return this.fail(`Keep the other instructions under ${MAX_INSTRUCTIONS} characters.`);
-    if ([...checklist, instructions ?? ""].some((text) => text && this.chatCarriesDoorCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
+    if ([...checklist, instructions ?? ""].some((text) => text && this.carriesCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.preferences = {
       checklist,
       photosRequired: input.photosRequired ?? saved.photosRequired,
@@ -1326,9 +1353,8 @@ export class LiveDesk {
   private async sendMessageNow(input: { to?: string; text?: string; confirmation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
     const text = input.text?.trim() ?? "";
     if (!text || text.length > MAX_HOST_MESSAGE) return this.fail(MESSAGE_NEEDED);
-    const key = this.keyFor(pinKey);
-    if (key && !this.pin) this.unlock(key);
-    if (this.hostTextCarriesCode(text)) return this.fail(DOOR_CODE_IN_CHAT);
+    this.openSeal(pinKey);
+    if (this.carriesCode(text)) return this.fail(DOOR_CODE_IN_CHAT);
     const to = input.to?.trim() ?? "";
     if (!to) return this.fail(RECIPIENT_NEEDED);
     const recipient = this.recipientOf(to);
@@ -1362,17 +1388,6 @@ export class LiveDesk {
     if (!sent) return this.fail(cant);
     this.keepSent(recipient.name, text);
     return this.reply({ next: `Sent to ${recipient.name}.` });
-  }
-
-  /**
-   * True when a host message could carry the door code. When the code is sealed and this desk
-   * can't open it, any run of 4 or more digits might be it, so that is refused too.
-   */
-  private hostTextCarriesCode(text: string): boolean {
-    // A code split by spaces, dots, or dashes, like "8 0 8 8" or "80-88", counts too.
-    const joined = joinSplitDigits(text);
-    if (this.chatCarriesDoorCode(text) || this.chatCarriesDoorCode(joined)) return true;
-    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(joined);
   }
 
   /**
@@ -1634,8 +1649,8 @@ export class LiveDesk {
 
   /**
    * Keeps a text from the cleaner or a saved contact, or from the host in the group, for Grok to
-   * read. Every run of 4 or more digits is redacted, so the door code never reaches a message even
-   * when this desk doesn't hold it in memory. The last 200 are kept.
+   * read. Every run of 4 or more digits is redacted, even split like "80-88", so the door code never
+   * reaches a message even when this desk doesn't hold it in memory. The last 200 are kept.
    */
   private keepMessage(from: string, input: Inbound, handled: MessageHandled): void {
     const who = this.speaker(from, input.channel);
@@ -1648,9 +1663,9 @@ export class LiveDesk {
     this.persist();
   }
 
-  /** A kept message's text: every run of 4 or more digits redacted, trimmed to 300 characters. */
+  /** A kept message's text: every run of 4 or more digits redacted, split or not, trimmed to 300 characters. */
   private messageText(text: string): string {
-    return this.hideCode(text).replace(/\d{4,}/g, "[redacted]").trim().slice(0, MAX_MESSAGE_TEXT);
+    return redactDigitRuns(this.hideCode(text)).trim().slice(0, MAX_MESSAGE_TEXT);
   }
 
   /** Now, as local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
