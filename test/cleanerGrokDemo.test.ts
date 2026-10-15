@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
@@ -8,6 +9,7 @@ import { zonedInstant } from "../src/cleaner-core/calendar";
 import { privateCodeLine } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
 import { drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
@@ -737,5 +739,120 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
     const queued = cleaningUpdates(wired);
     expect(queued).toHaveLength(1);
     expect(queued[0]?.status).toBe("pending");
+  });
+});
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+function routineDoc(name: string): string {
+  return readFileSync(join(ROOT, "grok-template", "routines", name), "utf8");
+}
+
+async function rpc(method: string): Promise<Record<string, unknown>> {
+  const root = mkdtempSync(join(tmpdir(), "cleaner-rpc-"));
+  try {
+    const desk = liveDeskFor(root, () => deskEnv(), () => new Date(FROZEN));
+    const reply = await handleCleanerMcpMessage(desk, { jsonrpc: "2.0", id: 1, method });
+    return (reply.body as { result: Record<string, unknown> }).result;
+  } finally {
+    resetLiveDesks();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const ROUTINE_NEXT = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
+const TIMES_NEXT = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+
+describe("Cleaner Core Grok demo: Grok guidance", () => {
+  it("lists check_now and save_alert_routine, and names the address and token", async () => {
+    const wired = await app();
+    const listed = await wired.listTools(PATH, CLEANER_TOKEN);
+    expect(listed.names).toEqual(expect.arrayContaining(["check_now", "save_alert_routine"]));
+    const tools = ((await rpc("tools/list")).tools as { name: string; description: string }[]) ?? [];
+    const alerts = tools.find((tool) => tool.name === "save_alert_routine");
+    expect(alerts?.description).toContain("address and token");
+    expect(alerts?.description).toContain("from the secure card");
+    expect(alerts?.description).toContain("never repeats them");
+  });
+
+  it("initialize tells Grok when to check, post alerts, and collect secrets", async () => {
+    const text = String((await rpc("initialize")).instructions);
+    expect(text.startsWith("Call get_state first and follow its next step.")).toBe(true);
+    for (const line of [
+      "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it. Post each alert in your own short words. Collect secrets only with your secure card.",
+      "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
+      "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
+    ]) {
+      expect(text).toContain(line);
+    }
+  });
+
+  it("asks where bookings come from at the calendar step", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE });
+    const people = await call(wired, "save_people", { host: HOST, cleaner: CLEANER });
+    const copy = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
+    expect(people.structured?.next).toBe(copy);
+    expect((await call(wired, "get_state")).structured?.next).toBe(copy);
+  });
+
+  it("get_state asks for the routines after the checks, until one is saved", async () => {
+    const wired = await app();
+    alertStub(() => 200);
+    await setUpGoogle(wired);
+    expect((await call(wired, "run_checks", { googleEvents: googleList([]) })).isError).toBe(false);
+    expect(await done(wired)).toContain("Checks finished.");
+    expect((await call(wired, "get_state")).structured?.next).toBe(ROUTINE_NEXT);
+    expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
+    expect((await call(wired, "get_state")).structured?.next).toBe(TIMES_NEXT);
+  });
+
+  it("ships both routine docs without adding them to the Tour Core manifest", () => {
+    for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
+      const doc = routineDoc(name);
+      expect(doc, name).toContain("check_now");
+      expect(doc, name).toContain("secure card");
+      expect(doc, name).not.toContain(DOOR_CODE);
+    }
+    expect(routineDoc("cleaner-core-alerts.md")).toContain("Cleaner Core alerts are connected.");
+    expect(routineDoc("cleaner-core-alerts.md")).toContain("save_alert_routine");
+    const manifest = JSON.parse(readFileSync(join(ROOT, "grok-template", "template.json"), "utf8")) as { routines: { doc: string }[] };
+    expect(manifest.routines.map((routine) => routine.doc).join(" ")).not.toContain("cleaner-core");
+  });
+});
+
+describe("Cleaner Core Grok demo: needsTimes", () => {
+  it("is omitted for a fresh job and set once a released job loses its times", async () => {
+    setCleanerGroupFetch(groupStub().impl);
+    const wired = await app({ groupChat: true });
+    await setUpGoogle(wired);
+    const fresh = await call(wired, "run_checks", { googleEvents: withNext(WAKE_STAY) });
+    expect(fresh.isError).toBe(false);
+    const beforeConfirm = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    expect(beforeConfirm.structured?.needsTimes).toBeUndefined();
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    await yes(wired, "SM-needs-yes-1");
+    await yes(wired, "SM-needs-yes-2");
+    const steady = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
+    // The next guest's own job has no check-in after it yet, so there is nothing to ask for.
+    expect(turnsOf(steady)).toHaveLength(2);
+    expect(steady.structured?.needsTimes).toBeUndefined();
+    const moved = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
+    expect(moved.isError).toBe(false);
+    expect((moved.structured?.turns as { checkoutTime: string | null }[])[0]?.checkoutTime).toBeNull();
+    expect(moved.structured?.needsTimes).toBe(true);
+    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    const settled = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
+    expect(settled.structured?.needsTimes).toBeUndefined();
+  });
+
+  it("is omitted when the open job's stay was removed", async () => {
+    setCleanerGroupFetch(groupStub().impl);
+    const wired = await app({ groupChat: true });
+    await confirmedJob(wired, WAKE_STAY);
+    const removed = await call(wired, "check_now", { googleEvents: googleList([]) });
+    expect(turnsOf(removed).every((turn) => turn.status === "canceled")).toBe(true);
+    expect(removed.structured?.needsTimes).toBeUndefined();
   });
 });

@@ -43,6 +43,8 @@ export const FIRST_QUESTION =
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
 const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
+const CALENDAR_ASK = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
+const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
 const PEOPLE_ASK = "Who is the host and the cleaner? Send each phone number. An observer is optional.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
@@ -319,7 +321,7 @@ export class LiveDesk {
     else delete this.file.observer;
     this.persist();
     this.engine = undefined;
-    return this.reply({ next: "What's the calendar link for this property?" });
+    return this.reply({ next: CALENDAR_ASK });
   }
 
   saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
@@ -400,6 +402,7 @@ export class LiveDesk {
     return this.reply({
       alerts: fresh.map((note) => note.body),
       turns: this.turns(),
+      ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
       ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
       ...(read.googleUnread ? { googleUnread: true as const } : {}),
     });
@@ -732,15 +735,26 @@ export class LiveDesk {
     let next = "What's the property address, and what should I call the business?";
     if (!this.file.address) next = "What's the property address, and what should I call the business?";
     else if (!this.file.cleaner) next = PEOPLE_ASK;
-    else if (!this.file.calendarLink && !this.file.google) next = "What's the calendar link for this property?";
+    else if (!this.file.calendarLink && !this.file.google) next = CALENDAR_ASK;
     else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
+    else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
     if (this.held) next = this.holdLine();
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
     return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
+  }
+
+  /**
+   * True when a job already released to the cleaner has lost a time. With group chat on, a moved
+   * stay clears the checkout time without a host note, so check_now flags it for Grok to ask.
+   * A job with no next check-in date yet (the last stay on the calendar) can't be asked about.
+   */
+  private needsTimes(engine: CleanerCore): boolean {
+    if (this.file.released !== true) return false;
+    return engine.jobs().some((job) => job.status !== "canceled" && job.status !== "done" && job.nextCheckInDate !== null && (!job.checkoutTime || !job.nextCheckInTime));
   }
 
   /** True when the job the host is answering about already has its next check-in time saved. */

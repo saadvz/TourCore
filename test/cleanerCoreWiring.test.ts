@@ -64,6 +64,8 @@ const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
 const PIN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+/** Grok's own step after the checks. It names the alert routine's key, and is for Grok, not the host. */
+const ROUTINE_STEP = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
 const HOST_LEAK = /\b(webhook|key|request|queued)\b/i;
 const FALSE_RETRY = /try again in a few minutes|we'll try again/i;
 
@@ -234,7 +236,8 @@ describe("Cleaner Core live wiring", () => {
     expect(unsigned.status).toBe(403);
     http.push(await unsigned.text());
 
-    for (const text of [...tools, ...http, ...bodies(wired.cleanerSent.filter((item) => !item.body.includes(DOOR_CODE)))]) {
+    for (const raw of [...tools, ...http, ...bodies(wired.cleanerSent.filter((item) => !item.body.includes(DOOR_CODE)))]) {
+      const text = raw.split(ROUTINE_STEP).join("");
       expect(text).not.toMatch(BANNED);
       expect(text).not.toMatch(/\b(911|injury|blood)\b/i);
       expect(text).not.toMatch(FALSE_RETRY);
