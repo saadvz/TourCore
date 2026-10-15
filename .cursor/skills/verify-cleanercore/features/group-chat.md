@@ -1,10 +1,10 @@
 # Group thread for the host and the cleaner
 
-Cory is in the cleaning thread from setup and does not text YES. Maria opts in by text, then they read the same thread. The door code never goes to that thread. Maria gets it privately. After delivery, Cory reads "Maria got the door code privately." from get_state. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
+Cory is in the cleaning thread from the texting setup step and does not text YES. Maria opts in by text, then they read the same thread. The door code never goes to that thread. Maria gets it privately. After delivery, Cory reads "Maria got the door code privately." from get_state. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
 
 ## Sub-features
 
-- `eligible` sends one private door code after Maria replies YES and confirms. Cory is already in the thread. The thread does not contain the code.
+- `eligible` sends one private door code after Maria replies YES and confirms. Cory is already in the thread from the texting setup step. The thread does not contain the code.
 - `private` sends the code one-on-one when Alex has joined. The group does not get the private line.
 - `held` sends no code after the cleaner replies STOP, and the job does not clear.
 - `stop-host` drops Cory from later group texts and leaves Maria on them.
@@ -23,7 +23,7 @@ Cory is in the cleaning thread from setup and does not text YES. Maria opts in b
 ## How to get to it (user POV)
 
 - The host turns group chat on for Scratch Lane.
-- Maria gets one text naming the group and replies YES. Cory is already in the thread from setup.
+- Maria gets one text naming the group and replies YES. Cory is already in the thread from the texting setup step.
 - The host confirms 11:00 AM and 4:00 PM through confirm times. Maria replies YES to schedule.
 - The host says the guests have left. The code goes to Maria alone. The thread does not receive it.
 - A time, a STOP, a hurt message, or a problem in the thread follows the rules above. Only the host's resume puts the job back on.
