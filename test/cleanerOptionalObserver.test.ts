@@ -118,13 +118,13 @@ function open(phones: string[]) {
 }
 
 async function setup(desk: ReturnType<typeof open>["desk"], observer?: string) {
-  expect(desk.getState("2").ok).toBe(true);
-  expect(desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-  const saved = desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer });
+  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+  const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer });
   expect(saved.ok).toBe(true);
-  expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
-  expect(desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY).ok).toBe(true);
-  expect(desk.setUpTexting().ok).toBe(true);
+  expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
+  expect((await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY)).ok).toBe(true);
+  expect((await desk.setUpTexting()).ok).toBe(true);
   expect((await desk.runChecks()).ok).toBe(true);
   expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
 }
@@ -144,24 +144,24 @@ function bodyHasCode(body: string): boolean {
 describe("optional observer", () => {
   it("saves with the observer left empty and does not ask for a third number", async () => {
     const { desk, root } = open([HOST, CLEANER]);
-    expect(desk.getState("2").ok).toBe(true);
-    const asked = desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
+    expect((await desk.getState("2")).ok).toBe(true);
+    const asked = await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     expect(asked.ok).toBe(true);
     if (asked.ok) {
       // In the diagram order the booking sources come before the people.
       expect(String(asked.result.next)).toMatch(/Guesty Lite link/i);
       expect(asksForThird(String(asked.result.next))).toBe(false);
     }
-    const omitted = desk.savePeople({ host: HOST, cleaner: CLEANER });
-    const blank = desk.savePeople({ host: HOST, cleaner: CLEANER, observer: "" });
-    const spaces = desk.savePeople({ host: HOST, cleaner: CLEANER, observer: "   " });
+    const omitted = await desk.savePeople({ host: HOST, cleaner: CLEANER });
+    const blank = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: "" });
+    const spaces = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: "   " });
     for (const saved of [omitted, blank, spaces]) {
       expect(saved.ok).toBe(true);
       if (!saved.ok) continue;
       expect(asksForThird(String(saved.result.next))).toBe(false);
       expect(String(saved.result.next)).toMatch(/Guesty Lite link/i);
     }
-    const state = desk.getState();
+    const state = await desk.getState();
     expect(state.ok).toBe(true);
     if (state.ok) {
       expect(state.result.done).toContain("Cleaner saved.");
@@ -203,7 +203,7 @@ describe("optional observer", () => {
     expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
     expect(sms.sent.filter((item) => item.to === OLD).some((item) => bodyHasCode(item.body))).toBe(false);
 
-    const cleared = desk.savePeople({ host: HOST, cleaner: CLEANER });
+    const cleared = await desk.savePeople({ host: HOST, cleaner: CLEANER });
     expect(cleared.ok).toBe(true);
     if (cleared.ok) expect(asksForThird(String(cleared.result.next))).toBe(false);
     const file = JSON.parse(readFileSync(join(root, "cleaner-live.json"), "utf8")) as { observer?: string };
@@ -239,11 +239,11 @@ describe("optional observer", () => {
 
   it("keeps a three-number setup on group copies only, and never sends the code to the observer", async () => {
     const { desk, sms, posts } = open([HOST, CLEANER, OLD]);
-    expect(desk.getState("2").ok).toBe(true);
-    expect(desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-    const people = desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD });
+    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+    const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD });
     expect(people.ok).toBe(true);
-    const state = desk.getState();
+    const state = await desk.getState();
     expect(state.ok).toBe(true);
     if (state.ok) expect(state.result.done).toContain("Cleaner and observer saved.");
     await setup(desk, OLD);
@@ -263,9 +263,9 @@ describe("optional observer", () => {
 
   it("still answers STOP from both numbers, sends nothing for HELP, and skips an opted-out number", async () => {
     const early = open([HOST, CLEANER]);
-    expect(early.desk.getState("2").ok).toBe(true);
-    expect(early.desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" }).ok).toBe(true);
-    expect(early.desk.savePeople({ host: HOST, cleaner: CLEANER }).ok).toBe(true);
+    expect((await early.desk.getState("2")).ok).toBe(true);
+    expect((await early.desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
+    expect((await early.desk.savePeople({ host: HOST, cleaner: CLEANER })).ok).toBe(true);
     const helpBefore = early.sms.sent.length;
     await early.desk.inbound({ id: "help-host-early", from: HOST, text: "HELP" });
     await early.desk.inbound({ id: "help-cleaner-early", from: CLEANER, text: "HELP" });
@@ -286,7 +286,7 @@ describe("optional observer", () => {
     await desk.inbound({ id: "help-cleaner", from: CLEANER, text: "HELP" });
     expect(sms.sent.slice(beforeHelp).length).toBe(0);
     expect(posts.slice(beforeHelpPosts).length).toBe(0);
-    const held = desk.getState();
+    const held = await desk.getState();
     expect(held.ok).toBe(true);
     if (held.ok) {
       const turns = held.result.turns as { checkoutTime: string | null; status: string }[];
