@@ -762,14 +762,15 @@ class Engine implements CleanerCore {
     if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.inflight.add(input.id);
     try {
-      const { codeHeld, ...result } = await this.receiveClaimed(input, from);
-      return this.options.grokReadsMessages ? { ...result, outcome: outcomeOf(result, codeHeld === true) } : result;
+      const { label, ...result } = await this.receiveClaimed(input, from);
+      return this.options.grokReadsMessages ? { ...result, outcome: label ?? outcomeOf(result) } : result;
     } finally {
       this.inflight.delete(input.id);
     }
   }
 
-  private async receiveClaimed(input: { id: string; from: string; text: string; channel?: "group" }, from: string): Promise<ReceiveResult & { codeHeld?: boolean }> {
+  /** `label`, when set, is what Grok reads beside the message instead of the label from the reason. */
+  private async receiveClaimed(input: { id: string; from: string; text: string; channel?: "group" }, from: string): Promise<ReceiveResult & { label?: MessageHandled }> {
     this.transcriptState.push(`${from}: ${this.redactInbound(input.text.trim())}`);
     if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
@@ -810,7 +811,7 @@ class Engine implements CleanerCore {
       if (this.codeOnly(input.text)) {
         this.inboundIds.push(input.id);
         this.save();
-        return { handled: true, reason: "review", sent: alert ? [alert] : [], codeHeld: true };
+        return { handled: true, reason: "review", sent: alert ? [alert] : [], label: "code-held" };
       }
     }
     if (from === this.owner && stripFiller(normalize(input.text)) === "retry") return this.retryUncertain(input.id);
@@ -1498,7 +1499,7 @@ class Engine implements CleanerCore {
     return { handled: true, reason: "opted-in", sent };
   }
 
-  private async finish(from: string, id: string): Promise<ReceiveResult> {
+  private async finish(from: string, id: string): Promise<ReceiveResult & { label?: MessageHandled }> {
     if (this.cleanerConsent !== "in") return this.markIgnored(id);
     if (this.problemHold) return this.guide(from, id);
     const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
@@ -1517,7 +1518,8 @@ class Engine implements CleanerCore {
       await this.tellHostDone(job);
     }
     this.save();
-    return result;
+    // The job is done only once the cleaner's acknowledgement went out.
+    return acked ? result : { ...result, label: "none" };
   }
 
   private cleanerStep(): CleanerStep {
@@ -1544,8 +1546,12 @@ class Engine implements CleanerCore {
 
   private async quietOrGuide(from: string, id: string, text: string): Promise<ReceiveResult> {
     if (from === this.cleanerPhone && this.cleanerConsent === "in" && keywordOf(text) !== "help") {
-      // Grok reads a text that isn't a keyword and decides what happens next.
-      if (this.options.grokReadsMessages && !isCleanerKeyword(text)) return this.markIgnored(id);
+      // Grok reads a text that isn't a keyword and decides what happens next. Only the cleaner can
+      // take an offer or finish a cleaning, so the guide to YES or DONE still goes in those steps.
+      if (this.options.grokReadsMessages && !isCleanerKeyword(text)) {
+        const step = this.cleanerStep();
+        if (step !== "needs-yes" && step !== "in-progress") return this.markIgnored(id);
+      }
       return this.guide(from, id);
     }
     return this.markIgnored(id);
@@ -3186,8 +3192,7 @@ function isCleanerKeyword(text: string): boolean {
 }
 
 /** The label Grok reads beside a message: what Cleaner Core did with it. */
-function outcomeOf(result: ReceiveResult, codeHeld: boolean): MessageHandled {
-  if (codeHeld) return "code-held";
+function outcomeOf(result: ReceiveResult): MessageHandled {
   switch (result.reason) {
     case "opted-in":
       return "opted-in";

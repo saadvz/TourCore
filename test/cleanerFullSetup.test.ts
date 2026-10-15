@@ -832,6 +832,47 @@ describe("Cleaner Core messages: Grok reads every message", () => {
     expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "done" });
   });
 
+  it("still guides a near-miss YES on an offer to reply YES, and records it", async () => {
+    const { desk, sms } = openDesk([HOST, CLEANER], "0");
+    await setUp(desk, { groupChat: "cleaner-only" });
+    await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+    expect((ok(desk.getTurns()).turns as { status: string }[])[0]?.status).toBe("offered");
+    await desk.inbound({ id: "near-yes", from: CLEANER, text: ARRIVAL_TEXT });
+    expect(sms.sent.at(-1)).toEqual(expect.objectContaining({ to: CLEANER, body: "Reply YES to schedule the cleaning, or STOP to opt out." }));
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: ARRIVAL_TEXT, handled: "none" });
+  });
+
+  it("still guides a near-miss DONE during the cleaning to reply DONE, and records it", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "all-done", from: CLEANER, text: "All done!" });
+    expect(sms.sent.at(-1)).toEqual(expect.objectContaining({ to: CLEANER, body: "Reply DONE when the cleaning is finished." }));
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "All done!", handled: "none" });
+  });
+
+  it("sends no reply to free text while the cleaner waits for the guests to leave", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const before = sms.sent.length;
+    await desk.inbound({ id: "free", from: CLEANER, text: "Do you want me to bring extra towels?" });
+    expect(sms.sent).toHaveLength(before);
+    expect(brief(await messagesNow(desk)).at(-1)?.handled).toBe("none");
+  });
+
+  it("labels a DONE none when its acknowledgement didn't go out, and the job stays open", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    setCleanerTwilioClient({
+      ...sms,
+      async sendSms(input) {
+        if (input.body === "Thanks, cleaning marked done.") throw new Error("carrier down");
+        return sms.sendSms(input);
+      },
+    });
+    await desk.inbound({ id: "done-failed", from: CLEANER, text: "DONE" });
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "none" });
+    expect((ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status)).not.toContain("done");
+  });
+
   it("records STOP as stop and still sends the host the existing note", async () => {
     const { desk, sms } = await confirmedCleaner();
     await desk.inbound({ id: "stop", from: CLEANER, text: "STOP" });
