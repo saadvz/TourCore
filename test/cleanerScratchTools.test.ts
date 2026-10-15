@@ -184,6 +184,7 @@ describe("Scratch test tools", () => {
       "Door code notice to the host: sent.",
       "Start note to the cleaner: sent.",
       "Done note to the cleaner: sent.",
+      "Done note to the host: sent.",
     ]);
 
     const again = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
@@ -422,13 +423,13 @@ describe("Scratch test tools", () => {
     expect(resumed.text).toContain(sentence);
     const lines = linesOf(await call(wired, "read_outbox"));
     expect(lines).toContain("Hold note to the host: sent.");
-    expect(lines).toContain("Resume note to the host: sent.");
+    expect(lines).toContain("Resume note to the host: unsent.");
     expect(lines.join("\n").includes(LANE.pin)).toBe(false);
     const state = await call(wired, "get_state");
     expect(state.text).toContain(sentence);
     expect(state.text.includes(LANE.pin)).toBe(false);
     expect(twilioCalls).toBe(0);
-    const stopAck = `You're opted out of cleaning texts for ${LANE.property.address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
+    const stopAck = `You're opted out of cleaning texts for ${LANE.property.address}, and the cleaning there is on hold. Reply START to get texts again.`;
     expect(wired.cleanerSent.map((item) => item.body)).toContain(stopAck);
     expect(wired.cleanerSent.some((item) => item.body.includes("is back on"))).toBe(false);
     expect(wired.cleanerSent.map((item) => item.body).join("\n").includes(LANE.pin)).toBe(false);

@@ -20,7 +20,7 @@ const CLEANER_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so
 const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 const OWNER_HOLD = `The cleaning at ${ADDRESS} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
-const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
+const HOST_START_HELD = `You'll get cleaning texts for ${ADDRESS} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`;
 
 const HOST_KIND_RULE = {
   "host-checkout": "blocked",
@@ -179,7 +179,7 @@ describe("one opt-out check for every text to Cory", () => {
 
     const beforeStart = box.sent.length;
     await job.receive({ id: "owner-start", from: OWNER, text: "START" });
-    expect(box.sent.slice(beforeStart)).toEqual([{ to: OWNER, body: START_ACK, kind: "start" }]);
+    expect(box.sent.slice(beforeStart)).toEqual([{ to: OWNER, body: HOST_START_HELD, kind: "start" }]);
     expect(job.jobOnHold()).toBe(true);
     expect(job.holdNotice()).toBe(OWNER_HOLD);
     const startAgain = box.sent.length;
@@ -207,6 +207,9 @@ describe("one opt-out check for every text to Cory", () => {
     expect(box.sent.some((text) => text.kind === "resume")).toBe(false);
     expect(resumed?.body).toContain("is back on");
     expect(job.hostNotes().some((line) => line.includes("is back on"))).toBe(true);
+    expect(job.outbox().find((item) => item.kind === "resume")?.status).toBe("unsent");
+    expect(job.outbox().filter((item) => item.to === OWNER && item.kind === "done").map((item) => item.status)).toEqual(["unsent"]);
+    expect(job.outbox().find((item) => item.kind === "review")?.status).toBe("unsent");
 
     const ownerKinds = new Set(box.sent.slice(marked).filter((text) => text.to === OWNER).map((text) => text.kind));
     for (const kind of ownerKinds) expect(HOST_KIND_RULE[kind]).toBe("safety");
@@ -300,7 +303,7 @@ describe("ordered STOP, reminder, and DONE on the Twilio log", () => {
     const stopAck = sms.sent.slice(beforeStop).map((item) => ({ to: item.to, body: item.body.split(LANE.pin).join("[redacted]") }));
     expect(stopAck).toEqual([{
       to: HOST,
-      body: `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
+      body: `You're opted out of cleaning texts for ${ADDRESS}, and the cleaning there is on hold. Reply START to get texts again.`,
     }]);
     const afterStop = sms.sent.length;
     now = DUE;

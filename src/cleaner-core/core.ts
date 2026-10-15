@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -101,7 +101,7 @@ export interface OutboxView {
   to: string;
   body: string;
   kind: TextKind;
-  status: "sent" | "failed" | "canceled" | "uncertain";
+  status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
 }
 
@@ -432,7 +432,7 @@ interface OutboxItem {
   to: string;
   body: string;
   kind: TextKind;
-  status: "sent" | "failed" | "canceled" | "uncertain";
+  status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
   lease?: ActionLease;
 }
@@ -1292,9 +1292,21 @@ class Engine implements CleanerCore {
     if (result.sent.length > 0) {
       job.done = true;
       this.inboundIds.push(id);
+      await this.tellHostDone(job);
     }
     this.save();
     return result;
+  }
+
+  private async tellHostDone(job: Job): Promise<void> {
+    if (!this.owner) return;
+    await this.emitOne({
+      id: `done-host:${job.id}`,
+      jobId: job.id,
+      to: this.owner,
+      kind: "done",
+      body: hostDoneLine(this.options.property.address),
+    });
   }
 
   private async clearDeparture(id: string): Promise<ReceiveResult> {
@@ -1677,7 +1689,7 @@ class Engine implements CleanerCore {
     if (this.pin && draft.body.includes(this.pin)) return null;
     const forHost = (this.owner && draft.to === this.owner) || (!this.owner && HOST_DIRECT.has(draft.kind));
     if (!forHost) return null;
-    if (this.outboxState.find((item) => item.id === draft.id)?.status !== "sent") this.upsert(draft, "sent");
+    if (this.outboxState.find((item) => item.id === draft.id)?.status !== "sent") this.upsert(draft, "unsent");
     this.keepHostNote(`host:${draft.kind}:${draft.body}`, draft.body);
     return { to: draft.to, body: draft.body, kind: draft.kind };
   }
@@ -1793,7 +1805,7 @@ class Engine implements CleanerCore {
     return text;
   }
 
-  private upsert(draft: Draft, status: "sent" | "failed" | "uncertain" | "canceled"): void {
+  private upsert(draft: Draft, status: "sent" | "failed" | "uncertain" | "canceled" | "unsent"): void {
     const next: OutboxItem = {
       id: draft.id,
       to: draft.to,
@@ -1899,7 +1911,8 @@ class Engine implements CleanerCore {
       this.holdCause = "cleaner";
     }
     this.participantConsent.set(from, "out");
-    const result = await this.reply(from, ack, "stop", "stop", inboundId);
+    const replyBody = from === this.owner ? hostStopReply(this.options.property.address, this.problemHold) : ack;
+    const result = await this.reply(from, replyBody, "stop", "stop", inboundId);
     const note: CleanerText[] = [];
     if (from === this.cleanerPhone && this.owner && from !== this.owner) {
       const held = await this.emit({
@@ -2026,7 +2039,7 @@ class Engine implements CleanerCore {
       if (this.pin) this.problemHold = true;
       else this.optedOut = true;
       this.rememberOwnerHold();
-      const result = await this.reply(from, ack, "stop", "stop", inboundId);
+      const result = await this.reply(from, hostStopReply(this.options.property.address, this.problemHold), "stop", "stop", inboundId);
       return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
     this.optedOut = true;
@@ -2063,7 +2076,7 @@ class Engine implements CleanerCore {
       this.ownerOptedOut = false;
       if (!this.pin) this.optedOut = false;
       if (this.groupChat && this.hostGroup === "out") this.hostGroup = "in";
-      const result = await this.reply(from, START_ACK, "start", "start", inboundId);
+      const result = await this.reply(from, hostStartReply(this.options.property.address, this.problemHold), "start", "start", inboundId);
       return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
     }
     if (this.problemHold && this.pin && from === this.cleanerPhone) {

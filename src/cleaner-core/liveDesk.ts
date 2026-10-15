@@ -8,7 +8,7 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { cleanerOptOutHold, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
+import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
@@ -478,8 +478,12 @@ export class LiveDesk {
     }
     this.noteSeen(id);
     const address = this.file.address ?? "the property";
-    const body =
-      keyword === "stop"
+    const host = from === this.file.host;
+    const body = host
+      ? keyword === "stop"
+        ? hostStopReply(address, this.held)
+        : hostStartReply(address, this.held)
+      : keyword === "stop"
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
     if (this.scratchCapture()) {
@@ -591,7 +595,8 @@ export class LiveDesk {
           }
           const address = file.address;
           const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "");
-          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms) return;
+          const readySms = text.kind === "done";
+          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms && !readySms) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
@@ -646,7 +651,8 @@ export class LiveDesk {
     const engineRows = (this.engine?.outbox() ?? []).map((item) => {
       const shown = item.kind === "pin" ? this.engine?.pinShownStatus(item.id) : undefined;
       const saved = shown ? undefined : this.file.deliveries?.find((row) => row.id === item.id)?.status;
-      const status = shown ?? saved ?? (item.status === "sent" ? "sent" : item.status === "failed" ? "failed" : item.status === "canceled" ? "canceled" : "waiting");
+      const stored = item.status === "uncertain" ? "waiting" : item.status;
+      const status = shown ?? saved ?? stored;
       const role = whoTheyAre(item.to, people);
       return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status) };
     });

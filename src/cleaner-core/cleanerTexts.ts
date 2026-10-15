@@ -93,6 +93,22 @@ export function resumeNote(address: string): string {
   return `The cleaning at ${address} is back on.`;
 }
 
+export function hostStopReply(address: string, held: boolean): string {
+  return held
+    ? `You're opted out of cleaning texts for ${address}, and the cleaning there is on hold. Reply START to get texts again.`
+    : `You're opted out of cleaning texts for ${address}. Reply START to get texts again.`;
+}
+
+export function hostStartReply(address: string, held: boolean): string {
+  return held
+    ? `You'll get cleaning texts for ${address} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`
+    : `You'll get cleaning texts for ${address} again.`;
+}
+
+export function hostDoneLine(address: string): string {
+  return `The cleaner marked the cleaning at ${address} done.`;
+}
+
 export function groupOptInBody(name: string, otherName: string, address: string): string {
   return `${name}, you're invited to the cleaning group for ${address} with ${otherName}. Reply YES to join that group, or STOP to opt out.`;
 }
