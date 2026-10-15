@@ -10,7 +10,7 @@ import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { formatWhen, zonedInstant } from "./calendar";
-import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
+import { joinSplitDigits, openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -1155,7 +1155,9 @@ export class LiveDesk {
     if (!this.file.checked || !engine || !this.reachable(recipient.send, engine)) return this.fail(cant);
     // The engine's outbox counts them, so this desk saves no timestamp that could hold the door code's digits.
     if (engine.hostMessagesSince(new Date(this.now().getTime() - HOUR_MS)) >= HOST_MESSAGES_PER_HOUR) return this.fail(TOO_MANY);
-    const fingerprint = createHash("sha256").update(`${recipient.key}|${text}`).digest("hex");
+    // A group approval also binds who is in the group, so a join or a leave before the yes voids it.
+    const bound = recipient.send === "group" ? `group:${engine.groupMembers().join(",")}` : recipient.key;
+    const fingerprint = createHash("sha256").update(`${bound}|${text}`).digest("hex");
     const code = input.confirmation?.trim() ?? "";
     if (!code) {
       const question = `Send to ${recipient.name}: "${text}"?`;
@@ -1182,8 +1184,10 @@ export class LiveDesk {
    * can't open it, any run of 4 or more digits might be it, so that is refused too.
    */
   private hostTextCarriesCode(text: string): boolean {
-    if (this.chatCarriesDoorCode(text)) return true;
-    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(text);
+    // A code split by spaces, dots, or dashes, like "8 0 8 8" or "80-88", counts too.
+    const joined = joinSplitDigits(text);
+    if (this.chatCarriesDoorCode(text) || this.chatCarriesDoorCode(joined)) return true;
+    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(joined);
   }
 
   /**
