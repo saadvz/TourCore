@@ -28,6 +28,7 @@ const TIME = "Cory will confirm that time.";
 const PRIVATE_LINE = "Maria got the door code privately.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
+const OFFER_COPY = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.`;
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
 const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
@@ -79,7 +80,7 @@ const checks = {
   },
   held() {
     if (pins.length !== 0) fail("pin sent");
-    if (groups.length !== 0) fail("group text");
+    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group text");
     if (!sent.some((text) => text.to === OWNER && text.body === STOP_HOLD)) fail("stop hold");
     if (sent.some((text) => text.to === CLEANER && text.body.includes("[redacted]"))) fail("cleaner saw the code");
     if (!clock || clock.status === "cleared" || clock.status === "done") fail("job moved");
@@ -99,8 +100,10 @@ const checks = {
   },
   time() {
     if (!clock || clock.checkoutTime !== "11:00 AM") fail("clock moved");
+    const copy = groups.filter((text) => text.body === OFFER_COPY);
+    if (copy.length !== 1 || JSON.stringify(copy[0].audience) !== JSON.stringify([OWNER, CLEANER])) fail("offer copy");
     if (groups.filter((text) => text.body === TIME).length !== 1) fail("time reply");
-    if (groups.some((text) => text.body !== TIME)) fail("extra group text");
+    if (groups.some((text) => text.body !== TIME && text.body !== OFFER_COPY)) fail("extra group text");
   },
   injury() {
     const emergency = sent.filter((text) => text.kind === "emergency");
@@ -108,11 +111,11 @@ const checks = {
     if (emergency[0].to !== OWNER || emergency[0].body !== HOST_HURT || emergency[0].channel) fail("host 911");
     if (emergency[1].to !== OWNER || emergency[1].body !== INJURY_HOLD || emergency[1].channel) fail("injury hold");
     if (emergency[2].to !== CLEANER || emergency[2].body !== HURT || emergency[2].channel) fail("cleaner 911");
-    if (groups.length !== 0) fail("group saw 911");
+    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group saw 911");
     if (sent.some((text) => text.body === TIME)) fail("group handling ran first");
   },
   problem() {
-    if (groups.length !== 0) fail("group saw the hold");
+    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group saw the hold");
     if (!sent.some((text) => text.to === OWNER && text.kind === "review" && text.body === HOLD)) fail("host hold");
     if (!sent.some((text) => text.to === CLEANER && text.kind === "held" && text.body === HOLD)) fail("cleaner hold");
     if (pins.length !== 0) fail("pin during hold");

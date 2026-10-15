@@ -174,7 +174,7 @@ describe("host texts after 46105bc", () => {
     expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin)).includes(LANE.pin)).toBe(false);
   }, 60_000);
 
-  it("logs the resume note unsent while Cory is opted out, and the cleaner still gets the door code", async () => {
+  it("logs the resume note unsent while Cory is opted out, sends one ready text, and the cleaner still gets the door code", async () => {
     if (!LANE) throw new Error("missing lane");
     const wired = await scratchApp();
     await saveLane(wired);
@@ -189,13 +189,14 @@ describe("host texts after 46105bc", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).not.toBe(PIN_SENT);
     const after = redact(wired.cleanerSent.slice(afterStop), LANE.pin);
-    expect(after.filter((item) => item.to === HOST)).toEqual([]);
+    expect(after.filter((item) => item.to === HOST)).toEqual([{ to: HOST, body: HOST_DONE }]);
     expect(after.filter((item) => item.body.includes("Door code:"))).toEqual([
       { to: LANE.cleanerPhone, body: `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.` },
     ]);
     const lines = linesOf(await call(wired, "read_outbox"));
     expect(lines).toContain("Resume note to the host: unsent.");
-    expect(lines).toContain("Done note to the host: unsent.");
+    expect(lines.filter((line) => line === "Done note to the host: sent.")).toEqual(["Done note to the host: sent."]);
+    expect(lines.filter((line) => line === "Done note to the host: unsent.")).toEqual([]);
     expect(lines.filter((line) => line === "Resume note to the host: sent.")).toEqual([]);
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"done\"");
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");

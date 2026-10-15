@@ -553,6 +553,7 @@ class Engine implements CleanerCore {
   private participantConsent = new Map<string, "pending" | "in" | "out">();
   private readonly groupChat: CleanerCoreOptions["groupChat"];
   private hostGroup: "pending" | "in" | "out" = "pending";
+  private hostGroupSaved = false;
   private problemHold = false;
   private ownerOptedOut = false;
   private holdCause: "cleaner" | "owner" | "injury" | undefined;
@@ -614,6 +615,7 @@ class Engine implements CleanerCore {
     }
     this.load();
     if (!this.hadStoredConsent && options.cleanerConsent) this.cleanerConsent = options.cleanerConsent;
+    this.seatHost();
   }
 
   async pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult> {
@@ -712,13 +714,6 @@ class Engine implements CleanerCore {
     }
     if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
     if (this.pin && from === this.owner && isDeparture(input.text) && !grouped) return this.clearDeparture(input.id);
-    if (this.groupChat && from === this.owner && isYes(input.text) && this.hostGroup === "pending" && this.delivery(`opt-in:group:${from}`) === "sent") {
-      this.hostGroup = "in";
-      this.inboundIds.push(input.id);
-      const sent = await this.drainOne();
-      this.save();
-      return { handled: true, reason: "opted-in", sent };
-    }
     const moved = await this.moveCheckout(input.id, from, input.text);
     if (moved) return moved;
     if (this.optedOut || !this.everConsented) return this.markIgnored(input.id);
@@ -1022,15 +1017,6 @@ class Engine implements CleanerCore {
   private async sendGroupInvites(): Promise<CleanerText[]> {
     if (!this.groupChat || !this.owner || !this.cleanerPhone) return [];
     const sent: CleanerText[] = [];
-    if (this.hostGroup === "pending") {
-      const text = await this.emit({
-        id: `opt-in:group:${this.owner}`,
-        to: this.owner,
-        kind: "opt-in",
-        body: groupOptInBody(this.groupChat.hostName, this.groupChat.cleanerName, this.options.property.address),
-      });
-      if (text) sent.push(text);
-    }
     for (const extra of this.groupChat.extra ?? []) {
       const phone = parsePhone(extra.phone);
       if (!phone || this.participantConsent.get(phone) !== "pending") continue;
@@ -1284,6 +1270,7 @@ class Engine implements CleanerCore {
 
   private async finish(from: string, id: string): Promise<ReceiveResult> {
     if (this.cleanerConsent !== "in") return this.markIgnored(id);
+    if (this.problemHold) return this.guide(from, id);
     const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
     if (!job) {
       for (const finished of this.ordered()) {
@@ -1666,9 +1653,25 @@ class Engine implements CleanerCore {
     });
   }
 
+  private seatHost(): void {
+    if (!this.groupChat || !this.owner) return;
+    if (this.ownerOptedOut || this.optedOut) {
+      this.hostGroup = "out";
+      return;
+    }
+    if (this.hostGroup === "out" || this.hostGroup === "in") return;
+    if (this.hostGroupSaved) return;
+    if (this.everConsented) this.hostGroup = "in";
+  }
+
   private async copyOffer(draft: Draft, actor: string): Promise<void> {
     const mode = this.messagingMode();
-    if (mode === "cleaner-only") return;
+    if (mode === "cleaner-only") {
+      if (this.groupChat && this.owner && this.hostGroup === "in" && this.owner !== actor) {
+        await this.emitGroup(`${draft.id}:host`, offerForOthers(draft.body), "offer", draft.jobId);
+      }
+      return;
+    }
     const channel = mode === "native" ? "group" : "mirror";
     const body = offerForOthers(draft.body);
     for (const person of this.audience()) {
@@ -1726,8 +1729,12 @@ class Engine implements CleanerCore {
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
+  private ownerStillGetsDone(draft: Draft): boolean {
+    return draft.kind === "done" && Boolean(this.owner) && draft.to === this.owner;
+  }
+
   private ownerDeclined(draft: Draft): boolean {
-    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind)) return false;
+    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind) || this.ownerStillGetsDone(draft)) return false;
     if (this.groupChat && this.hostGroup === "out") return true;
     return this.ownerOptedOut;
   }
@@ -1764,8 +1771,8 @@ class Engine implements CleanerCore {
     } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
-    if (this.optedOut && !SAFETY.has(draft.kind)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
-    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) {
+    if (this.optedOut && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) {
       return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
     }
     const existing = this.outboxState.find((item) => item.id === draft.id);
@@ -2458,7 +2465,10 @@ class Engine implements CleanerCore {
     this.reviewItems = record.reviews ?? [];
     this.auditLog = record.audit ?? [];
     this.counters = { ...emptyCounters(), ...record.counters };
-    if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
+    if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") {
+      this.hostGroup = record.hostGroup;
+      this.hostGroupSaved = true;
+    }
     if (record.problemHold === true) this.problemHold = true;
     if (record.ownerOptedOut === true) this.ownerOptedOut = true;
     if (record.holdCause === "cleaner" || record.holdCause === "owner" || record.holdCause === "injury") this.holdCause = record.holdCause;

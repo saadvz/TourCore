@@ -1,0 +1,10 @@
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"host-checkout","outcome":"sent","to":"***0100"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"opt-in","outcome":"sent","to":"***0101"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"opt-in","outcome":"sent","to":"***0122"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"host-checkin","outcome":"sent","to":"***0100"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"offer","outcome":"sent","to":"***0101"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"offer","outcome":"sent","to":"***0100"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"offer","outcome":"sent","to":"***0122"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"confirm","outcome":"sent","to":"***0101"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"pin","outcome":"sent","to":"***0101"}
+{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"pin-notice","outcome":"sent","to":"***0100"}

@@ -1,10 +1,10 @@
 # Group thread for the host and the cleaner
 
-Cory and Maria opt in one-on-one, then read the same cleaning thread. The door code never goes to that thread. Maria gets it privately. After delivery, Cory reads "Maria got the door code privately." from get_state. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
+Cory is in the cleaning thread from the texting setup step and does not text YES. Maria opts in by text, then they read the same thread. The door code never goes to that thread. Maria gets it privately. After delivery, Cory reads "Maria got the door code privately." from get_state. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
 
 ## Sub-features
 
-- `eligible` sends one private door code after both people reply YES and the cleaner confirms. The thread does not contain it.
+- `eligible` sends one private door code after Maria replies YES and confirms. Cory is already in the thread from the texting setup step. The thread does not contain the code.
 - `private` sends the code one-on-one when Alex has joined. The group does not get the private line.
 - `held` sends no code after the cleaner replies STOP, and the job does not clear.
 - `stop-host` drops Cory from later group texts and leaves Maria on them.
@@ -12,7 +12,7 @@ Cory and Maria opt in one-on-one, then read the same cleaning thread. The door c
 - `time` leaves 11:00 AM in place and tells the thread Cory will confirm it.
 - `injury` sends the one-on-one 911 lines and the injury hold to Cory, and no group text.
 - `problem` sends the hold line to Cory and Maria and nothing to the thread.
-- `before-yes` sends the invites one-on-one and no group text.
+- `before-yes` sends Maria's invite one-on-one and no group text. Cory is not asked to reply YES.
 - `inert` keeps the old private door code when group chat is off.
 - `done` reaches done from Maria's START and DONE. Cory gets one ready line.
 - `done-without-start` reaches done from Maria's DONE after the private code. A second DONE does not send a second ready line.
@@ -23,7 +23,7 @@ Cory and Maria opt in one-on-one, then read the same cleaning thread. The door c
 ## How to get to it (user POV)
 
 - The host turns group chat on for Scratch Lane.
-- Maria and Cory each get one text naming the group and the other person. Each replies YES.
+- Maria gets one text naming the group and replies YES. Cory is already in the thread from the texting setup step.
 - The host confirms 11:00 AM and 4:00 PM through confirm times. Maria replies YES to schedule.
 - The host says the guests have left. The code goes to Maria alone. The thread does not receive it.
 - A time, a STOP, a hurt message, or a problem in the thread follows the rules above. Only the host's resume puts the job back on.

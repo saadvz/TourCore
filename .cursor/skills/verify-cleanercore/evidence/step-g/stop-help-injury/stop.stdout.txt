@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout"
+    },
+    {
+      "to": "+15555550100",
+      "body": "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again.",
+      "kind": "stop"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [
+    {
+      "id": "notion:row-anita",
+      "departingUid": "notion:row-anita",
+      "arrivingUid": null,
+      "status": "discovered",
+      "live": true,
+      "textsBlocked": true,
+      "checkoutDate": "2026-10-18",
+      "nextCheckInDate": null,
+      "sameDay": false,
+      "checkoutTime": null,
+      "nextCheckInTime": null,
+      "checkoutAt": null,
+      "nextCheckInAt": null,
+      "version": 1,
+      "hostCheckoutVersion": 0,
+      "hostCheckInVersion": 0,
+      "asking": "checkout"
+    }
+  ],
+  "outbox": [
+    {
+      "id": "host-checkout:notion:row-anita:2026-10-18:660",
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    },
+    {
+      "id": "stop:smoke-op-1",
+      "to": "+15555550100",
+      "body": "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again.",
+      "kind": "stop",
+      "status": "sent"
+    }
+  ],
+  "transcript": [
+    "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "+15555550100: STOP",
+    "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. Reply START to get texts again."
+  ],
+  "blocks": [
+    {
+      "uid": "notion:row-block",
+      "summary": "Owner block"
+    }
+  ],
+  "tenant": "scratch-lane",
+  "sync": {
+    "reason": "read",
+    "conversation": "closed",
+    "sources": [
+      "notion"
+    ],
+    "conflicts": [],
+    "freshness": [
+      {
+        "kind": "notion",
+        "fetchedAt": "2026-10-14T15:00:00.000Z",
+        "stale": false
+      }
+    ],
+    "provenance": [
+      {
+        "jobId": "notion:row-anita",
+        "sources": [
+          {
+            "kind": "notion",
+            "uid": "notion:row-anita"
+          }
+        ]
+      }
+    ]
+  }
+}

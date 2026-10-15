@@ -1,0 +1,9 @@
+This run used the in-process doctor/smoke CLI. A live cleaning job will not do these steps. They stay unverified until a run on that live target covers them. That run still uses only Scratch test numbers.
+
+1. Started tsx via npm run cleaner:doctor, npm run cleaner:smoke, and npm run cleaner:health in this checkout. A hosted job is not launched that way.
+2. Read Guesty Lite, Google Calendar, and Notion fixtures under src/cleaner-core/fixtures/. Did not call Guesty, Google, Notion, or Twilio, and did not use a live credential.
+3. Froze time at the smoke default 2026-10-14T15:00:00.000Z, or at the --now instant a journey passed. Did not use the wall clock except where health was given that same instant.
+4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. Temporary directories were removed after stdout was saved.
+5. Applied each --reply inside the process. A reply that starts with @ reads a file inside the process. The exposure reply file was a temporary file outside this evidence folder and was deleted. Neither path received an inbound SMS.
+6. Printed no door code. A crash is --crash after-accept or --crash before-pin, which stops the process after the durable row is saved. It is not a kill of a live host.
+7. ci-local ran scripts/ci-check.sh: typecheck, build, the full test suite, the cleaner-core tests with the flag on and off, the secret scan, the baseline eval, and the SETUP_PROMPT check. Then a flag-off smoke exited 2.
