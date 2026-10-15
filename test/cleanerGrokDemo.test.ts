@@ -763,7 +763,7 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function routineDoc(name: string): string {
-  return readFileSync(join(ROOT, "grok-template", "routines", name), "utf8");
+  return readFileSync(join(ROOT, "cleaner-template", "routines", name), "utf8");
 }
 
 async function rpc(method: string): Promise<Record<string, unknown>> {
@@ -826,7 +826,7 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     expect((await call(wired, "get_state")).structured?.next).toBe(TIMES_NEXT);
   });
 
-  it("ships both routine docs without adding them to the Tour Core manifest", () => {
+  it("ships both routine docs in the Cleaner Core template, not the Tour Core manifest", () => {
     for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
       const doc = routineDoc(name);
       expect(doc, name).toContain("check_now");

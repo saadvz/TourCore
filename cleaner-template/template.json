@@ -1,0 +1,62 @@
+{
+  "name": "Cleaner Core",
+  "version": "0.1.0",
+  "distribution": "team",
+  "profile": "bot-profile.md",
+  "setupPrompt": "SETUP_PROMPT.md",
+  "readme": "README.md",
+  "hostedCleanerCoreUrl": "https://tourcore-production-72ec.up.railway.app",
+  "repository": {
+    "url": "https://github.com/saadvz/TourCore",
+    "bootstrap": "CLEANER_CORE_BOOTSTRAP.md",
+    "note": "The public repository. Grok clones it only to read CLEANER_CORE_BOOTSTRAP.md and these files. It never runs Cleaner Core from the clone."
+  },
+  "integrations": [
+    {
+      "name": "Cleaner Core",
+      "type": "custom-mcp-server",
+      "url": "hostedCleanerCoreUrl/mcp/cleaner-core",
+      "auth": "OAuth 2.1 discovered from the Cleaner Core service. The owner clicks Allow. Grok cannot approve itself.",
+      "travelsWithTemplate": false
+    },
+    {
+      "name": "Google Calendar",
+      "type": "first-party-connector",
+      "auth": "The host connects their own Google account to Grok's built-in Google Calendar connector. Grok reads the events and passes them to Cleaner Core. Cleaner Core never gets a Google approval.",
+      "travelsWithTemplate": false
+    }
+  ],
+  "routines": [
+    {
+      "name": "Cleaner Core Check",
+      "doc": "routines/cleaner-core-check.md",
+      "trigger": "scheduled",
+      "schedule": "Every 5 minutes for a demo, and hourly otherwise.",
+      "allowedTools": ["check_now", "confirm_times", "get_state", "save_arrival", "get_job_photos"],
+      "credentialsTravelWithTemplate": false
+    },
+    {
+      "name": "Cleaner Core Alerts",
+      "doc": "routines/cleaner-core-alerts.md",
+      "trigger": "authenticated-webhook",
+      "allowedTools": ["check_now", "confirm_times", "get_state", "save_arrival", "get_job_photos"],
+      "credentialsTravelWithTemplate": false
+    }
+  ],
+  "marketplace": {
+    "ships": ["the paste-in prompt", "the bot profile and standing instructions", "the Cleaner Core Check and Cleaner Core Alerts routine definitions"],
+    "neverShips": ["the Alerts routine's webhook address or token", "Cleaner Core OAuth tokens", "Google OAuth tokens", "Twilio credentials", "a door code", "phone numbers", "live booking or cleaning records"],
+    "activation": "A new host pastes the prompt, connects to the hosted Cleaner Core named by hostedCleanerCoreUrl, and clicks Allow once. They never run a server."
+  },
+  "suggestedPrompts": ["Set up Cleaner Core", "Check my calendars", "Show the upcoming cleanings", "The guests have left", "Text the cleaner", "Show the last cleaning's photos"],
+  "neverIncluded": [
+    "the door code",
+    "the Alerts routine's webhook address or token",
+    "Cleaner Core connector or OAuth tokens",
+    "Google OAuth access or refresh tokens",
+    "Twilio account details or keys",
+    "host, cleaner, or contact phone numbers",
+    "calendar links",
+    "live booking, cleaning, message, or photo records"
+  ]
+}

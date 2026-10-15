@@ -258,6 +258,7 @@ export async function handleCleanerMcpMessage(
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
         "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
         "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.",
+        "Setup goes in this order: save_property, save_sources, save_people, save_schedule, save_door_code on your secure card, save_preferences, then a review in your own words and activate after the host replies Activate. After that, create the Cleaner Core Check and Cleaner Core Alerts routines. CLEANER_CORE_BOOTSTRAP.md in the repository has the full guide.",
       ].join(" "),
     });
   }
