@@ -69,6 +69,12 @@ const TOOLS = [
     input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
+    name: "check_now",
+    title: "Check the calendars now",
+    description: "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar.",
+    input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
+  },
+  {
     name: "resume_job",
     title: "Resume the cleaning",
     description: "The host resumes a cleaning that was on hold. A text from the cleaner cannot do this.",
@@ -207,6 +213,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":
       return desk.runChecks(args as { googleEvents?: GoogleEventList });
+    case "check_now":
+      return desk.checkNow(args as { googleEvents?: GoogleEventList });
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_scratch":

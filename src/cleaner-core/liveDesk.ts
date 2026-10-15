@@ -86,12 +86,20 @@ interface LiveFile {
   pinSend?: PinSend;
   texting?: boolean;
   checked?: boolean;
+  /** How many `engine.hostNotes()` entries `check_now` has already returned. */
+  alertsShown?: number;
   released?: boolean;
   cleanerOut?: boolean;
   seenInbound?: string[];
   conversationSid?: string;
   deliveries?: { id: string; status: DeliveryReport }[];
   localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport }[];
+}
+
+interface CalendarRead {
+  guestyFailed: boolean;
+  reason?: string;
+  googleUnread: boolean;
 }
 
 interface OutboxRow {
@@ -146,6 +154,7 @@ export class LiveDesk {
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
   private checking = false;
+  private queue: Promise<void> = Promise.resolve();
   private held = false;
   private readonly path: string;
 
@@ -265,7 +274,51 @@ export class LiveDesk {
     });
   }
 
-  async runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+  /** Runs `work` after every earlier serial job has settled, so two checks never overlap. */
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(work, work);
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  runChecks(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    return this.serial(() => this.runChecksNow(input));
+  }
+
+  /**
+   * Re-reads the saved calendars, sends reminders that are due, and returns the host alerts
+   * that are new since the last call. Google events are applied only when Grok passes them.
+   */
+  checkNow(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    return this.serial(() => this.checkNowSerial(input));
+  }
+
+  private async checkNowSerial(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
+    this.resume();
+    const engine = this.engine;
+    if (!this.file.checked || !engine) return this.fail("Run the checks first.");
+    const read = await this.readCalendars(input.googleEvents);
+    await engine.runReminders();
+    this.syncHold();
+    const notes = engine.hostNotes();
+    const shown = Math.min(this.file.alertsShown ?? 0, notes.length);
+    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
+    let alerts = notes.slice(shown).filter((line) => delivered || !isPrivateCodeLine(line));
+    if (!engine.pinAccepted()) alerts = alerts.filter((line) => line !== PIN_SENT);
+    this.file.alertsShown = notes.length;
+    this.persist();
+    return this.reply({
+      alerts,
+      turns: this.turns(),
+      ...(read.guestyFailed ? { guestyUnread: true as const } : {}),
+      ...(read.googleUnread ? { googleUnread: true as const } : {}),
+    });
+  }
+
+  private async runChecksNow(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
     if (!this.file.texting || !(this.file.calendarLink || this.file.google) || !this.pin) return this.fail("Set up texting first.");
     if (!this.file.host || !this.file.cleaner || !isAllowlisted(this.env(), this.file.host) || !isAllowlisted(this.env(), this.file.cleaner)) {
       return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
@@ -274,9 +327,9 @@ export class LiveDesk {
     const before = this.engine;
     this.engine = this.openEngine();
     this.checking = true;
-    let read: { guestyFailed: boolean; reason?: string };
+    let read: CalendarRead;
     try {
-      read = await this.readCalendars(input.googleEvents);
+      read = await this.readCalendars(input.googleEvents, { skipGoogleOnGuestyFailure: true });
     } catch (err) {
       this.engine = before;
       throw err;
@@ -299,18 +352,30 @@ export class LiveDesk {
     });
   }
 
-  /** Reads every saved booking source into the engine. Guesty Lite first, then Google. */
-  private async readCalendars(googleEvents?: GoogleEventList): Promise<{ guestyFailed: boolean; reason?: string }> {
+  /**
+   * Reads every saved booking source into the engine. Guesty Lite first, then Google. A failed
+   * Guesty read does not stop Google, unless the caller says so. An unread Google source is reported.
+   */
+  private async readCalendars(googleEvents?: GoogleEventList, options: { skipGoogleOnGuestyFailure?: boolean } = {}): Promise<CalendarRead> {
     const engine = this.engine;
     const file = this.file;
     if (!engine) throw new Error("Setup is incomplete.");
+    let guestyFailed = false;
+    let reason: string | undefined;
     if (file.calendarLink) {
       const read = await readPublicCalendar(file.calendarLink, calendarFetch ?? fetch);
-      if (!read.ok) return { guestyFailed: true, reason: read.reason };
-      await engine.pollFeed(read.body);
+      if (read.ok) await engine.pollFeed(read.body);
+      else {
+        guestyFailed = true;
+        reason = read.reason;
+      }
     }
-    if (googleEvents && file.propertyId) await engine.readSource(googleCalendarSource(googleEvents, file.propertyId));
-    return { guestyFailed: false };
+    let googleUnread = false;
+    if (googleEvents && file.propertyId && !(guestyFailed && options.skipGoogleOnGuestyFailure)) {
+      const google = await engine.readSource(googleCalendarSource(googleEvents, file.propertyId));
+      googleUnread = !google.polled;
+    }
+    return { guestyFailed, ...(reason ? { reason } : {}), googleUnread };
   }
 
   getTurns(): ToolReply {
