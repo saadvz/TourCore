@@ -103,6 +103,7 @@ interface LiveFile {
   /** Ids of the jobs the host gave both times for through confirm_times. */
   timedJobs?: string[];
   cleanerOut?: boolean;
+  hostOut?: boolean;
   seenInbound?: string[];
   conversationSid?: string;
   deliveries?: { id: string; status: DeliveryReport }[];
@@ -360,7 +361,8 @@ export class LiveDesk {
   }
 
   saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
-    if (!(this.file.calendarLink || this.file.google) || !this.file.propertyId) return this.fail("Save the calendar link first.");
+    if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
+    if (!this.file.calendarLink && !this.file.google && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
     if (!pinKey) return this.fail(PIN_KEY_MISSING);
@@ -682,6 +684,7 @@ export class LiveDesk {
     this.file.cleanerOut = false;
     this.file.released = false;
     delete this.file.pinSend;
+    delete this.file.hostOut;
     delete this.file.conversationSid;
     delete this.file.deliveries;
     delete this.file.localSends;
@@ -727,6 +730,38 @@ export class LiveDesk {
     // Already inside the serial queue, so this calls the inner step, not `inbound`.
     await this.inboundSerial({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
     return this.reply({ next: SCRATCH_TEST_WENT_THROUGH });
+  }
+
+  addTestTurn(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+    return this.serial(() => this.addTestTurnNow(input));
+  }
+
+  private async addTestTurnNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+    const guard = this.testTurnGuard();
+    if (guard) return this.fail(guard);
+    if (!this.file.texting || !this.pin || !this.file.host || !this.file.cleaner) return this.fail("Set up texting first.");
+    const checkout = input.checkout?.trim() ?? "";
+    const checkIn = input.checkIn?.trim() ?? "";
+    if (!statedClock(checkout) || !statedClock(checkIn)) {
+      return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
+    }
+    this.file.checked = true;
+    this.file.released = true;
+    this.persist();
+    this.resume();
+    if (!this.engine) return this.fail("Set up texting first.");
+    if (this.pin) this.engine.rememberPin(this.pin);
+    const created = await this.engine.addTestTurn({ checkout, checkIn });
+    if (!created.created) {
+      if (created.reason === "exists") return this.reply({ next: "That test turnover is already saved.", turns: this.turns() });
+      if (created.reason === "refused") return this.fail("I can text the host and the cleaner only after those numbers are approved for texts.");
+      return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
+    }
+    const invited = this.engine.outbox().some((item) => item.kind === "opt-in" && item.status === "sent");
+    return this.reply({
+      next: invited ? "Test turnover saved. Anyone who has not replied YES got only the opt-in text." : "Test turnover saved. Nothing was sent.",
+      turns: this.turns(),
+    });
   }
 
   reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
@@ -832,6 +867,8 @@ export class LiveDesk {
       this.held = false;
       this.file.cleanerOut = false;
     }
+    if (from === this.file.host && keyword === "stop") this.file.hostOut = true;
+    if (from === this.file.host && keyword === "start") this.file.hostOut = false;
     this.noteSeen(id);
     const address = this.file.address ?? "the property";
     const host = from === this.file.host;
@@ -952,6 +989,7 @@ export class LiveDesk {
       holdSends: () => this.checking || (!liveSmsOn(env()) && !this.scratchCapture()),
       deferCleanerTexts: this.file.released !== true,
       ...(this.file.cleanerOut ? { cleanerConsent: "out" as const } : {}),
+      ...(this.file.hostOut ? { ownerOptedOut: true } : {}),
       optInBody: `Hi, this is ${file.business} at ${file.address}. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.`,
       stopReply: `You're opted out of cleaning texts for ${file.address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
       noteHostOnStop: true,
@@ -982,7 +1020,8 @@ export class LiveDesk {
           const address = file.address;
           const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "");
           const readySms = text.kind === "done";
-          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms && !readySms) return;
+          const inviteSms = text.kind === "opt-in";
+          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms && !readySms && !inviteSms) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
@@ -1002,6 +1041,13 @@ export class LiveDesk {
       now: this.now,
       dataDir,
     });
+  }
+
+  /** Scratch only. The host and cleaner saved with save_people are allowed even when they are not 555 numbers. */
+  private testTurnGuard(): string | undefined {
+    if (!scratchToolsOn(this.env())) return SCRATCH_PROPERTY_REFUSAL;
+    if (!isScratchPropertyAddress(this.file.address)) return SCRATCH_PROPERTY_REFUSAL;
+    return undefined;
   }
 
   private scratchGuard(from?: string): string | undefined {

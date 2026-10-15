@@ -35,6 +35,11 @@ export const SCRATCH_TOOLS = [
     title: "Record a delivery",
     description: "Records that a test text was sent, delivered, failed, or undelivered. It does not text anyone.",
   },
+  {
+    name: "add_test_turn",
+    title: "Add a test turnover",
+    description: "Creates one test turnover from a checkout time and the next check-in. It does not read a calendar. It only works on the Scratch test property.",
+  },
 ] as const;
 
 export const DELIVERY_REPORTS = ["sent", "delivered", "failed", "undelivered"] as const;

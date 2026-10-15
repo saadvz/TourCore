@@ -283,6 +283,8 @@ export interface CleanerCoreOptions {
   noteHostOnStop?: boolean;
   /** Used only when this tenant has no saved consent yet. A stored choice wins. */
   cleanerConsent?: "pending" | "in" | "out";
+  /** Host already texted STOP before this store existed. A saved choice wins. */
+  ownerOptedOut?: boolean;
   /** Live chat keeps the seal outside this store. Scratch fixtures seal here. */
   sealPinAtRest?: boolean;
   /** Host sentence after the private text is accepted. Unset keeps the fixture sentence. */
@@ -319,6 +321,12 @@ export interface CleanerCore {
   markReady(): void;
   /** Sends the cleaner opt-in, then any text that was waiting on the host's times. */
   releaseCleanerTexts(): Promise<CleanerText[]>;
+  /**
+   * One Scratch turnover from a checkout clock and the next check-in clock.
+   * Does not read a calendar. A second call does not add a job or send an offer.
+   * A past checkout does not release the door code.
+   */
+  addTestTurn(input: { checkout: string; checkIn: string }): Promise<{ created: boolean; reason?: "exists" | "times" | "refused" }>;
   cleanerHasOptedOut(): boolean;
   fileReview(kind: ReviewKind): Promise<ReceiveResult>;
   replay(): Promise<{ sent: CleanerText[] }>;
@@ -361,6 +369,8 @@ const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-fai
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
+const TEST_TURN_ID = "scratch-test-turn";
+const TEST_TURN_NEXT = "scratch-test-next";
 
 /**
  * Usage:
@@ -573,6 +583,7 @@ class Engine implements CleanerCore {
   private readonly backupDir: string | undefined;
   private deferCleaner: boolean;
   private hadStoredConsent = false;
+  private storeLoaded = false;
   private readonly inflight = new Set<string>();
   private sourceRecords: SourceRecord[] = [];
   private reviewItems: ReviewItem[] = [];
@@ -617,6 +628,7 @@ class Engine implements CleanerCore {
     }
     this.load();
     if (!this.hadStoredConsent && options.cleanerConsent) this.cleanerConsent = options.cleanerConsent;
+    if (!this.storeLoaded && options.ownerOptedOut) this.ownerOptedOut = true;
     this.seatHost();
   }
 
@@ -714,6 +726,7 @@ class Engine implements CleanerCore {
     if (from && isYes(input.text) && this.participantConsent.get(from) === "pending" && this.delivery(`opt-in:${from}`) === "sent") {
       return this.optInParticipant(from, input.id);
     }
+    if (this.owner && from === this.owner && isYes(input.text) && this.hostInviteOpen()) return this.optInHost(input.id);
     if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
     if (this.pin && from === this.owner && isDeparture(input.text) && !grouped) return this.clearDeparture(input.id);
     const moved = await this.moveCheckout(input.id, from, input.text);
@@ -880,6 +893,40 @@ class Engine implements CleanerCore {
     if (!this.optedOut) sent.push(...(await this.drainOne()));
     this.save();
     return sent;
+  }
+
+  async addTestTurn(input: { checkout: string; checkIn: string }): Promise<{ created: boolean; reason?: "exists" | "times" | "refused" }> {
+    const checkout = clockMinutes(input.checkout);
+    const checkIn = clockMinutes(input.checkIn);
+    if (checkout === undefined || checkIn === undefined) return { created: false, reason: "times" };
+    if (!this.scratchReady()) return { created: false, reason: "refused" };
+    if (this.jobsState.some((job) => job.id === TEST_TURN_ID || !job.canceled)) return { created: false, reason: "exists" };
+    const checkoutDate = localDate(this.now(), this.options.property.timeZone);
+    const nextCheckInDate = checkIn > checkout ? checkoutDate : addCalendarDays(checkoutDate, 1);
+    this.reconcile([
+      {
+        id: TEST_TURN_ID,
+        departingUid: TEST_TURN_ID,
+        arrivingUid: TEST_TURN_NEXT,
+        checkInDate: addCalendarDays(checkoutDate, -1),
+        checkoutDate,
+        nextCheckInDate,
+        sameDay: nextCheckInDate === checkoutDate,
+        sequence: 1,
+        contentHash: `${checkoutDate}|${nextCheckInDate}|${TEST_TURN_NEXT}`,
+      },
+    ]);
+    this.addFact(TEST_TURN_ID, "checkout", checkout);
+    this.addFact(TEST_TURN_ID, "checkin", checkIn);
+    this.deferCleaner = false;
+    if (this.groupChat && !this.ownerOptedOut && this.hostGroup !== "out") {
+      this.hostGroup = "pending";
+      this.hostGroupSaved = true;
+    }
+    await this.sendHostOptIn();
+    await this.sendOptIn();
+    this.save();
+    return { created: true };
   }
 
   cleanerHasOptedOut(): boolean {
@@ -1250,6 +1297,30 @@ class Engine implements CleanerCore {
       kind: "opt-in",
       body: this.cleanerOptInBody(),
     });
+  }
+
+  private hostInviteOpen(): boolean {
+    if (!this.owner || this.hostGroup !== "pending" || this.ownerOptedOut) return false;
+    return this.delivery(`opt-in:${this.owner}`) === "sent";
+  }
+
+  private async optInHost(id: string): Promise<ReceiveResult> {
+    this.hostGroup = "in";
+    this.hostGroupSaved = true;
+    this.ownerOptedOut = false;
+    this.inboundIds.push(id);
+    this.save();
+    return { handled: true, reason: "opted-in", sent: [] };
+  }
+
+  private async sendHostOptIn(): Promise<CleanerText | null> {
+    if (!this.owner || this.ownerOptedOut || (this.groupChat && this.hostGroup === "out")) return null;
+    const id = `opt-in:${this.owner}`;
+    if (this.delivery(id) === "sent") return null;
+    const body = this.groupChat
+      ? groupOptInBody(this.groupChat.hostName, this.groupChat.cleanerName, this.options.property.address)
+      : `Hi, this is ${this.hostName} at ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
+    return this.emit({ id, to: this.owner, kind: "opt-in", body });
   }
 
   private cleanerOptInBody(): string {
@@ -2462,6 +2533,7 @@ class Engine implements CleanerCore {
 
   private load(): void {
     if (!this.file || !existsSync(this.file)) return;
+    this.storeLoaded = true;
     const parsed = JSON.parse(readFileSync(this.file, "utf8")) as StoreFile;
     if (parsed.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
     const mine = sliceForTenant(parsed, this.tenantId);
@@ -2820,6 +2892,10 @@ function minutesOf(hmText: string): number {
 
 function hm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function localDate(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
 }
 
 function clockMinutes(text: string): number | undefined {
