@@ -1110,6 +1110,58 @@ describe("Cleaner Core send_message: the host approves first", () => {
     expect(body.result.content[0]?.text).toBe(DOOR_CODE_IN_CHAT);
   });
 
+  it("refuses a door code split by spaces, dashes, or dots, with the code known and with it sealed", async () => {
+    const split = (code: string) => [
+      `Code ${code.split("").join(" ")}`,
+      `Use ${code.slice(0, 2)}-${code.slice(2)} at the back`,
+      `It's ${code.split("").join(".")} today`,
+    ];
+    const { desk, root, sms } = await confirmedCleaner();
+    const before = sms.sent.length;
+    for (const text of split(DOOR_CODE)) {
+      expect(await desk.sendMessage({ to: "cleaner", text }), text).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+    }
+    // The engine's host-message path refuses it too, even if a caller skipped the desk.
+    const engine = (desk as unknown as { engine: CleanerCore }).engine;
+    for (const body of split(DOOR_CODE)) await expect(engine.sendHostMessage({ to: CLEANER, body })).rejects.toThrow();
+    expect(sms.sent).toHaveLength(before);
+    expect(hostOutbox(desk)).toEqual([]);
+    resetLiveDesks();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: [HOST, CLEANER].join(","),
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const restarted = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    for (const text of split(DOOR_CODE)) {
+      expect(await restarted.sendMessage({ to: "cleaner", text }), `sealed: ${text}`).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+      expect(await restarted.sendMessage({ to: "cleaner", text }, PIN_KEY), `opened: ${text}`).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+    }
+    expect(sms.sent).toHaveLength(before);
+  });
+
+  it("voids a group approval when someone joins or leaves the group before the yes", async () => {
+    const { desk, groups } = openDesk([HOST, CLEANER, OBSERVER], "1");
+    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+    await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
+    const beforeJoin = await preview(desk, "group", LATE);
+    await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
+    expect(await desk.sendMessage({ to: "group", text: LATE, confirmation: beforeJoin.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    const beforeLeave = await preview(desk, "group", LATE);
+    await desk.inbound({ id: "stop-sam", from: OBSERVER, text: "STOP" });
+    expect(await desk.sendMessage({ to: "group", text: LATE, confirmation: beforeLeave.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    expect(groups.posts.filter((post) => post.body === LATE)).toEqual([]);
+    expect(hostOutbox(desk)).toEqual([]);
+    // Asked again with the group as it is now, it goes to the people still in it.
+    const now = await preview(desk, "group", LATE);
+    ok(await desk.sendMessage({ to: "group", text: LATE, confirmation: now.code }));
+    expect(groups.posts.filter((post) => post.body === LATE)).toEqual([{ to: [HOST, CLEANER].sort(), body: LATE }]);
+  });
+
   it("refuses an empty or too long text, and an unknown recipient", async () => {
     const { desk } = await confirmedCleaner();
     expect((await desk.sendMessage({ to: "cleaner", text: "  " })).ok).toBe(false);

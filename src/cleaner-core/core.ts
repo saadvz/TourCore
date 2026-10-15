@@ -434,6 +434,8 @@ export interface CleanerCore {
   sendHostMessage(input: { to: string; body: string }): Promise<CleanerText | null>;
   /** How many host messages went out after `since`. */
   hostMessagesSince(since: Date): number;
+  /** The phones in the group thread now, sorted. Empty without group chat. */
+  groupMembers(): string[];
 }
 
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -442,6 +444,15 @@ const HOST_INJURY = "If someone is hurt, call 911 now.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 export const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
+
+/**
+ * Joins digits split by spaces, dots, dashes, underscores, or slashes, so "8 0 8 8", "80-88", and
+ * "8.0.8.8" read as 8088. A host message is checked for the door code in this form too.
+ */
+export function joinSplitDigits(text: string): string {
+  return text.replace(/(\d)[\s.\-_/\u2010-\u2015]+(?=\d)/g, "$1");
+}
+
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
 const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
@@ -2098,6 +2109,8 @@ class Engine implements CleanerCore {
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
+    } else if (draft.kind === "host-message" && this.pin && joinSplitDigits(draft.body).includes(this.pin)) {
+      throw new Error("The door code leaked into a host message.");
     } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review" && draft.kind !== "host-message") {
       throw new Error("Step C does not send a door code.");
     }
@@ -2792,6 +2805,10 @@ class Engine implements CleanerCore {
     const to = parsePhone(input.to);
     if (!to) return null;
     return this.emit({ id, to, body, kind: "host-message" });
+  }
+
+  groupMembers(): string[] {
+    return this.groupChat ? [...this.groupAudience()].sort() : [];
   }
 
   hostMessagesSince(since: Date): number {
