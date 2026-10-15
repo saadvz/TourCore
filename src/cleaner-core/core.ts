@@ -494,6 +494,11 @@ export function joinSplitDigits(text: string): string {
   return text.replace(/(\d)[\s.\-_/\u2010-\u2015]+(?=\d)/g, "$1");
 }
 
+/** Every run of 4 or more digits, even split by spaces, dots, dashes, underscores, or slashes, as [redacted]. */
+export function redactDigitRuns(text: string): string {
+  return text.replace(/\d(?:[\s.\-_/\u2010-\u2015]*\d){3,}/g, "[redacted]");
+}
+
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done", "checklist"]);
 /** Job notes kept during a cleaning, newest last, and the length of each. */
 const MAX_NOTES = 5;
@@ -1665,7 +1670,7 @@ class Engine implements CleanerCore {
 
   /** A job note: the door code and every run of 4 or more digits, even split by spaces or dashes, redacted. */
   private noteText(text: string): string {
-    const redacted = this.redact(text).replace(/\d(?:[\s.\-_/\u2010-\u2015]*\d){3,}/g, "[redacted]");
+    const redacted = redactDigitRuns(this.redact(text));
     return redacted.trim().slice(0, MAX_NOTE);
   }
 
