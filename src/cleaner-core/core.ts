@@ -24,7 +24,7 @@ import {
   type SourceSnapshot,
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
-import { redactLine, redactPhone } from "./redact";
+import { containsCodeToken, redactLine, redactPhone } from "./redact";
 import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
@@ -3129,7 +3129,8 @@ class Engine implements CleanerCore {
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
     if (existing && existing.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
     const json = JSON.stringify(mergeTenantSlice(existing, this.tenantId, mine));
-    if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
+    // The code as its own token. An id that only holds the digits (a SID, a UUID, a booking UID) is fine.
+    if (this.pin && containsCodeToken(json, this.pin)) throw new Error("The door code cannot be stored in plaintext.");
     writeFileAtomic(this.file, `${json}\n`);
     if (this.sqlite) mirrorStore(this.databasePath(), json);
   }
@@ -3169,7 +3170,7 @@ class Engine implements CleanerCore {
     if (!this.file) throw new Error("Backup needs a data directory.");
     this.save();
     const json = readFileSync(this.file, "utf8");
-    if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
+    if (this.pin && containsCodeToken(json, this.pin)) throw new Error("The door code cannot be stored in plaintext.");
     mirrorStore(this.databasePath(), json);
     snapshotStore(this.databasePath(), dest);
     this.audit("engine", "backup", 1, "backup");

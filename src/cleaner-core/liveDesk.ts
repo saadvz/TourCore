@@ -20,6 +20,7 @@ import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
+import { containsCodeToken } from "./redact";
 import { isScratchTestNumber } from "./scratch";
 import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
@@ -625,11 +626,11 @@ export class LiveDesk {
     return this.withFailure(this.reply(this.cleaningState()), failure);
   }
 
-  saveProperty(input: PropertyInput): Promise<ToolReply> {
-    return this.serial(async () => this.savePropertyNow(input));
+  saveProperty(input: PropertyInput, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(async () => this.savePropertyNow(input, pinKey));
   }
 
-  private savePropertyNow(input: PropertyInput): ToolReply {
+  private savePropertyNow(input: PropertyInput, pinKey: Buffer | undefined): ToolReply {
     if (this.file.choice !== "cleaners") return this.fail("Tell me which job you want help with first.");
     const address = input.address?.trim() ?? "";
     const business = input.business?.trim() ?? "";
@@ -640,6 +641,9 @@ export class LiveDesk {
     const nickname = input.nickname?.trim() ?? "";
     const propertyType = input.propertyType?.trim() ?? "";
     if (nickname.length > MAX_NAME || propertyType.length > MAX_NAME) return this.fail(`Keep the nickname and the property type under ${MAX_NAME} characters.`);
+    // The business name goes into the cleaner's opt-in text. The address is left out: it holds house numbers and ZIP codes.
+    this.openSeal(pinKey);
+    if ([business, nickname, propertyType].some((text) => text && this.carriesCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
     const checkoutText = input.checkoutTime?.trim() ?? "";
     const checkInText = input.checkInTime?.trim() ?? "";
     const checkoutTime = checkoutText ? usualTime(checkoutText) : undefined;
@@ -865,7 +869,8 @@ export class LiveDesk {
     for (let attempt = 0; attempt < 8; attempt++) {
       this.file.pinSeal = sealPin(code, key);
       const json = `${JSON.stringify(this.file)}\n`;
-      if (json.includes(code) || json.includes(key.toString("base64"))) continue;
+      // The code as its own token (an id that only holds the digits is fine); the key anywhere.
+      if (containsCodeToken(json, code) || json.includes(key.toString("base64"))) continue;
       this.writeFile(json);
       // The engine names the lock in the private code text, so it reopens with the new location.
       if (this.file.lockLocation !== previousLock) this.stale = true;
@@ -2126,7 +2131,8 @@ export class LiveDesk {
 
   private persist(): void {
     const json = `${JSON.stringify(this.file)}\n`;
-    if (this.pin && json.includes(this.pin)) throw new Error("Could not seal the door code.");
+    // The code as its own token. An id that only holds the digits (a SID, a UUID, a booking UID) is fine.
+    if (this.pin && containsCodeToken(json, this.pin)) throw new Error("Could not seal the door code.");
     this.writeFile(json);
   }
 

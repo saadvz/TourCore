@@ -11,6 +11,7 @@ import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { photoKey, servePhoto, setCleanerPhotoFetch } from "../src/cleaner-core/photos";
+import { containsCodeToken } from "../src/cleaner-core/redact";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { CLEANER_SCOPE } from "../src/mcp/oauth/provider";
@@ -23,6 +24,7 @@ import {
   CALENDAR_ICS,
   CALENDAR_URL,
   CLEANER,
+  CLEANER_AUTH,
   CLEANER_LINE,
   CLEANER_TOKEN,
   DOOR_CODE,
@@ -30,7 +32,6 @@ import {
   HOST,
   OBSERVER,
   OFF_LIST,
-  PIN_KEY_HEADER,
   TEST_PIN_KEY,
   fakeSms,
   startWiredApp,
@@ -2107,4 +2108,114 @@ describe("Cleaner Core full diagram", () => {
     expect(PLAIN_CODE.test(replies.join("\n"))).toBe(false);
     expect(hosted.logs.join("\n").includes(serverKey)).toBe(false);
   }, 60_000);
+});
+
+describe("Cleaner Core door-code write guard: ids that only hold the digits", () => {
+  /** A Twilio-format SID (SM + 32 hex) that holds the made-up code 8088. */
+  const PROBE_SID = "SM00808800000000000000000000000000";
+  /** The code as its own token. Letters, digits, `_`, and `-` around it make it part of an id. */
+  const STANDALONE = new RegExp(`(?<![A-Za-z0-9_-])${DOOR_CODE}(?![A-Za-z0-9_-])`);
+  const WEBHOOK = "/webhooks/twilio/cleaner-core";
+
+  async function setUpWired(wired: WiredApp, stays: { id: string; start: string; end: string }[]) {
+    const steps: [string, Record<string, unknown>][] = [
+      ["get_state", { said: "2" }],
+      ["save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30 AM", checkInTime: "3:00 PM" }],
+      ["save_sources", { google: true }],
+      ["save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }],
+      ["save_schedule", {}],
+      ["save_door_code", { code: DOOR_CODE, lockLocation: LOCK }],
+      ["save_preferences", {}],
+      ["activate", { googleEvents: googleList(stays) }],
+    ];
+    for (const [name, args] of steps) {
+      const reply = await call(wired, name, args);
+      expect(reply.isError, `${name}: ${reply.text}`).toBe(false);
+    }
+  }
+
+  function savedFiles(wired: WiredApp): { path: string; text: string }[] {
+    return filesUnder(wired.root).map((path) => ({ path, text: readFileSync(path, "latin1") }));
+  }
+
+  it("takes and saves a cleaner YES whose Twilio SID holds the code, and save_arrival still works", async () => {
+    expect(PROBE_SID).toMatch(/^SM[0-9a-f]{32}$/);
+    expect(PROBE_SID).toContain(DOOR_CODE);
+    const wired = await app();
+    await setUpWired(wired, [{ id: "g-probe", start: "2026-10-14", end: "2026-10-17" }]);
+    expect((await call(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" })).isError).toBe(false);
+
+    const optIn = await wired.postTwilio(WEBHOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: PROBE_SID, token: CLEANER_AUTH });
+    expect(optIn.status).toBe(200);
+    const offer = await wired.postTwilio(WEBHOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-guard-offer", token: CLEANER_AUTH });
+    expect(offer.status).toBe(200);
+    expect((await call(wired, "get_turns")).structured?.turns).toEqual([expect.objectContaining({ checkoutDate: "2026-10-17", status: "confirmed" })]);
+    const arrival = await call(wired, "save_arrival", { time: "11:30 AM" });
+    expect(arrival.isError, arrival.text).toBe(false);
+
+    const files = savedFiles(wired);
+    const live = files.find((file) => file.path.endsWith("cleaner-live.json"));
+    const engine = files.find((file) => file.path.endsWith("cleaner-core.json"));
+    expect((JSON.parse(live?.text ?? "{}") as { seenInbound?: string[] }).seenInbound).toContain(PROBE_SID);
+    expect(engine?.text).toContain(PROBE_SID);
+    for (const file of files) expect(STANDALONE.test(file.text), file.path).toBe(false);
+  });
+
+  it("applies and saves a booking whose UID holds the code", async () => {
+    const wired = await app();
+    const stay = { id: `ev${DOOR_CODE}xyz`, start: "2026-10-14", end: "2026-10-17" };
+    await setUpWired(wired, [stay]);
+    const checked = await call(wired, "check_now", { googleEvents: googleList([stay]) });
+    expect(checked.isError, checked.text).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "get_turns")).structured?.turns).toEqual([expect.objectContaining({ checkoutDate: "2026-10-17" })]);
+    const files = savedFiles(wired);
+    expect(files.some((file) => file.text.includes(stay.id))).toBe(true);
+    for (const file of files) expect(STANDALONE.test(file.text), file.path).toBe(false);
+  });
+
+  it("counts the code only as its own token", () => {
+    for (const text of [DOOR_CODE, `x ${DOOR_CODE} y`, `code:${DOOR_CODE}.`, `"${DOOR_CODE}"`, `{"body":"Code\\n${DOOR_CODE}"}`, `{"body":"x\\u001f${DOOR_CODE}"}`]) {
+      expect(containsCodeToken(text, DOOR_CODE), text).toBe(true);
+    }
+    for (const text of [`SM00${DOOR_CODE}ab`, `ev${DOOR_CODE}xyz`, `1${DOOR_CODE}`, `${DOOR_CODE}a`, `a1b2-${DOOR_CODE}-c3d4`, `x_${DOOR_CODE}`, "", "80 88"]) {
+      expect(containsCodeToken(text, DOOR_CODE), text).toBe(false);
+    }
+    expect(containsCodeToken("a+b 1.5 c", "1.5")).toBe(true);
+    expect(containsCodeToken("a 125 c", "1.5")).toBe(false);
+  });
+
+  it("still refuses to write a file that holds the plain code as its own token", async () => {
+    const { desk } = openDesk([HOST, CLEANER], "0");
+    await setUp(desk, { groupChat: "cleaner-only" });
+    const inside = desk as unknown as {
+      file: { preferences?: { checklist: string[]; photosRequired: boolean; supplyNotes: boolean; instructions?: string } };
+      persist(): void;
+      engine: CleanerCore;
+    };
+    for (const instructions of [` ${DOOR_CODE} `, `Code\n${DOOR_CODE}`]) {
+      inside.file.preferences = { checklist: [], photosRequired: false, supplyNotes: false, instructions };
+      expect(() => inside.persist()).toThrow("Could not seal the door code.");
+    }
+    inside.file.preferences = { checklist: [], photosRequired: false, supplyNotes: false };
+    const engine = inside.engine as unknown as { hostNoteState: { id: string; body: string }[]; save(): void };
+    engine.hostNoteState.push({ id: "probe", body: `lockbox: ${DOOR_CODE}.` });
+    expect(() => engine.save()).toThrow("The door code cannot be stored in plaintext.");
+    engine.hostNoteState.pop();
+  });
+
+  it("refuses a split code in save_property's business, nickname, or property type", async () => {
+    const wired = await app();
+    await setUpWired(wired, []);
+    const base = { business: BUSINESS, address: ADDRESS, timeZone: ZONE };
+    for (const extra of [{ business: "Unit 80 88 Cleaning" }, { nickname: "Lake 80.88" }, { propertyType: "Condo 8-0-8-8" }]) {
+      const refused = await call(wired, "save_property", { ...base, ...extra });
+      expect(refused.isError, JSON.stringify(extra)).toBe(true);
+      expect(refused.text).toBe(DOOR_CODE_IN_CHAT);
+    }
+    const live = JSON.parse(savedFiles(wired).find((file) => file.path.endsWith("cleaner-live.json"))?.text ?? "{}") as { business?: string };
+    expect(live.business).toBe(BUSINESS);
+    // The address keeps its house number and ZIP code.
+    expect((await call(wired, "save_property", base)).isError).toBe(false);
+  });
 });
