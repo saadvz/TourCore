@@ -242,6 +242,8 @@ export interface CleanerCoreOptions {
   cleaner: { phone: string; approved: boolean };
   /** Standing door code. Absent means this engine never texts one. */
   pin?: string;
+  /** Where the lock is, named in the private door-code text. Never a code. */
+  lockLocation?: string;
   /** Name in the cleaner opt-in text. */
   hostName?: string;
   /** Numbers that share a group thread. They never receive the door code. */
@@ -1564,7 +1566,7 @@ class Engine implements CleanerCore {
       const pin = this.pin;
       const route = this.groupChat ? codeRoute(this.groupSeats()) : "private";
       if (route === "held") return sent;
-      const body = doorCodeBody(this.options.property.address, pin);
+      const body = doorCodeBody(this.options.property.address, pin, this.options.lockLocation?.trim() || undefined);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
       const text = await this.emit({

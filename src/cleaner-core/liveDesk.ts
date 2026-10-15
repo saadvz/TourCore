@@ -46,7 +46,12 @@ const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
 const CALENDAR_ASK = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar.";
 const ROUTINE_ASK = "Create the Cleaner Core Check and Cleaner Core Alerts routines, then save the alert routine's address and key with the secure card.";
-const PEOPLE_ASK = "Who is the host and the cleaner? Send each phone number. An observer is optional.";
+const PROPERTY_ASK = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
+const PEOPLE_ASK =
+  "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
+const PREFERENCES_ASK =
+  "Any cleaning preferences? A checklist, whether photos are required, whether the cleaner may send supply notes, and other instructions. If there are none, save empty preferences.";
+const REVIEW_ASK = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
 
@@ -60,8 +65,32 @@ const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
 const ROUTINE_NEEDED = "Send the routine's https address and its key.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
-const DOOR_CODE_ASK = "What's the door code? I'll save it and I won't repeat it.";
+const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
 const MAX_CALENDARS = 8;
+const MAX_CONTACTS = 4;
+const MAX_NAME = 40;
+const MAX_LOCK_LOCATION = 80;
+const MAX_CHECKLIST = 12;
+const MAX_CHECKLIST_ITEM = 80;
+const MAX_INSTRUCTIONS = 300;
+const CONTACT_ROLES = ["co-host", "assistant", "observer"] as const;
+const GROUP_CHOICES = ["cleaner-only", "cleaner-and-host", "everyone"] as const;
+
+export type ContactRole = (typeof CONTACT_ROLES)[number];
+export type GroupChoice = (typeof GROUP_CHOICES)[number];
+
+interface Contact {
+  name: string;
+  role: ContactRole;
+  phone: string;
+}
+
+interface Preferences {
+  checklist: string[];
+  photosRequired: boolean;
+  supplyNotes: boolean;
+  instructions?: string;
+}
 /** The name a legacy single calendar link reads as. Its source id stays `guesty-lite`. */
 const LEGACY_CALENDAR = "Guesty Lite";
 
@@ -89,12 +118,26 @@ export type ToolReply = ToolOk | ToolNo;
 interface LiveFile {
   choice?: "tours" | "cleaners";
   business?: string;
+  nickname?: string;
   address?: string;
+  propertyType?: string;
   timeZone?: string;
+  /** The usual checkout and check-in times, as "HH:MM". */
+  checkoutTime?: string;
+  checkInTime?: string;
   propertyId?: string;
   host?: string;
   cleaner?: string;
+  cleanerName?: string;
+  /** The legacy single observer from save_people. It reads as one contact named Observer. */
   observer?: string;
+  contacts?: Contact[];
+  /** Unset keeps every saved contact in the group, as before the choice existed. */
+  groupChat?: GroupChoice;
+  /** Where the lock is. Never digits that could be a code. */
+  lockLocation?: string;
+  /** Set once the host saved cleaning preferences or said there are none. */
+  preferences?: Preferences;
   /** Legacy single link from save_calendar_link. It reads as one calendar named Guesty Lite. */
   calendarLink?: string;
   /** Saved calendar links in dedupe order, after the legacy link. Each one is the source `ical:<slug>`. */
@@ -242,6 +285,26 @@ function fromLink(source: BookingSource, origin: string): BookingSource {
   return { kind: source.kind, read: async () => ({ ...(await source.read()), origin }) };
 }
 
+/** A stated clock time with AM or PM, like "10:30 AM", as "HH:MM". Anything else is undefined. */
+function usualTime(text: string): string | undefined {
+  const times = spokenTimes(normalize(text));
+  const time = times[0];
+  if (times.length !== 1 || !time?.meridiem) return undefined;
+  const hour = (time.hour % 12) + (time.meridiem === "PM" ? 12 : 0);
+  return `${String(hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
+}
+
+/** "HH:MM" as "10:30 AM". */
+function clockText(hm: string): string {
+  const [hour = 0, minute = 0] = hm.split(":").map(Number);
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+/** The saved extra contacts. A legacy observer reads as one contact named Observer and comes first. */
+function contactsOf(file: LiveFile): Contact[] {
+  return [...(file.observer ? [{ name: "Observer", role: "observer" as const, phone: file.observer }] : []), ...(file.contacts ?? [])];
+}
+
 function propertyIdFor(business: string): string {
   const slug = business.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "property";
   return `live-${slug}`;
@@ -375,7 +438,15 @@ export class LiveDesk {
     return this.withFailure(this.reply(this.cleaningState()), failure);
   }
 
-  saveProperty(input: { address?: string; business?: string; timeZone?: string }): ToolReply {
+  saveProperty(input: {
+    address?: string;
+    business?: string;
+    timeZone?: string;
+    nickname?: string;
+    propertyType?: string;
+    checkoutTime?: string;
+    checkInTime?: string;
+  }): ToolReply {
     if (this.file.choice !== "cleaners") return this.fail("Tell me which job you want help with first.");
     const address = input.address?.trim() ?? "";
     const business = input.business?.trim() ?? "";
@@ -383,15 +454,42 @@ export class LiveDesk {
     if (!address || !business || !timeZone.includes("/")) {
       return this.fail("I need the business name, the property address, and the time zone.");
     }
+    const nickname = input.nickname?.trim() ?? "";
+    const propertyType = input.propertyType?.trim() ?? "";
+    if (nickname.length > MAX_NAME || propertyType.length > MAX_NAME) return this.fail(`Keep the nickname and the property type under ${MAX_NAME} characters.`);
+    const checkoutText = input.checkoutTime?.trim() ?? "";
+    const checkInText = input.checkInTime?.trim() ?? "";
+    const checkoutTime = checkoutText ? usualTime(checkoutText) : undefined;
+    const checkInTime = checkInText ? usualTime(checkInText) : undefined;
+    if ((checkoutText && !checkoutTime) || (checkInText && !checkInTime)) {
+      return this.fail("Send the usual checkout and check-in times like 11:00 AM and 3:00 PM.");
+    }
     this.file.business = business;
     this.file.address = address;
     this.file.timeZone = timeZone;
     this.file.propertyId = propertyIdFor(business);
+    this.keep("nickname", nickname || undefined);
+    this.keep("propertyType", propertyType || undefined);
+    if (checkoutTime) this.file.checkoutTime = checkoutTime;
+    if (checkInTime) this.file.checkInTime = checkInTime;
     this.persist();
-    return this.reply({ next: PEOPLE_ASK });
+    // The engine reads the usual times when it opens.
+    this.engine = undefined;
+    return this.reply({ next: this.setupNext() });
   }
 
-  savePeople(input: { host?: string; cleaner?: string; observer?: string }): ToolReply {
+  /**
+   * Saves the host, the cleaner (with an optional name), up to four extra contacts, and the
+   * group-chat choice. Each save replaces the saved people. The legacy observer counts as a contact.
+   */
+  savePeople(input: {
+    host?: string;
+    cleaner?: string;
+    observer?: string;
+    cleanerName?: string;
+    contacts?: { name?: string; role?: string; phone?: string }[];
+    groupChat?: string;
+  }): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const host = parsePhone(input.host ?? "");
     const cleaner = parsePhone(input.cleaner ?? "");
@@ -404,17 +502,42 @@ export class LiveDesk {
     if (observer && (observer === host || observer === cleaner)) {
       return this.fail("The observer has to be a different phone number from the host and the cleaner.");
     }
+    const cleanerName = input.cleanerName?.trim() ?? "";
+    if (cleanerName.length > MAX_NAME) return this.fail(`Keep the cleaner's name under ${MAX_NAME} characters.`);
+    const groupChat = input.groupChat?.trim() ?? "";
+    if (groupChat && !(GROUP_CHOICES as readonly string[]).includes(groupChat)) {
+      return this.fail("Choose who gets the texts: cleaner-only, cleaner-and-host, or everyone.");
+    }
+    const contacts: Contact[] = [];
+    const used = new Set([host, cleaner, ...(observer ? [observer] : [])]);
+    for (const contact of input.contacts ?? []) {
+      const name = contact.name?.trim() ?? "";
+      const role = contact.role?.trim() ?? "";
+      const phone = parsePhone(contact.phone ?? "");
+      if (!name || name.length > MAX_NAME) return this.fail(`Give each contact a name under ${MAX_NAME} characters.`);
+      if (!(CONTACT_ROLES as readonly string[]).includes(role)) return this.fail("Each contact is a co-host, an assistant, or an observer.");
+      if (!phone) return this.fail(`Send ${name}'s phone number.`);
+      if (used.has(phone)) return this.fail("Each person needs a different phone number.");
+      if (this.chatCarriesDoorCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
+      used.add(phone);
+      contacts.push({ name, role: role as ContactRole, phone });
+    }
+    if (contacts.length + (observer ? 1 : 0) > MAX_CONTACTS) return this.fail(`I can keep up to ${MAX_CONTACTS} extra contacts.`);
+    if (this.chatCarriesDoorCode(cleanerName)) return this.fail(DOOR_CODE_IN_CHAT);
     this.file.host = host;
     this.file.cleaner = cleaner;
     if (observer) this.file.observer = observer;
     else delete this.file.observer;
+    this.keep("cleanerName", cleanerName || undefined);
+    this.keep("contacts", contacts.length > 0 ? contacts : undefined);
+    this.keep("groupChat", (groupChat || undefined) as GroupChoice | undefined);
     this.persist();
     this.engine = undefined;
-    return this.reply({ next: CALENDAR_ASK });
+    return this.reply({ next: this.setupNext() });
   }
 
   saveCalendarLink(input: { url?: string; google?: boolean }): ToolReply {
-    if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
@@ -422,7 +545,7 @@ export class LiveDesk {
     if (url) this.file.calendarLink = url;
     if (input.google) this.file.google = true;
     this.persist();
-    return this.reply({ next: DOOR_CODE_ASK });
+    return this.reply({ next: this.setupNext() });
   }
 
   /**
@@ -433,7 +556,7 @@ export class LiveDesk {
    * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
    */
   saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }): ToolReply {
-    if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
+    if (!this.file.address) return this.fail("Save the property first.");
     const next: LiveFile = { ...this.file };
     if (input.calendars !== undefined) {
       const calendars = input.calendars.map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
@@ -461,30 +584,66 @@ export class LiveDesk {
     }
     this.file = next;
     this.persist();
-    return this.reply({ next: DOOR_CODE_ASK });
+    return this.reply({ next: this.setupNext() });
   }
 
-  saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
+  /**
+   * Seals the door code. lockLocation names where the lock is, for the private code text. Leaving it
+   * out keeps the saved one, and an empty one clears it. It may not carry a run of 4 or more digits.
+   */
+  saveDoorCode(input: { code?: string; lockLocation?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
     if (!hasSources(this.file) && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
+    const lockLocation = input.lockLocation?.trim();
+    if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(lockLocation) || this.chatCarriesDoorCode(lockLocation))) {
+      return this.fail(`Say where the lock is in under ${MAX_LOCK_LOCATION} characters, with no code or long number in it.`);
+    }
     if (!pinKey) return this.fail(PIN_KEY_MISSING);
     const previousPin = this.pin;
     const previousSeal = this.file.pinSeal;
+    const previousLock = this.file.lockLocation;
     this.pin = code;
+    if (lockLocation !== undefined) this.keep("lockLocation", lockLocation || undefined);
     for (let attempt = 0; attempt < 8; attempt++) {
       this.file.pinSeal = sealPin(code, pinKey);
       const json = `${JSON.stringify(this.file)}\n`;
       if (json.includes(code) || json.includes(pinKey.toString("base64"))) continue;
       this.writeFile(json);
+      // The engine names the lock in the private code text, so it reopens with the new location.
+      if (this.file.lockLocation !== previousLock) this.engine = undefined;
       return this.reply({
         next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
       });
     }
     this.pin = previousPin;
     this.file.pinSeal = previousSeal;
+    this.keep("lockLocation", previousLock);
     return this.fail("Could not seal the door code.");
+  }
+
+  /**
+   * Saves the cleaning preferences. A field left out keeps what was saved, and `{}` the first time
+   * means there are none, which still moves setup on to the review.
+   */
+  savePreferences(input: { checklist?: string[]; photosRequired?: boolean; supplyNotes?: boolean; instructions?: string }): ToolReply {
+    if (!this.pin && !this.file.pinSeal) return this.fail("Save the door code first.");
+    const saved = this.file.preferences ?? { checklist: [], photosRequired: false, supplyNotes: false };
+    const checklist = input.checklist === undefined ? saved.checklist : input.checklist.map((item) => item.trim()).filter((item) => item.length > 0);
+    if (checklist.length > MAX_CHECKLIST) return this.fail(`I can keep up to ${MAX_CHECKLIST} checklist items.`);
+    if (checklist.some((item) => item.length > MAX_CHECKLIST_ITEM)) return this.fail(`Keep each checklist item under ${MAX_CHECKLIST_ITEM} characters.`);
+    const instructions = input.instructions === undefined ? saved.instructions : input.instructions.trim() || undefined;
+    if (instructions && instructions.length > MAX_INSTRUCTIONS) return this.fail(`Keep the other instructions under ${MAX_INSTRUCTIONS} characters.`);
+    if ([...checklist, instructions ?? ""].some((text) => text && this.chatCarriesDoorCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
+    this.file.preferences = {
+      checklist,
+      photosRequired: input.photosRequired ?? saved.photosRequired,
+      supplyNotes: input.supplyNotes ?? saved.supplyNotes,
+      ...(instructions ? { instructions } : {}),
+    };
+    this.persist();
+    return this.reply({ next: this.setupNext() });
   }
 
   setUpTexting(): ToolReply {
@@ -494,6 +653,14 @@ export class LiveDesk {
     return this.reply({
       next: "Texting is saved. The cleaner gets one text asking them to reply YES, and only after you confirm the checkout and the next check-in.",
     });
+  }
+
+  /** Review & Activate: saves texting, then runs the checks. Takes the same input as run_checks. */
+  activate(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
+    if (!this.file.preferences) return Promise.resolve(this.fail("Save the cleaning preferences first, or save empty ones if there are none."));
+    const texting = this.setUpTexting();
+    if (!texting.ok) return Promise.resolve(texting);
+    return this.runChecks(input);
   }
 
   /**
@@ -665,7 +832,7 @@ export class LiveDesk {
    * already timed is left to needsTimes.
    */
   private newBookingAlert(engine: CleanerCore): { id: string; body: string }[] {
-    if (!groupChatEnabled(this.env()) || !this.file.address || !this.file.timeZone) return [];
+    if (!this.groupOn() || !this.file.address || !this.file.timeZone) return [];
     const job = timesTarget(engine);
     if (!job || job.status !== "discovered" || job.checkoutTime || (this.file.timedJobs ?? []).includes(job.id)) return [];
     const day = formatWhen(zonedInstant(job.checkoutDate, "12:00", this.file.timeZone), this.file.timeZone).day;
@@ -692,7 +859,7 @@ export class LiveDesk {
     const engine = this.engine;
     const target = timesTarget(engine);
     const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
-    if (groupChatEnabled(this.env())) {
+    if (this.groupOn()) {
       await engine.confirmHostTimes({ checkout, checkIn });
     } else {
       await engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
@@ -754,12 +921,12 @@ export class LiveDesk {
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
-    if (groupChatEnabled(this.env()) && this.engine.groupPinSettled() && !sentNow) {
+    if (this.groupOn() && this.engine.groupPinSettled() && !sentNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "", outcome: "settled", notePending: false };
       this.persist();
       return this.reply({ next: "A text failed to send. I saved it for your review and did not count it as delivered." });
     }
-    if (sentNow && groupChatEnabled(this.env()) && !privateNow) {
+    if (sentNow && this.groupOn() && !privateNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
@@ -1003,33 +1170,116 @@ export class LiveDesk {
     }
   }
 
+  /**
+   * The setup steps follow the diagram: property, sources, people, door code, preferences, then
+   * review. At review the saved choices come back as `setup` for Grok to summarize in its own words.
+   */
   private cleaningState(): Record<string, unknown> {
     const done: string[] = [];
     if (this.file.address) done.push("Property saved.");
-    if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
+    if (this.file.cleaner) done.push(this.peopleLine());
     const calendars = calendarsOf(this.file).length;
     if (calendars === 1) done.push("Calendar link saved.");
     if (calendars > 1) done.push(`${calendars} calendar links saved.`);
     if (this.file.google) done.push("Google Calendar saved.");
     if (this.pin) done.push("Door code saved.");
-    if (this.file.texting) done.push("Texting saved.");
-    if (this.file.texting && groupChatEnabled(this.env())) {
-      done.push(this.file.observer ? "Group chat set up with you, the cleaner, and the observer." : "Group chat set up with you and the cleaner.");
+    const preferences = this.file.preferences;
+    if (preferences) {
+      const any = preferences.checklist.length > 0 || preferences.photosRequired || preferences.supplyNotes || Boolean(preferences.instructions);
+      done.push(any ? "Preferences saved." : "No cleaning preferences.");
     }
+    if (this.file.texting) done.push("Texting saved.");
+    if (this.file.texting && this.groupOn()) done.push(this.groupLine());
     if (this.file.checked) done.push("Checks finished.");
-    let next = "What's the property address, and what should I call the business?";
-    if (!this.file.address) next = "What's the property address, and what should I call the business?";
-    else if (!this.file.cleaner) next = PEOPLE_ASK;
+    let next: string;
+    if (!this.file.address) next = PROPERTY_ASK;
     else if (!hasSources(this.file)) next = CALENDAR_ASK;
+    else if (!this.file.cleaner) next = PEOPLE_ASK;
     else if (!this.pin) next = DOOR_CODE_ASK;
-    else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
+    else if (!this.file.texting) next = preferences ? REVIEW_ASK : PREFERENCES_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+    const review = next === REVIEW_ASK;
     if (this.held) next = this.holdLine();
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
-    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
+    return {
+      done,
+      next,
+      ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
+      ...(this.file.checked ? { turns: this.turns() } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
+    };
+  }
+
+  /** The next setup step, for a save tool's reply. */
+  private setupNext(): string {
+    return String(this.cleaningState().next);
+  }
+
+  private peopleLine(): string {
+    const contacts = contactsOf(this.file).length;
+    if (contacts === 0) return "Cleaner saved.";
+    if (this.file.observer && !this.file.contacts) return "Cleaner and observer saved.";
+    return `Cleaner and ${contacts} extra ${contacts === 1 ? "contact" : "contacts"} saved.`;
+  }
+
+  private groupLine(): string {
+    const extra = this.groupExtras();
+    if (extra.length === 0) return "Group chat set up with you and the cleaner.";
+    if (this.file.observer && extra.length === 1) return "Group chat set up with you, the cleaner, and the observer.";
+    return "Group chat set up with you, the cleaner, and your contacts.";
+  }
+
+  /**
+   * The saved choices, for Grok's review summary. Phones show their last 4 digits only. The door
+   * code is never here, and access holds the lock location alone.
+   */
+  private reviewSetup(): Record<string, unknown> {
+    const file = this.file;
+    const last4 = (phone: string | undefined) => {
+      const four = phone?.replace(/\D/g, "").slice(-4) ?? "";
+      return four && !this.leaks(four) ? { phoneLast4: four } : {};
+    };
+    return {
+      property: {
+        business: file.business,
+        ...(file.nickname ? { nickname: file.nickname } : {}),
+        address: file.address,
+        ...(file.propertyType ? { propertyType: file.propertyType } : {}),
+        timeZone: file.timeZone,
+        ...(file.checkoutTime ? { checkoutTime: clockText(file.checkoutTime) } : {}),
+        ...(file.checkInTime ? { checkInTime: clockText(file.checkInTime) } : {}),
+      },
+      sources: { calendars: calendarsOf(file).map((calendar) => calendar.name), google: file.google === true },
+      people: {
+        host: last4(file.host),
+        cleaner: { ...(file.cleanerName ? { name: file.cleanerName } : {}), ...last4(file.cleaner) },
+        contacts: contactsOf(file).map((contact) => ({ name: contact.name, role: contact.role, ...last4(contact.phone) })),
+        groupChat: file.groupChat ?? "everyone",
+        groupThread: this.groupOn(),
+      },
+      access: file.lockLocation ? { lockLocation: file.lockLocation } : {},
+      preferences: file.preferences,
+    };
+  }
+
+  /** Group texts are on when the server allows them and the host didn't choose cleaner-only. */
+  private groupOn(): boolean {
+    return groupChatEnabled(this.env()) && this.file.groupChat !== "cleaner-only";
+  }
+
+  /** The contacts who join the group. cleaner-and-host leaves them all out. */
+  private groupExtras(): { phone: string; name: string }[] {
+    if (this.file.groupChat === "cleaner-and-host") return [];
+    return contactsOf(this.file).map((contact) => ({ phone: contact.phone, name: contact.name }));
+  }
+
+  /** Sets a saved field, or removes it when the value is undefined. */
+  private keep<K extends keyof LiveFile>(key: K, value: LiveFile[K] | undefined): void {
+    if (value === undefined) delete this.file[key];
+    else this.file[key] = value;
   }
 
   /**
@@ -1088,14 +1338,21 @@ export class LiveDesk {
     }
     const env = () => this.env();
     const dataDir = join(this.root, "cleaner-job");
-    const observer = parsePhone(file.observer ?? "");
+    const extra = this.groupExtras();
     mkdirSync(dataDir, { recursive: true });
     return openCleanerCore({
       enabled: true,
-      property: { id: file.propertyId, address: file.address, timeZone: file.timeZone },
+      property: {
+        id: file.propertyId,
+        address: file.address,
+        timeZone: file.timeZone,
+        ...(file.checkoutTime ? { defaultCheckout: file.checkoutTime } : {}),
+        ...(file.checkInTime ? { defaultCheckIn: file.checkInTime } : {}),
+      },
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),
+      ...(file.lockLocation ? { lockLocation: file.lockLocation } : {}),
       hostName: file.business,
       consented: file.texting === true,
       allowlist: smsAllowlist(env()),
@@ -1111,12 +1368,12 @@ export class LiveDesk {
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
       pinFailedBody: PIN_FAILED,
-      ...(groupChatEnabled(env())
+      ...(this.groupOn()
         ? {
             groupChat: {
               hostName: "Cory",
-              cleanerName: "Maria",
-              ...(observer ? { extra: [{ phone: observer, name: "Observer" }] } : {}),
+              cleanerName: file.cleanerName ?? "Maria",
+              ...(extra.length > 0 ? { extra } : {}),
             },
           }
         : {}),
@@ -1167,7 +1424,7 @@ export class LiveDesk {
     if (!scratchToolsOn(this.env())) return SCRATCH_PROPERTY_REFUSAL;
     if (from !== undefined && !isScratchTestNumber(from)) return SCRATCH_NUMBER_REFUSAL;
     if (!isScratchPropertyAddress(this.file.address)) return SCRATCH_PROPERTY_REFUSAL;
-    const saved = [this.file.host, this.file.cleaner, this.file.observer].filter((phone): phone is string => Boolean(phone));
+    const saved = [this.file.host, this.file.cleaner, ...contactsOf(this.file).map((contact) => contact.phone)].filter((phone): phone is string => Boolean(phone));
     if (saved.some((phone) => !isScratchTestNumber(phone))) return SCRATCH_NUMBER_REFUSAL;
     if (from !== undefined) {
       const parsed = parsePhone(from);
@@ -1279,7 +1536,7 @@ export class LiveDesk {
   }
 
   private privateCodeWaiting(): boolean {
-    if (!groupChatEnabled(this.env()) || !this.engine) return false;
+    if (!this.groupOn() || !this.engine) return false;
     const tracked = this.file.pinSend;
     if (tracked?.delivered === true && tracked.outcome !== "undelivered") return false;
     if (tracked?.outcome === "undelivered") return true;
@@ -1348,7 +1605,7 @@ export class LiveDesk {
     }
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) {
-      if (!groupChatEnabled(this.env())) return { sent: [] };
+      if (!this.groupOn()) return { sent: [] };
       this.resume();
       if (!this.engine) return { sent: [] };
       const result = await this.engine.receive({ id, from, text });

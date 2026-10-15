@@ -18,14 +18,31 @@ const TOOLS = [
   {
     name: "save_property",
     title: "Save the property",
-    description: "Saves the business name, the property address, and the time zone.",
-    input: z.object({ business: z.string(), address: z.string(), timeZone: z.string() }),
+    description:
+      "Saves the business name, the property address, and the time zone. Optional: the property's nickname, its type, and the usual checkoutTime and checkInTime, each a clock time like 11:00 AM.",
+    input: z.object({
+      business: z.string(),
+      address: z.string(),
+      timeZone: z.string(),
+      nickname: z.string().optional(),
+      propertyType: z.string().optional(),
+      checkoutTime: z.string().optional(),
+      checkInTime: z.string().optional(),
+    }),
   },
   {
     name: "save_people",
     title: "Save the people",
-    description: "Saves the host and the cleaner. Each one is a phone number. An observer is optional.",
-    input: z.object({ host: z.string(), cleaner: z.string(), observer: z.string().optional() }),
+    description:
+      "Saves the host and the cleaner. Each one is a phone number. An observer is optional. Optional: cleanerName, up to 4 contacts (name, role co-host, assistant, or observer, and phone), and groupChat: cleaner-only (one-to-one texts), cleaner-and-host, or everyone. Contacts never get the door code.",
+    input: z.object({
+      host: z.string(),
+      cleaner: z.string(),
+      observer: z.string().optional(),
+      cleanerName: z.string().optional(),
+      contacts: z.array(z.object({ name: z.string(), role: z.enum(["co-host", "assistant", "observer"]), phone: z.string() })).max(4).optional(),
+      groupChat: z.enum(["cleaner-only", "cleaner-and-host", "everyone"]).optional(),
+    }),
   },
   {
     name: "save_calendar_link",
@@ -47,8 +64,28 @@ const TOOLS = [
   {
     name: "save_door_code",
     title: "Save the door code",
-    description: "Stores the door code. The reply never includes the digits. The code is not returned later.",
-    input: z.object({ code: z.string() }),
+    description:
+      "Stores the door code. The reply never includes the digits. The code is not returned later. lockLocation is optional: where the lock is, like back door lockbox, with no numbers. It is named in the cleaner's private code text.",
+    input: z.object({ code: z.string(), lockLocation: z.string().optional() }),
+  },
+  {
+    name: "save_preferences",
+    title: "Save the cleaning preferences",
+    description:
+      "Saves the cleaning preferences: checklist items (up to 12, each under 80 characters), photosRequired, supplyNotes, and other instructions (under 300 characters). A field left out keeps what was saved. Pass {} when the host has none.",
+    input: z.object({
+      checklist: z.array(z.string()).optional(),
+      photosRequired: z.boolean().optional(),
+      supplyNotes: z.boolean().optional(),
+      instructions: z.string().optional(),
+    }),
+  },
+  {
+    name: "activate",
+    title: "Activate",
+    description:
+      "Call after the host reviewed the setup and replied Activate. Saves texting and runs the checks, like run_checks. It does not send a live text. When the host uses Google Calendar, pass its events as googleEvents.",
+    input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
     name: "set_up_texting",
@@ -226,10 +263,18 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
     if (name === "save_door_code" && key === "code") continue;
     if (typeof value === "string" && desk.chatCarriesDoorCode(value)) return true;
   }
-  // Calendar names are shown back, so a door code can't hide in one.
+  // Calendar names, contact names, and checklist items are shown back, so a door code can't hide in one.
   if (name === "save_sources") {
     const calendars = (args as { calendars?: { name: string }[] }).calendars ?? [];
     if (calendars.some((calendar) => desk.chatCarriesDoorCode(calendar.name))) return true;
+  }
+  if (name === "save_people") {
+    const contacts = (args as { contacts?: { name: string }[] }).contacts ?? [];
+    if (contacts.some((contact) => desk.chatCarriesDoorCode(contact.name))) return true;
+  }
+  if (name === "save_preferences") {
+    const checklist = (args as { checklist?: string[] }).checklist ?? [];
+    if (checklist.some((item) => desk.chatCarriesDoorCode(item))) return true;
   }
   return false;
 }
@@ -239,15 +284,19 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
     case "save_property":
-      return desk.saveProperty(args as { business: string; address: string; timeZone: string });
+      return desk.saveProperty(args as Parameters<LiveDesk["saveProperty"]>[0]);
     case "save_people":
-      return desk.savePeople(args as { host: string; cleaner: string; observer?: string });
+      return desk.savePeople(args as Parameters<LiveDesk["savePeople"]>[0]);
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url?: string; google?: boolean });
     case "save_sources":
       return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean });
     case "save_door_code":
-      return desk.saveDoorCode(args as { code: string }, pinKey);
+      return desk.saveDoorCode(args as { code: string; lockLocation?: string }, pinKey);
+    case "save_preferences":
+      return desk.savePreferences(args as Parameters<LiveDesk["savePreferences"]>[0]);
+    case "activate":
+      return desk.activate(args as { googleEvents?: GoogleEventList });
     case "set_up_texting":
       return desk.setUpTexting();
     case "get_turns":
