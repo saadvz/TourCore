@@ -62,6 +62,22 @@ const TOOLS = [
     }),
   },
   {
+    name: "save_schedule",
+    title: "Save the messaging schedule",
+    description:
+      "Saves when the cleaner gets texts. firstText: when-confirmed (right after the host confirms the times) or days-after-check-in with firstTextDays, sent at 9:00 AM that day. reminder: morning-of or days-before-checkout with reminderDays, at reminderTime like 6:00 PM. Days run 1 to 14. Optional quietFrom and quietUntil, like 9:00 PM and 8:00 AM, hold the first cleaning text and the reminder until they end; empty ones clear them. escalateTo names who should hear about problems; alerts still go to the host. A field left out keeps what was saved. Pass {} to keep the defaults. Nothing here sends the door code.",
+    input: z.object({
+      firstText: z.enum(["when-confirmed", "days-after-check-in"]).optional(),
+      firstTextDays: z.number().int().min(1).max(14).optional(),
+      reminder: z.enum(["morning-of", "days-before-checkout"]).optional(),
+      reminderDays: z.number().int().min(1).max(14).optional(),
+      reminderTime: z.string().optional(),
+      quietFrom: z.string().optional(),
+      quietUntil: z.string().optional(),
+      escalateTo: z.string().optional(),
+    }),
+  },
+  {
     name: "save_door_code",
     title: "Save the door code",
     description:
@@ -291,6 +307,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.saveCalendarLink(args as { url?: string; google?: boolean });
     case "save_sources":
       return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean });
+    case "save_schedule":
+      return desk.saveSchedule(args as Parameters<LiveDesk["saveSchedule"]>[0]);
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string; lockLocation?: string }, pinKey);
     case "save_preferences":
