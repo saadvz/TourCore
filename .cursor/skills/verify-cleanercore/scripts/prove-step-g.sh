@@ -13,6 +13,10 @@ export NODE_OPTIONS="${NODE_OPTIONS:-} --disable-warning=ExperimentalWarning"
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 SKILL="$(cd "$(dirname "$0")/.." && pwd)"
 EVIDENCE="$SKILL/evidence/step-g"
+if [[ -n "${PROVE_STEP_G_EVIDENCE:-}" ]]; then
+  mkdir -p "$PROVE_STEP_G_EVIDENCE"
+  EVIDENCE="$(cd "$PROVE_STEP_G_EVIDENCE" && pwd)"
+fi
 rm -rf "$EVIDENCE"
 mkdir -p "$EVIDENCE"
 cd "$ROOT"
@@ -96,6 +100,108 @@ assert_journey() {
 
 smoke() {
   env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- "$@"
+}
+
+# Paths that still run scripts/ci-check.sh. features/g-ci-local.md says why.
+# A directory entry matches every file under it. A file entry matches that path only.
+CI_CHECK_PATHS=(
+  # CI files
+  ".github/workflows/"
+  "scripts/ci-check.sh"
+  # Shared pipeline code
+  "scripts/build.mjs"
+  "scripts/scan-cleaner-secrets.mjs"
+  "scripts/scratch-pin-pattern.mjs"
+  "scripts/cleaner-seal-test-key.mjs"
+  "package.json"
+  "package-lock.json"
+  "tsconfig.json"
+  "vitest.config.ts"
+  "vitest.eval.config.ts"
+  "grok-template/SETUP_PROMPT.md"
+)
+
+collect_changed_files() {
+  local base=""
+  if git rev-parse --verify --quiet origin/master >/dev/null; then
+    base="$(git merge-base HEAD origin/master)"
+  elif git rev-parse --verify --quiet master >/dev/null; then
+    base="$(git merge-base HEAD master)"
+  fi
+  if [[ -n "$base" ]]; then
+    git diff --name-only "$base" HEAD
+  fi
+  git diff --name-only
+  git diff --name-only --cached
+  git ls-files --others --exclude-standard
+}
+
+changed_file_needs_ci_check() {
+  local file="$1"
+  local path
+  for path in "${CI_CHECK_PATHS[@]}"; do
+    if [[ "$path" == */ ]]; then
+      if [[ "$file" == "$path"* ]]; then
+        return 0
+      fi
+    elif [[ "$file" == "$path" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_logged() {
+  local dir="$1"
+  local name="$2"
+  shift 2
+  printf '%s\n' "$*" >"$dir/$name.command"
+  set +e
+  "$@" >"$dir/$name.stdout.txt" 2>"$dir/$name.stderr.txt"
+  local code=$?
+  set -e
+  printf '%s\n' "$code" >"$dir/$name.exit"
+  if [[ "$code" != "0" ]]; then
+    fail "$name exit $code"
+  fi
+}
+
+run_ci_gate() {
+  local dir="$EVIDENCE/ci-local"
+  mkdir -p "$dir"
+  local changed=()
+  mapfile -t changed < <(collect_changed_files | sed '/^$/d' | sort -u)
+  if ((${#changed[@]})); then
+    printf '%s\n' "${changed[@]}" >"$dir/changed-files.txt"
+  else
+    : >"$dir/changed-files.txt"
+  fi
+  local file
+  local full=0
+  for file in "${changed[@]}"; do
+    if changed_file_needs_ci_check "$file"; then
+      full=1
+      break
+    fi
+  done
+  if [[ "$full" == "1" ]]; then
+    printf '%s\n' "ci-check" >"$dir/decision.txt"
+    run_logged "$dir" ci bash scripts/ci-check.sh
+    return
+  fi
+  printf '%s\n' "related" >"$dir/decision.txt"
+  local existing=()
+  for file in "${changed[@]}"; do
+    if [[ -f "$file" ]]; then
+      existing+=("$file")
+    fi
+  done
+  if ((${#existing[@]})); then
+    run_logged "$dir" related npx vitest related --run "${existing[@]}"
+  else
+    run_logged "$dir" related npx vitest related --run
+  fi
+  run_logged "$dir" typecheck npm run typecheck
 }
 
 # ci-local runs last so a journey failure stops first. The folder is still the CI proof.
@@ -374,6 +480,16 @@ PHRASES
   ' "$EVIDENCE/stop-help-injury/everyday.stdout.txt" "$EVIDENCE/stop-help-injury/result.txt"
 }
 
+if [[ "${PROVE_STEP_G_CI_ONLY:-}" == "1" ]]; then
+  run_ci_gate
+  if ! node scripts/scan-cleaner-secrets.mjs "$EVIDENCE"; then
+    fail "step G evidence contains a configured scratch secret"
+  fi
+  printf '%s\n' "ci-gate pass" >"$EVIDENCE/result.txt"
+  printf '%s\n' "$EVIDENCE"
+  exit 0
+fi
+
 run_journeys
 
 printf '%s\n' "== regressions"
@@ -388,16 +504,7 @@ if ! bash "$SKILL/scripts/prove-step-f.sh" >"$EVIDENCE/regression-step-f.txt"; t
 fi
 
 doctor "$EVIDENCE/ci-local"
-mkdir -p "$EVIDENCE/ci-local"
-printf '%s\n' "bash scripts/ci-check.sh" >"$EVIDENCE/ci-local/ci.command"
-set +e
-bash scripts/ci-check.sh >"$EVIDENCE/ci-local/ci.stdout.txt" 2>"$EVIDENCE/ci-local/ci.stderr.txt"
-ci_code=$?
-set -e
-printf '%s\n' "$ci_code" >"$EVIDENCE/ci-local/ci.exit"
-if [[ "$ci_code" != "0" ]]; then
-  fail "ci-local exit $ci_code"
-fi
+run_ci_gate
 printf '%s\n' "env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --watch-freshness --feed $GUESTY --review stale-source" >"$EVIDENCE/ci-local/flag-off.command"
 set +e
 env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --watch-freshness --feed "$GUESTY" --review stale-source \
@@ -420,6 +527,7 @@ regressions: prove-step-d.sh prove-step-e.sh prove-step-f.sh
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-g.sh
 pins: redacted
 stale-default: 3 hours, three missed hourly Guesty Lite polls
+ci-gate: vitest related and typecheck, or scripts/ci-check.sh when the diff hits the path list
 EOF
 
 cat >"$EVIDENCE/stand-in.txt" <<'EOF'
@@ -431,7 +539,7 @@ This run used the in-process doctor/smoke CLI. A live cleaning job will not do t
 4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. Temporary directories were removed after stdout was saved.
 5. Applied each --reply inside the process. A reply that starts with @ reads a file inside the process. The exposure reply file was a temporary file outside this evidence folder and was deleted. Neither path received an inbound SMS.
 6. Printed no door code. A crash is --crash after-accept or --crash before-pin, which stops the process after the durable row is saved. It is not a kill of a live host.
-7. ci-local ran scripts/ci-check.sh: typecheck, build, the full test suite, the cleaner-core tests with the flag on and off, the secret scan, the baseline eval, and the SETUP_PROMPT check. Then a flag-off smoke exited 2.
+7. The local CI gate reads the git diff. When a changed file is under .github/workflows/, or is scripts/ci-check.sh, or is shared pipeline code listed in the script, ci-local runs scripts/ci-check.sh. That run is typecheck, build, the full test suite, the cleaner-core tests with the flag on and off, the secret scan, the baseline eval, and the SETUP_PROMPT check. Any other diff runs npx vitest related --run on the changed files, then npm run typecheck. A failing related test or a failing typecheck exits nonzero. Then a flag-off smoke exited 2.
 EOF
 
 printf '%s\n' "$EVIDENCE"
