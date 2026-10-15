@@ -26,6 +26,8 @@ const PRIVATE_LINE = privateCodeLine("Maria");
 const TIME_LINE = groupTimeLine("Cory");
 const HOLD = holdNote(ADDRESS);
 const RESUME = resumeNote(ADDRESS);
+const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
+const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.";
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
@@ -88,6 +90,26 @@ async function joined(sent: ReturnType<typeof box>, extra = false) {
   await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
   await job.receive({ id: "schedule", from: CLEANER, text: "YES" });
   return job;
+}
+
+async function afterCode(label: string) {
+  const sent = box();
+  const job = await joined(sent);
+  await job.receive({ id: `${label}-left`, from: OWNER, text: "guests have left" });
+  return { sent, job };
+}
+
+function hostReady(sent: CleanerText[]): CleanerText[] {
+  return sent.filter((text) => text.to === OWNER && text.body === READY);
+}
+
+function doneHost(job: { outbox(): { to: string; body: string; kind: string; status: string }[] }) {
+  return job.outbox().filter((item) => item.kind === "done" && item.to === OWNER).map((item) => ({
+    to: item.to,
+    body: item.body,
+    kind: item.kind,
+    status: item.status,
+  }));
 }
 
 function groupTexts(sent: CleanerText[]): CleanerText[] {
@@ -364,6 +386,80 @@ describe("group thread", () => {
     const resumed = await job.resumeJob();
     expect(resumed?.body).toBe(RESUME);
     expect(job.jobOnHold()).toBe(false);
+  });
+
+  it("leaves the job unfinished when DONE follows a group problem, with or without START", async () => {
+    const plain = await afterCode("problem-plain");
+    await plain.job.receive({ id: "problem-plain", from: CLEANER, text: "The lock is broken", channel: "group" });
+    expect(await plain.job.receive({ id: "problem-plain-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(plain.job.jobs().some((item) => item.status === "done")).toBe(false);
+    expect(hostReady(plain.sent.sent)).toEqual([]);
+    expect(doneHost(plain.job)).toEqual([]);
+
+    const started = await afterCode("problem-start");
+    await started.job.receive({ id: "problem-start", from: CLEANER, text: "The lock is broken", channel: "group" });
+    await started.job.receive({ id: "problem-start-start", from: CLEANER, text: "START", channel: "group" });
+    expect(await started.job.receive({ id: "problem-start-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(started.job.jobs().some((item) => item.status === "done")).toBe(false);
+    expect(hostReady(started.sent.sent)).toEqual([]);
+    expect(doneHost(started.job)).toEqual([]);
+
+    const resumed = await afterCode("problem-resume");
+    await resumed.job.receive({ id: "problem-resume-hold", from: CLEANER, text: "The lock is broken", channel: "group" });
+    await resumed.job.resumeJob();
+    expect(await resumed.job.receive({ id: "problem-resume-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "done",
+      sent: [{ to: CLEANER, body: "Thanks, cleaning marked done.", kind: "done" }],
+    });
+    expect(resumed.job.jobs().some((item) => item.status === "done")).toBe(true);
+    expect(hostReady(resumed.sent.sent)).toEqual([{ to: OWNER, body: READY, kind: "done" }]);
+    expect(doneHost(resumed.job)).toEqual([{ to: OWNER, body: READY, kind: "done", status: "sent" }]);
+  });
+
+  it("leaves the job unfinished when DONE follows a host STOP after the code, with or without START", async () => {
+    const plain = await afterCode("owner-plain");
+    await plain.job.receive({ id: "owner-plain-stop", from: OWNER, text: "STOP", channel: "group" });
+    expect(await plain.job.receive({ id: "owner-plain-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(plain.job.jobs().some((item) => item.status === "done")).toBe(false);
+    expect(hostReady(plain.sent.sent)).toEqual([]);
+    expect(doneHost(plain.job)).toEqual([]);
+
+    const started = await afterCode("owner-start");
+    await started.job.receive({ id: "owner-start-stop", from: OWNER, text: "STOP", channel: "group" });
+    await started.job.receive({ id: "owner-start-start", from: CLEANER, text: "START", channel: "group" });
+    expect(await started.job.receive({ id: "owner-start-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [{ to: CLEANER, body: ON_HOLD, kind: "next" }],
+    });
+    expect(started.job.jobs().some((item) => item.status === "done")).toBe(false);
+    expect(hostReady(started.sent.sent)).toEqual([]);
+    expect(doneHost(started.job)).toEqual([]);
+
+    const resumed = await afterCode("owner-resume");
+    await resumed.job.receive({ id: "owner-resume-stop", from: OWNER, text: "STOP", channel: "group" });
+    await resumed.job.resumeJob();
+    expect(await resumed.job.receive({ id: "owner-resume-done", from: CLEANER, text: "DONE", channel: "group" })).toEqual({
+      handled: true,
+      reason: "done",
+      sent: [{ to: CLEANER, body: "Thanks, cleaning marked done.", kind: "done" }],
+    });
+    expect(resumed.job.jobs().some((item) => item.status === "done")).toBe(true);
+    expect(hostReady(resumed.sent.sent)).toEqual([{ to: OWNER, body: READY, kind: "done" }]);
+    expect(doneHost(resumed.job)).toEqual([{ to: OWNER, body: READY, kind: "done", status: "sent" }]);
   });
 
   it("reaches done from the cleaner's replies after the code is out", async () => {
