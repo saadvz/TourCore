@@ -29,6 +29,7 @@ const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someon
 const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
+const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory and Maria. Reply YES to join that group, or STOP to opt out.";
 const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
 
 function sink() {
@@ -299,7 +300,7 @@ describe("group chat flag", () => {
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     };
-    expect(await invite(base)).toEqual([GROUP_INVITE]);
+    expect(await invite(base)).toEqual([GROUP_INVITE, OBSERVER_INVITE]);
     expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "0" })).toEqual([SOLO_INVITE]);
     expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "false" })).toEqual([SOLO_INVITE]);
   });

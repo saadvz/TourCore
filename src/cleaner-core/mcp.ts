@@ -22,8 +22,8 @@ const TOOLS = [
   {
     name: "save_people",
     title: "Save the people",
-    description: "Saves the host, the cleaner, and the observer. Each one is a phone number.",
-    input: z.object({ host: z.string(), cleaner: z.string(), observer: z.string() }),
+    description: "Saves the host and the cleaner. Each one is a phone number. An observer is optional.",
+    input: z.object({ host: z.string(), cleaner: z.string(), observer: z.string().optional() }),
   },
   {
     name: "save_calendar_link",
@@ -191,7 +191,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_property":
       return desk.saveProperty(args as { business: string; address: string; timeZone: string });
     case "save_people":
-      return desk.savePeople(args as { host: string; cleaner: string; observer: string });
+      return desk.savePeople(args as { host: string; cleaner: string; observer?: string });
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url: string });
     case "save_door_code":

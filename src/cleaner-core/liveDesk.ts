@@ -40,6 +40,7 @@ export const FIRST_QUESTION =
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
 const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
+const PEOPLE_ASK = "Who is the host and the cleaner? Send each phone number. An observer is optional.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
 
@@ -196,26 +197,33 @@ export class LiveDesk {
     this.file.timeZone = timeZone;
     this.file.propertyId = propertyIdFor(business);
     this.persist();
-    return this.reply({ next: "Who is the host, the cleaner, and the observer? Send each phone number." });
+    return this.reply({ next: PEOPLE_ASK });
   }
 
   savePeople(input: { host?: string; cleaner?: string; observer?: string }): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     const host = parsePhone(input.host ?? "");
     const cleaner = parsePhone(input.cleaner ?? "");
-    const observer = parsePhone(input.observer ?? "");
-    if (!host || !cleaner || !observer || new Set([host, cleaner, observer]).size < 3) {
-      return this.fail("I need three different phone numbers: the host, the cleaner, and the observer.");
+    const observerText = input.observer?.trim() ?? "";
+    const observer = observerText ? parsePhone(observerText) : undefined;
+    if (!host || !cleaner || host === cleaner) {
+      return this.fail("I need two different phone numbers: the host and the cleaner. An observer is optional.");
+    }
+    if (observerText && !observer) return this.fail("Send the observer as a phone number, or leave that number out.");
+    if (observer && (observer === host || observer === cleaner)) {
+      return this.fail("The observer has to be a different phone number from the host and the cleaner.");
     }
     this.file.host = host;
     this.file.cleaner = cleaner;
-    this.file.observer = observer;
+    if (observer) this.file.observer = observer;
+    else delete this.file.observer;
     this.persist();
+    this.engine = undefined;
     return this.reply({ next: "What's the calendar link for this property?" });
   }
 
   saveCalendarLink(input: { url?: string }): ToolReply {
-    if (!this.file.cleaner) return this.fail("Save the cleaner and the observer first.");
+    if (!this.file.cleaner) return this.fail("Save the host and the cleaner first.");
     const url = input.url?.trim() ?? "";
     if (!url.startsWith("https://")) return this.fail("Send a public https calendar link.");
     this.file.calendarLink = url;
@@ -498,14 +506,14 @@ export class LiveDesk {
   private cleaningState(): Record<string, unknown> {
     const done: string[] = [];
     if (this.file.address) done.push("Property saved.");
-    if (this.file.cleaner) done.push("Cleaner and observer saved.");
+    if (this.file.cleaner) done.push(this.file.observer ? "Cleaner and observer saved." : "Cleaner saved.");
     if (this.file.calendarLink) done.push("Calendar link saved.");
     if (this.pin) done.push("Door code saved.");
     if (this.file.texting) done.push("Texting saved.");
     if (this.file.checked) done.push("Checks finished.");
     let next = "What's the property address, and what should I call the business?";
     if (!this.file.address) next = "What's the property address, and what should I call the business?";
-    else if (!this.file.cleaner) next = "Who is the host, the cleaner, and the observer? Send each phone number.";
+    else if (!this.file.cleaner) next = PEOPLE_ASK;
     else if (!this.file.calendarLink) next = "What's the calendar link for this property?";
     else if (!this.pin) next = "What's the door code? I'll save it and I won't repeat it.";
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
@@ -557,6 +565,7 @@ export class LiveDesk {
     }
     const env = this.env;
     const dataDir = join(this.root, "cleaner-job");
+    const observer = parsePhone(file.observer ?? "");
     mkdirSync(dataDir, { recursive: true });
     return openCleanerCore({
       enabled: true,
@@ -578,7 +587,15 @@ export class LiveDesk {
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
       pinFailedBody: PIN_FAILED,
-      ...(groupChatEnabled(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
+      ...(groupChatEnabled(env())
+        ? {
+            groupChat: {
+              hostName: "Cory",
+              cleanerName: "Maria",
+              ...(observer ? { extra: [{ phone: observer, name: "Observer" }] } : {}),
+            },
+          }
+        : {}),
       sink: {
         send: async (text) => {
           const hostLine = text.to === file.host && text.channel !== "group";
