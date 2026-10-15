@@ -325,7 +325,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
     case "save_property":
-      return desk.saveProperty(args as Parameters<LiveDesk["saveProperty"]>[0]);
+      return desk.saveProperty(args as Parameters<LiveDesk["saveProperty"]>[0], pinKey);
     case "save_people":
       return desk.savePeople(args as Parameters<LiveDesk["savePeople"]>[0], pinKey);
     case "save_calendar_link":
