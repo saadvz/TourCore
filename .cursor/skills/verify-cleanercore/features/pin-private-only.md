@@ -22,7 +22,7 @@ Preconditions:
 - `--group +15555550199` is an unapproved number, not a participant.
 
 - **Release the code.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --group-mode native --group-capable --group +15555550199 --participant observer=+15555550122 --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550122=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550101=YES --reply "+15555550100=guests have left"`. Exit code 0.
-- **Result.** The pin body is `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.` It has no channel. The notice goes to the owner and not to the observer.
+- **Result.** The pin body is `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.` It has no channel. The notice goes to the owner and not to the observer.
 - **Proof.** Save the command, stdout, stderr, exit code, transcript, and job list with feature id `pin-private-only`. `prove-step-f.sh`. The evidence tree must not contain the scratch digits.
 
 ## Gotchas

@@ -274,7 +274,7 @@ describe("step G safety gates", () => {
       expect(resumed.sent.find((text) => text.kind === "pin")).toEqual({
         to: CLEANER,
         kind: "pin",
-        body: `Guests have left ${ADDRESS}. Door code: ${lane.pin}. This code is only for you.`,
+        body: `Guests have left ${ADDRESS}. Door code: ${lane.pin}. This code is only for you. Reply DONE when the cleaning is finished.`,
       });
       expect(resumed.sent.filter((text) => text.kind === "pin")).toHaveLength(1);
       const third = await engine(sink(), clock, { dataDir: dir, pin: lane.pin, hostName: lane.hostName, watchFreshness: false }).runReminders();

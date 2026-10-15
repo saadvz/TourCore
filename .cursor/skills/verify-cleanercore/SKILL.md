@@ -167,7 +167,7 @@ Prove the step D blockers with:
 .cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
 ```
 
-That script takes no arguments. It removes `evidence/step-d/` and writes it again. It doctors before each journey, then drives `held`, `released`, `not-opted`, `unapproved-yes`, `not-approved`, `checkout-moved`, `full-turn`, `pin-stored`, `stop-holds`, `help-waiting`, `help-cleared`, `help-progress`, `injury-failed`, `pin-failed`, and `no-group`. The help journeys send no HELP reply. The injury replies stay, and the job status stays `awaiting_departure`, `cleared`, or `in_progress`. The script prints `evidence/step-d`.
+That script takes no arguments. It removes `evidence/step-d/` and writes it again. It doctors before each journey, then drives `held`, `released`, `not-opted`, `unapproved-yes`, `not-approved`, `checkout-moved`, `full-turn`, `done-without-start`, `done-early`, `pin-stored`, `stop-holds`, `help-waiting`, `help-cleared`, `help-progress`, `injury-failed`, `pin-failed`, and `no-group`. The help journeys send no HELP reply. The injury replies stay, and the job status stays `awaiting_departure`, `cleared`, or `in_progress`. `done-without-start` finishes from DONE after the private text and sends one host line. `done-early` answers DONE before that text and does not finish the job. The script prints `evidence/step-d`.
 
 Prove the step E blockers with:
 

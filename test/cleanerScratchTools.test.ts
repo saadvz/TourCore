@@ -306,7 +306,7 @@ describe("Scratch test tools", () => {
     const courtSent = wired.cleanerSent.map((item) => item.body.split(COURT.pin).join("[redacted]").split(LANE.pin).join("[redacted]"));
     expect(courtSent.join("\n")).not.toContain(COURT.pin);
     expect(courtSent.filter((body) => body.includes("Door code:"))).toEqual([
-      "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.",
+      "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.",
     ]);
   }, 40_000);
 

@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, privateCodeLine, reminderBody, resumeNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -49,6 +49,7 @@ export type TextKind =
   | "pin-held"
   | "started"
   | "done"
+  | "next"
   | "held"
   | "review"
   | "resume";
@@ -762,10 +763,6 @@ class Engine implements CleanerCore {
       for (const job of this.ordered()) {
         const key = this.pinKey(job);
         if (!key || this.delivery(key) === "sent" || this.delivery(key) === "canceled" || this.groupPinTerminal) continue;
-        if (this.groupChat && this.delivery(key) === "failed") {
-          this.sealGroupPin(key);
-          continue;
-        }
         for (const text of await this.deliverPin(job)) sent.push(text);
       }
     }
@@ -1184,14 +1181,14 @@ class Engine implements CleanerCore {
 
   private async answer(id: string, from: string, text: string): Promise<ReceiveResult> {
     const job = this.conversationJob();
-    if (!job) return this.markIgnored(id);
+    if (!job) return this.quietOrGuide(from, id, text);
     const status = this.derive(job);
     const minutes = clockMinutes(text);
     if (this.groupChat && from === this.owner && (status === "discovered" || status === "awaiting_checkin" || status === "offered")) {
       return this.markIgnored(id);
     }
     if (status === "discovered" || status === "awaiting_checkin") {
-      if (from !== this.owner) return this.markIgnored(id);
+      if (from !== this.owner) return this.quietOrGuide(from, id, text);
       const chosen = isYes(text) ? (status === "discovered" ? this.defaultCheckout : this.defaultCheckIn) : minutes;
       if (chosen === undefined) return this.markIgnored(id);
       this.addFact(job.id, status === "discovered" ? "checkout" : "checkin", chosen);
@@ -1207,9 +1204,9 @@ class Engine implements CleanerCore {
         return { handled: true, reason: "host-time", sent };
       }
       const confirmer = this.cleanerRecord()?.phone;
-      if (!confirmer || from !== confirmer) return this.markIgnored(id);
+      if (!confirmer || from !== confirmer) return this.quietOrGuide(from, id, text);
       if (isYes(text)) {
-        if (this.stale(job)) return this.markIgnored(id);
+        if (this.stale(job)) return this.quietOrGuide(from, id, text);
         const sent = await this.confirm(job);
         if (sent.length === 0 && !this.confirmSent(job)) return { handled: true, reason: "ignored", sent: [] };
         this.inboundIds.push(id);
@@ -1221,7 +1218,7 @@ class Engine implements CleanerCore {
         return this.reply(confirmer, DECLINED, "declined", "declined", id, job.id);
       }
     }
-    return this.markIgnored(id);
+    return this.quietOrGuide(from, id, text);
   }
 
   private async confirm(job: Job): Promise<CleanerText[]> {
@@ -1286,16 +1283,51 @@ class Engine implements CleanerCore {
   }
 
   private async finish(from: string, id: string): Promise<ReceiveResult> {
-    const job = this.ordered().find((item) => item.started && !item.done && this.pinDelivered(item));
-    if (!job || this.cleanerConsent !== "in") return this.markIgnored(id);
+    if (this.cleanerConsent !== "in") return this.markIgnored(id);
+    const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
+    if (!job) {
+      for (const finished of this.ordered()) {
+        if (finished.done && this.pinDelivered(finished)) await this.tellHostDone(finished);
+      }
+      return this.guide(from, id);
+    }
     const result = await this.reply(from, "Thanks, cleaning marked done.", "done", "done", id, job.id);
-    if (result.sent.length > 0) {
+    const acked = result.sent.length > 0 || this.delivery(`done:${id}`) === "sent";
+    if (acked) {
+      job.started = true;
       job.done = true;
-      this.inboundIds.push(id);
+      if (!this.inboundIds.includes(id)) this.inboundIds.push(id);
       await this.tellHostDone(job);
     }
     this.save();
     return result;
+  }
+
+  private cleanerStep(): CleanerStep {
+    if (this.problemHold) return "on-hold";
+    const delivered = this.ordered().find((item) => !item.canceled && !item.declined && this.pinDelivered(item));
+    if (delivered?.done) return "already-done";
+    if (delivered) return "in-progress";
+    const open = this.ordered().find((item) => !item.done && !item.canceled && !item.declined);
+    if (!open) return "already-done";
+    const status = this.derive(open);
+    if (status === "offered") return "needs-yes";
+    if (status === "confirmed" || status === "awaiting_departure") return "waiting-for-guests";
+    return "waiting-for-code";
+  }
+
+  private async guide(from: string, id: string): Promise<ReceiveResult> {
+    const result = await this.reply(from, cleanerNextStep(this.cleanerStep()), "next", "ignored", id);
+    if (result.sent.length > 0 || this.delivery(`next:${id}`) === "sent") {
+      if (!this.inboundIds.includes(id)) this.inboundIds.push(id);
+    }
+    this.save();
+    return result;
+  }
+
+  private async quietOrGuide(from: string, id: string, text: string): Promise<ReceiveResult> {
+    if (from === this.cleanerPhone && this.cleanerConsent === "in" && keywordOf(text) !== "help") return this.guide(from, id);
+    return this.markIgnored(id);
   }
 
   private async tellHostDone(job: Job): Promise<void> {
@@ -1367,36 +1399,17 @@ class Engine implements CleanerCore {
       const pin = this.pin;
       const route = this.groupChat ? codeRoute(this.groupSeats()) : "private";
       if (route === "held") return sent;
-      const body = route === "group" && this.groupChat
-        ? groupDoorCodeBody(this.groupChat.cleanerName, this.options.property.address, pin)
-        : doorCodeBody(this.options.property.address, pin);
+      const body = doorCodeBody(this.options.property.address, pin);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
-      const audience = route === "group" ? this.groupAudience() : undefined;
       const text = await this.emit({
         id: key,
         jobId: job.id,
         to: addressed.to,
         kind: "pin",
         body: addressed.body,
-        ...(audience ? { channel: "group" as const, audience } : {}),
       });
       if (text) sent.push(text);
-      if (this.groupChat && route === "group" && this.delivery(key) === "failed") this.sealGroupPin(key);
-      if (this.groupChat && route === "group" && this.delivery(key) === "sent") this.groupPinTerminal = true;
-      if (this.groupChat && route === "group" && this.delivery(key) !== "sent" && this.delivery(key) !== "failed" && this.delivery(key) !== "canceled") {
-        const privately = addressCleaner(this.cleanerRecord(), { kind: "pin", body: doorCodeBody(this.options.property.address, pin) });
-        if (privately) {
-          const privateText = await this.emit({
-            id: key,
-            jobId: job.id,
-            to: privately.to,
-            kind: "pin",
-            body: privately.body,
-          });
-          if (privateText) sent.push(privateText);
-        }
-      }
     }
     if (this.groupChat && this.groupPinTerminal && this.delivery(key) !== "sent") return sent;
     if (this.delivery(key) === "failed" && this.owner && !this.groupPhones.includes(this.owner)) {
@@ -1740,8 +1753,7 @@ class Engine implements CleanerCore {
     if (this.ownerDeclined(draft)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
-      const groupPin = Boolean(this.groupChat && draft.channel === "group" && codeRoute(this.groupSeats()) === "group" && draft.to === this.cleanerPhone);
-      if ((draft.channel && !groupPin) || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
+      if (draft.channel === "group" || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
         throw new Error("The door code only goes to the approved cleaner.");
       }
       if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone) {
@@ -2005,12 +2017,6 @@ class Engine implements CleanerCore {
     });
   }
 
-  private sealGroupPin(id: string): void {
-    const item = this.outboxState.find((row) => row.id === id);
-    if (item && item.status !== "sent") item.status = "canceled";
-    this.groupPinTerminal = true;
-  }
-
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
     if (this.groupChat) return this.stopMember(from, inboundId);
     const ack = this.options.stopReply ?? smsStopAck();
@@ -2085,6 +2091,10 @@ class Engine implements CleanerCore {
         const result = await this.reply(from, START_ACK, "start", "start", inboundId);
         return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
       }
+      if (this.cleanerConsent === "in") {
+        const result = await this.guide(from, inboundId);
+        return { ...result, seen: this.replySeen("next", inboundId, result.sent.length) };
+      }
       return { handled: true, reason: "ignored", sent: [], seen: true };
     }
     if (this.delivery(`start:${inboundId}`) === "sent") {
@@ -2101,7 +2111,13 @@ class Engine implements CleanerCore {
         return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
       }
       const job = this.ordered().find((item) => this.pinDelivered(item) && !item.started && !item.done);
-      if (this.cleanerConsent !== "in" || !job) return { handled: true, reason: "ignored", sent: [], seen: true };
+      if (this.cleanerConsent !== "in" || !job) {
+        if (this.cleanerConsent === "in") {
+          const result = await this.guide(from, inboundId);
+          return { ...result, seen: this.replySeen("next", inboundId, result.sent.length) };
+        }
+        return { handled: true, reason: "ignored", sent: [], seen: true };
+      }
       const result = await this.reply(from, "Got it, cleaning started.", "started", "start", inboundId, job.id);
       if (result.sent.length > 0) job.started = true;
       return { ...result, seen: result.sent.length > 0 };

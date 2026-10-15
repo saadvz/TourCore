@@ -14,14 +14,23 @@ const OWNER = "+15555550100";
 const CLEANER = "+15555550101";
 const EXTRA = "+15555550122";
 const HOLD = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YES.`;
-const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
+const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
+const HOST_RESTART = new Set([
+  STOP_HOLD,
+  `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`,
+  `The cleaning at ${ADDRESS} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`,
+  `You'll get cleaning texts for ${ADDRESS} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`,
+  "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.",
+  "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.",
+]);
 const RESUME = `The cleaning at ${ADDRESS} is back on.`;
 const TIME = "Cory will confirm that time.";
 const PRIVATE_LINE = "Maria got the door code privately.";
-const GROUP_PIN = `Maria, guests have left ${ADDRESS}. Door code: [redacted].`;
-const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you.`;
+const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
+const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 
 const report = JSON.parse(readFileSync(actualPath, "utf8"));
 const sent = report.sent ?? [];
@@ -43,7 +52,8 @@ for (const text of sent) {
   for (const phone of text.audience ?? []) {
     if (!scratch(phone)) fail(`audience ${phone}`);
   }
-  if (/grok bot|twilio|engine|cleaner_core/i.test(text.body)) fail(`named a setting: ${text.kind}`);
+  if (/twilio|engine|cleaner_core/i.test(text.body)) fail(`named a setting: ${text.kind}`);
+  if (/grok bot/i.test(text.body) && !HOST_RESTART.has(text.body)) fail(`named a setting: ${text.kind}`);
 }
 for (const text of groups) {
   if (/\byou\b/i.test(text.body)) fail(`group text says you: ${text.body}`);
@@ -55,9 +65,9 @@ for (const match of JSON.stringify(report).matchAll(/\+1\d{10}/g)) {
 const checks = {
   eligible() {
     if (pins.length !== 1) fail(`pin count ${pins.length}`);
-    if (pins[0].channel !== "group" || pins[0].to !== CLEANER) fail("pin route");
-    if (JSON.stringify(pins[0].audience) !== JSON.stringify([OWNER, CLEANER])) fail("pin audience");
-    if (pins[0].body !== GROUP_PIN) fail("pin body");
+    if (pins[0].channel || pins[0].to !== CLEANER) fail("pin route");
+    if (pins[0].body !== PRIVATE_PIN) fail("pin body");
+    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
     if (!clock || clock.status !== "cleared") fail("job");
   },
   private() {
@@ -94,9 +104,10 @@ const checks = {
   },
   injury() {
     const emergency = sent.filter((text) => text.kind === "emergency");
-    if (emergency.length !== 2) fail("911 count");
+    if (emergency.length !== 3) fail("911 count");
     if (emergency[0].to !== OWNER || emergency[0].body !== HOST_HURT || emergency[0].channel) fail("host 911");
-    if (emergency[1].to !== CLEANER || emergency[1].body !== HURT || emergency[1].channel) fail("cleaner 911");
+    if (emergency[1].to !== OWNER || emergency[1].body !== INJURY_HOLD || emergency[1].channel) fail("injury hold");
+    if (emergency[2].to !== CLEANER || emergency[2].body !== HURT || emergency[2].channel) fail("cleaner 911");
     if (groups.length !== 0) fail("group saw 911");
     if (sent.some((text) => text.body === TIME)) fail("group handling ran first");
   },
@@ -115,20 +126,33 @@ const checks = {
     if (pins.length !== 1 || pins[0].channel || pins[0].body !== PRIVATE_PIN) fail("old pin");
     if (sent.some((text) => /cleaning group/i.test(text.body))) fail("group invite");
   },
+  "done-without-start"() {
+    const finished = (report.jobs ?? []).find((job) => job.status === "done");
+    if (!finished) fail("not done");
+    if (sent.some((text) => text.body === "Got it, cleaning started.")) fail("start");
+    if (sent.filter((text) => text.to === CLEANER && text.body === "Thanks, cleaning marked done.").length !== 1) fail("done");
+    const ready = sent.filter((text) => text.to === OWNER && text.body === READY);
+    if (ready.length !== 1 || ready[0].channel) fail("ready line");
+    const again = sent.filter((text) => text.body === "This cleaning is already marked done.");
+    if (again.length !== 1 || again[0].to !== CLEANER || again[0].channel) fail("second done");
+    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+  },
   done() {
     const finished = (report.jobs ?? []).find((job) => job.status === "done");
     if (!finished) fail("not done");
     if (!sent.some((text) => text.to === CLEANER && text.body === "Got it, cleaning started.")) fail("start");
     if (!sent.some((text) => text.to === CLEANER && text.body === "Thanks, cleaning marked done.")) fail("done");
-    if (sent.some((text) => text.to === OWNER && (text.kind === "started" || text.kind === "done"))) fail("host moved the job");
+    const ready = sent.filter((text) => text.to === OWNER && text.body === READY);
+    if (ready.length !== 1 || ready[0].channel) fail("ready line");
+    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
   },
   twice() {
-    if (pins.length !== 1 || pins[0].body !== GROUP_PIN) fail("second pin");
+    if (pins.length !== 1 || pins[0].body !== PRIVATE_PIN || pins[0].channel) fail("second pin");
+    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
   },
   failed() {
-    if (pins.length !== 0) fail("retried pin");
-    const stored = (report.outbox ?? []).filter((item) => item.kind === "pin");
-    if (stored.length !== 1 || stored[0].status !== "canceled") fail("pin not settled");
+    if (pins.length !== 1 || pins[0].channel || pins[0].to !== CLEANER || pins[0].body !== PRIVATE_PIN) fail("private retry");
+    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
   },
 };
 

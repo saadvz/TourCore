@@ -23,16 +23,20 @@ const CONFIRM_2PM = `Cleaning is scheduled for Sunday, Oct 18 at 2:00 PM at ${AD
 const CORRECTED_2PM = `Update: checkout at ${ADDRESS} moved to Sunday, Oct 18 at 2:00 PM. Reply YES to keep the cleaning, or STOP to opt out.`;
 const REMINDER = `Reminder: cleaning at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM.`;
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${ADDRESS}. Reply YES to get cleaning texts, or STOP to opt out.`;
-const PIN_REDACTED = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you.`;
+const PIN_REDACTED = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PIN_NOTICE = "Door code sent to the cleaner.";
 const PIN_FAIL = "The door code didn't reach the cleaner. We'll try again in a few minutes.";
 const PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const STARTED = "Got it, cleaning started.";
 const DONE_ACK = "Thanks, cleaning marked done.";
+const HOST_DONE = `The cleaner marked the cleaning at ${ADDRESS} done.`;
+const ALREADY_DONE = "This cleaning is already marked done.";
+const BEFORE_CODE = "I'll text you the door code after the guests leave. Reply DONE after that.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const said = (from, text) => `${from}: ${text}`;
@@ -100,12 +104,47 @@ if (journey === "held") {
     STARTED,
     said(CLEANER, "DONE"),
     DONE_ACK,
+    HOST_DONE,
   ]);
   same(first.jobs[0]?.status, "done");
   same(first.pinRecipients, [CLEANER]);
   same(first.sent.map((text) => text.body), [
-    CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM, REMINDER, PIN_REDACTED, PIN_NOTICE, STARTED, DONE_ACK,
+    CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM, REMINDER, PIN_REDACTED, PIN_NOTICE, STARTED, DONE_ACK, HOST_DONE,
   ]);
+} else if (journey === "done-without-start") {
+  same(first.transcript, [
+    CHECKOUT_Q,
+    OPT_IN,
+    said(CLEANER, "YES"),
+    said(OWNER, "YES"),
+    CHECKIN_Q,
+    said(OWNER, "YES"),
+    OFFER,
+    said(CLEANER, "YES"),
+    CONFIRM,
+    REMINDER,
+    said(OWNER, "guests have left"),
+    PIN_REDACTED,
+    PIN_NOTICE,
+    said(CLEANER, "DONE"),
+    DONE_ACK,
+    HOST_DONE,
+    said(CLEANER, "DONE"),
+    ALREADY_DONE,
+  ]);
+  same(first.jobs[0]?.status, "done");
+  same(first.pinRecipients, [CLEANER]);
+  same(first.sent.filter((text) => text.body === HOST_DONE), [{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+  same(first.sent.filter((text) => text.body === DONE_ACK), [{ to: CLEANER, body: DONE_ACK, kind: "done" }]);
+  same(first.sent.filter((text) => text.body === ALREADY_DONE), [{ to: CLEANER, body: ALREADY_DONE, kind: "next" }]);
+  if (first.sent.some((text) => text.body === STARTED)) fail("START was not required");
+} else if (journey === "done-early") {
+  same(first.jobs[0]?.status, "awaiting_departure");
+  same(first.pinRecipients, []);
+  same(first.sent.filter((text) => text.body === BEFORE_CODE), [{ to: CLEANER, body: BEFORE_CODE, kind: "next" }]);
+  if ((first.sent ?? []).some((text) => text.kind === "pin" || text.body === HOST_DONE || text.body === DONE_ACK)) {
+    fail("DONE before the door code finished the job");
+  }
 } else if (journey === "stop-holds") {
   same(first.pinRecipients, []);
   same(first.sent.filter((text) => text.body === PIN_HELD), [{ to: OWNER, body: PIN_HELD, kind: "pin-held" }]);
@@ -114,14 +153,15 @@ if (journey === "held") {
   if ((first.sent ?? []).some((text) => text.kind === "pin")) fail("START resent the door code");
   if (!first.transcript.includes(PIN_HELD)) fail("the held notice is missing from the transcript");
 } else if (journey === "help-waiting" || journey === "help-cleared" || journey === "help-progress") {
-  const tail = (first.sent ?? []).slice(-3);
+  const tail = (first.sent ?? []).slice(-4);
   same(tail, [
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
     { to: OWNER, body: HOST_HURT, kind: "emergency" },
+    { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
     { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
   ]);
   if ((first.sent ?? []).some((text) => text.kind === "help")) fail("HELP sent a reply");
-  if ([EMERGENCY, HOST_HURT, CLEANER_HURT].some((body) => body.includes("4821") || body.includes("[redacted]"))) {
+  if ([EMERGENCY, HOST_HURT, INJURY_HOLD, CLEANER_HURT].some((body) => body.includes("4821") || body.includes("[redacted]"))) {
     fail("a safety reply includes the door code");
   }
   if (journey === "help-waiting") {
@@ -138,6 +178,7 @@ if (journey === "held") {
   }
 } else if (journey === "injury-failed") {
   same((first.sent ?? []).filter((text) => text.kind === "emergency"), [
+    { to: OWNER, body: INJURY_HOLD, kind: "emergency" },
     { to: CLEANER, body: CLEANER_HURT_MISSED, kind: "emergency" },
   ]);
   const host = (first.outbox ?? []).find((item) => item.body === HOST_HURT);

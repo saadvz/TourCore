@@ -30,6 +30,7 @@ afterEach(() => {
 function envFor(allowlist: string | undefined): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     CLEANER_CORE_ENABLED: "1",
+    CLEANER_CORE_GROUP_CHAT: "0",
     CLEANER_CORE_LIVE_SMS: "1",
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",

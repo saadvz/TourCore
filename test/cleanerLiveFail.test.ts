@@ -105,7 +105,7 @@ describe("live Scratch failures from 19087415", () => {
     const left = await call(wired, "mark_guests_left", { said: "The guests have left" });
     expect(nextOf(left)).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([
-      { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you." },
+      { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished." },
     ]);
 
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "failed" }))).toBe("Door code text to the cleaner: failed.");
@@ -269,7 +269,7 @@ describe("live Scratch failures from 19087415", () => {
     await confirmJob(wired);
     expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([
-      { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you." },
+      { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished." },
     ]);
     const beforeStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");

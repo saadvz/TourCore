@@ -62,6 +62,7 @@ const KIND_NAME: Record<TextKind, string> = {
   "pin-held": "Door code hold",
   started: "Start note",
   done: "Done note",
+  next: "Next step",
   held: "Hold note",
   review: "Review note",
   resume: "Resume note",

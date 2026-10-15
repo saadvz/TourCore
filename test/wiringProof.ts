@@ -123,7 +123,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     ...(live ? { CLEANER_CORE_LIVE_SMS: "1" } : {}),
     CLEANER_CORE_SMS_ALLOWLIST: options.allowlist ?? `${HOST},${CLEANER}`,
     ...(options.scratchTools ? { CLEANER_CORE_SCRATCH_TOOLS: "1" } : {}),
-    ...(options.groupChat ? { CLEANER_CORE_GROUP_CHAT: "1" } : {}),
+    ...(options.groupChat ? { CLEANER_CORE_GROUP_CHAT: "1" } : { CLEANER_CORE_GROUP_CHAT: "0" }),
     CLEANER_CORE_MCP_TOKEN: CLEANER_TOKEN,
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACcleanerwiring",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: CLEANER_AUTH,

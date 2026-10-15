@@ -21,7 +21,7 @@ Preconditions:
 
 - **STOP, HELP, injury.** The step F commands: `--closed --notion` with STOP, with HELP, and with `I fell and I'm hurt` twice from the owner and twice from the cleaner. Exit code 0. STOP still gets the STOP sentence. HELP adds no sent text. Injury still gets the 911 sentences.
 - **Observer and owner.** The step F observer group, observer one-to-one, and owner injury commands. An emergency text has no group channel.
-- **Wordings.** The seven step F phrases from the cleaner and the observer, solo and in a group. Each report has four emergency texts and no group channel on those texts.
+- **Wordings.** The seven step F phrases from the cleaner and the observer, solo and in a group. Each report has six emergency texts and no group channel on those texts.
 
 ## Gotchas
 
