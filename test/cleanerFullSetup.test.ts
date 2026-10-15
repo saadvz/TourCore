@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
-import { cleanerOptOutHold, groupTimeLine } from "../src/cleaner-core/cleanerTexts";
+import { cleanerOptOutHold, groupTimeLine, offerForOthers } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
 import { DOOR_CODE_IN_CHAT, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
+import { photoKey, servePhoto, setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import {
@@ -59,6 +60,7 @@ afterEach(async () => {
   setCleanerGroupFetch(undefined);
   setCleanerCalendarFetch(undefined);
   setCleanerAlertFetch(undefined);
+  setCleanerPhotoFetch(undefined);
   resetLiveDesks();
   while (open.length > 0) await open.pop()?.close();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -407,7 +409,7 @@ function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () =
     ...extraEnv,
   };
   const desk = liveDeskFor(root, () => env, now);
-  return { desk, sms, groups, root };
+  return { desk, sms, groups, root, env };
 }
 
 function ok(reply: ToolReply): Record<string, unknown> {
@@ -1298,5 +1300,265 @@ describe("Cleaner Core send_message: the host approves first", () => {
     expect(second.isError).toBe(false);
     expect(second.structuredContent).toEqual({ next: "Sent to Ana." });
     expect(sms.sent).toHaveLength(before + 1);
+  });
+});
+
+/** Made-up bytes that start and end like a JPEG. */
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from("made-up photo for a test"), Buffer.from([0xff, 0xd9])]);
+const PHOTO_BASE = "https://cleaner.example";
+const CHECKLIST_TEXT = "Checklist for Lake House: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.";
+const PHOTO_FIRST = "Please send a photo of the finished rooms, then reply DONE.";
+const OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+const PHOTOS_TOOL = "Gets expiring links to the cleaner's photos for a job. Look at them, compare with the checklist, and show them to the host.";
+const PHOTOS_INSTRUCTION =
+  "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.";
+
+let mediaCount = 0;
+
+/** A fake Twilio media download. It never leaves the machine. */
+function stubPhotos(): string[] {
+  const calls: string[] = [];
+  setCleanerPhotoFetch(async (url) => {
+    calls.push(url);
+    return new Response(JPEG, { status: 200, headers: { "content-type": "image/jpeg" } });
+  });
+  return calls;
+}
+
+function photo(): { url: string; contentType: string } {
+  mediaCount += 1;
+  return { url: `https://api.twilio.com/2010-04-01/Accounts/ACfake/Messages/MMfull${mediaCount}/Media/MEfull${mediaCount}`, contentType: "image/jpeg" };
+}
+
+type PreferencesInput = Parameters<LiveDesk["savePreferences"]>[0];
+
+/**
+ * Cleaner-only Lake House with these preferences, the cleaner opted in, and the offer taken. The
+ * clock starts Wed Oct 14 at 11:00 AM. The cleaning's checkout day is Sun Oct 18.
+ */
+async function takenWith(preferences: PreferencesInput, extraEnv: NodeJS.ProcessEnv = { PUBLIC_BASE_URL: PHOTO_BASE, CLEANER_CORE_PHOTO_KEY: "made-up-photo-key-for-tests-abcd" }) {
+  const time = testClock(FROZEN);
+  const opened = openDesk([HOST, CLEANER], "0", time.now, extraEnv);
+  const { desk } = opened;
+  ok(desk.getState("2"));
+  ok(desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
+  ok(desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+  ok(desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }));
+  ok(desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
+  ok(desk.savePreferences(preferences));
+  ok(await desk.activate());
+  ok(await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" }));
+  await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+  await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
+  return { ...opened, time };
+}
+
+function toCleanerBodies(sent: SentSms[]): string[] {
+  return sent.filter((item) => item.to === CLEANER).map((item) => item.body);
+}
+
+function statuses(desk: LiveDesk): string[] {
+  return (ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
+}
+
+describe("Cleaner Core cleaning: the checklist", () => {
+  it("sends the saved checklist right after the private code, once", async () => {
+    const { desk, sms } = await takenWith({ checklist: ["Strip the beds", "Restock coffee."] });
+    expect(toCleanerBodies(sms.sent)).not.toContain(CHECKLIST_TEXT);
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    const bodies = toCleanerBodies(sms.sent);
+    expect(bodies.slice(-2)).toEqual([PRIVATE_PIN, CHECKLIST_TEXT]);
+    await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
+    ok(await desk.checkNow());
+    await desk.inbound({ id: "start", from: CLEANER, text: "START" });
+    expect(toCleanerBodies(sms.sent).filter((body) => body === CHECKLIST_TEXT)).toHaveLength(1);
+    expect(CHECKLIST_TEXT.includes(DOOR_CODE)).toBe(false);
+  });
+
+  it("sends no checklist when none is saved", async () => {
+    const { desk, sms } = await takenWith({});
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe(PRIVATE_PIN);
+    expect(toCleanerBodies(sms.sent).some((body) => body.startsWith("Checklist for"))).toBe(false);
+  });
+
+  it("sends a checklist that says ready, and the code still goes", async () => {
+    const { desk, sms } = await takenWith({ checklist: ["Get the guest room ready"] });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    expect(toCleanerBodies(sms.sent).slice(-2)).toEqual([PRIVATE_PIN, "Checklist for Lake House: Get the guest room ready. Send photos, then reply DONE when finished."]);
+  });
+});
+
+describe("Cleaner Core cleaning: photos and notes", () => {
+  it("a photo-only MMS gets no guide reply and reaches Grok as [photo]", async () => {
+    stubPhotos();
+    const { desk, sms } = await takenWith({ checklist: ["Strip the beds"] });
+    const waiting = sms.sent.length;
+    await desk.inbound({ id: "mms-waiting", from: CLEANER, text: "", media: [photo()] });
+    expect(sms.sent).toHaveLength(waiting);
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    const before = sms.sent.length;
+    await desk.inbound({ id: "mms-1", from: CLEANER, text: "", media: [photo()] });
+    await desk.inbound({ id: "mms-2", from: CLEANER, text: "Kitchen", media: [photo()] });
+    expect(sms.sent).toHaveLength(before);
+    expect(brief(await messagesNow(desk)).slice(-3)).toEqual([
+      { from: "cleaner", name: "Ana", text: "[photo]", handled: "none" },
+      { from: "cleaner", name: "Ana", text: "[photo]", handled: "none" },
+      { from: "cleaner", name: "Ana", text: "Kitchen [photo]", handled: "none" },
+    ]);
+  });
+
+  it("DONE waits for a photo when photos are required", async () => {
+    stubPhotos();
+    const { desk, sms } = await takenWith({ photosRequired: true });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "done-early", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe(PHOTO_FIRST);
+    expect(statuses(desk)).not.toContain("done");
+    expect(brief(await messagesNow(desk)).at(-1)).toEqual({ from: "cleaner", name: "Ana", text: "DONE", handled: "none" });
+    await desk.inbound({ id: "mms", from: CLEANER, text: "", media: [photo()] });
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
+    expect(statuses(desk)[0]).toBe("done");
+  });
+
+  it("DONE goes through without a photo when photos aren't required", async () => {
+    const { desk, sms } = await takenWith({ photosRequired: false });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect(toCleanerBodies(sms.sent).at(-1)).toBe("Thanks, cleaning marked done.");
+  });
+
+  it("keeps at most 5 notes of 200 characters, and none with supply notes off", async () => {
+    const on = await takenWith({ supplyNotes: true });
+    ok(await on.desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    for (let index = 1; index <= 6; index++) await on.desk.inbound({ id: `note-${index}`, from: CLEANER, text: `Note ${index} ${"x".repeat(250)}` });
+    await on.desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    const completed = (ok(await on.desk.checkNow()).completed as { notes: string[] }[])[0];
+    expect(completed?.notes).toHaveLength(5);
+    expect(completed?.notes[0]?.startsWith("Note 2 ")).toBe(true);
+    expect(completed?.notes.every((note) => note.length === 200)).toBe(true);
+
+    resetLiveDesks();
+    const off = await takenWith({ supplyNotes: false });
+    ok(await off.desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await off.desk.inbound({ id: "note", from: CLEANER, text: "Need more paper towels" });
+    await off.desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    expect((ok(await off.desk.checkNow()).completed as { notes: string[] }[])[0]?.notes).toEqual([]);
+  });
+});
+
+describe("Cleaner Core cleaning: the completed record", () => {
+  it("check_now returns the finished cleaning once, with exact counts and times, and no door code", async () => {
+    stubPhotos();
+    const { desk, time, root } = await takenWith(PREFERENCES);
+    ok(desk.saveArrival({ time: "11:30 AM" }));
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    time.set("2026-10-14T15:32:00.000Z");
+    await desk.inbound({ id: "start", from: CLEANER, text: "START" });
+    time.set("2026-10-14T16:00:00.000Z");
+    await desk.inbound({ id: "towels", from: CLEANER, text: "Need more paper towels" });
+    await desk.inbound({ id: "code", from: CLEANER, text: `The lockbox code ${DOOR_CODE} stuck` });
+    await desk.inbound({ id: "spaced", from: CLEANER, text: "Is it 8 0 8 8 again?" });
+    await desk.inbound({ id: "mms-1", from: CLEANER, text: "", media: [photo(), photo()] });
+    await desk.inbound({ id: "mms-2", from: CLEANER, text: "", media: [photo()] });
+    time.set("2026-10-14T18:10:00.000Z");
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+
+    const reply = ok(await desk.checkNow());
+    expect(JSON.parse(plain(JSON.stringify(reply.completed)))).toEqual([
+      {
+        nickname: "Lake House",
+        day: "Sunday, Oct 18",
+        arrivalTime: "11:30 AM",
+        startedAt: "Wednesday, Oct 14, 11:32 AM",
+        doneAt: "Wednesday, Oct 14, 2:10 PM",
+        checklist: ["Strip the beds", "Restock coffee"],
+        photos: 3,
+        notes: ["Need more paper towels", "The lockbox code [redacted] stuck", "Is it [redacted] again?"],
+      },
+    ]);
+    expect(JSON.stringify(reply).includes(DOOR_CODE)).toBe(false);
+    expect(readFileSync(join(root, "cleaner-live.json"), "utf8").includes(DOOR_CODE)).toBe(false);
+    expect(readFileSync(join(root, "cleaner-job", "cleaner-core.json"), "utf8").includes(DOOR_CODE)).toBe(false);
+    expect(ok(await desk.checkNow()).completed).toBeUndefined();
+  });
+
+  it("sets the start time from the first message during the cleaning when START never came", async () => {
+    const { desk, time } = await takenWith({});
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    time.set("2026-10-14T15:45:00.000Z");
+    await desk.inbound({ id: "here", from: CLEANER, text: "Here now" });
+    time.set("2026-10-14T16:45:00.000Z");
+    await desk.inbound({ id: "later", from: CLEANER, text: "Halfway" });
+    time.set("2026-10-14T17:00:00.000Z");
+    await desk.inbound({ id: "done", from: CLEANER, text: "DONE" });
+    const completed = (ok(await desk.checkNow()).completed as Record<string, unknown>[])[0] ?? {};
+    expect(plain(String(completed.startedAt))).toBe("Wednesday, Oct 14, 11:45 AM");
+    expect(plain(String(completed.doneAt))).toBe("Wednesday, Oct 14, 1:00 PM");
+    expect(completed.arrivalTime).toBeNull();
+    expect(completed.photos).toBe(0);
+    expect(completed.checklist).toEqual([]);
+  });
+});
+
+describe("Cleaner Core cleaning: get_job_photos", () => {
+  it("returns working links, and makes its key once when none is set", async () => {
+    stubPhotos();
+    const { desk, env, root, time } = await takenWith({}, { PUBLIC_BASE_URL: PHOTO_BASE });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    await desk.inbound({ id: "mms", from: CLEANER, text: "", media: [photo(), photo()] });
+    const saves: string[] = [];
+    const save = (values: Record<string, string | undefined>) => {
+      saves.push(Object.keys(values).join(","));
+      Object.assign(env, values);
+    };
+    const request = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_job_photos", arguments: {} } };
+    const first = ((await handleCleanerMcpMessage(desk, request, PIN_KEY, false, save)).body as { result: { structuredContent: { photos: { url: string; expiresAt: string }[] } } }).result;
+    const photos = first.structuredContent.photos;
+    expect(photos).toHaveLength(2);
+    expect(saves).toEqual(["CLEANER_CORE_PHOTO_KEY"]);
+    const key = photoKey(env);
+    expect(key).toBeDefined();
+    for (const link of photos) {
+      expect(link.url).toMatch(/^https:\/\/cleaner\.example\/cleaner-core\/photos\/[a-p]+$/);
+      const token = link.url.slice(`${PHOTO_BASE}/cleaner-core/photos/`.length);
+      const served = servePhoto(root, token, key, time.now());
+      expect(served.status).toBe(200);
+      expect(served.status === 200 && served.body.equals(JPEG)).toBe(true);
+    }
+    await handleCleanerMcpMessage(desk, request, PIN_KEY, false, save);
+    expect(saves).toEqual(["CLEANER_CORE_PHOTO_KEY"]);
+    const byDay = ok(desk.getJobPhotos({ job: "2026-10-18" }));
+    expect((byDay.photos as unknown[]).length).toBe(2);
+    expect(desk.getJobPhotos({ job: "2026-12-25" }).ok).toBe(false);
+  });
+
+  it("lists get_job_photos and tells Grok to summarize a completed cleaning", async () => {
+    const { desk } = await takenWith({});
+    const tools = ((await mcp(desk, "tools/list")).tools as { name: string; description: string }[]) ?? [];
+    expect(tools.find((tool) => tool.name === "get_job_photos")?.description).toBe(PHOTOS_TOOL);
+    expect(String((await mcp(desk, "initialize")).instructions)).toContain(PHOTOS_INSTRUCTION);
+  });
+});
+
+describe("Cleaner Core cleaning: the host's other instructions (Ruling 9)", () => {
+  it("puts the saved instructions at the end of the first offer", async () => {
+    const { sms } = await takenWith({ instructions: "Leave the porch light on." });
+    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([`${OFFER} Note from the host: Leave the porch light on.`]);
+  });
+
+  it("keeps the offer copy without saved instructions", async () => {
+    const { sms } = await takenWith({});
+    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([OFFER]);
+  });
+
+  it("sends instructions that say ready, and copies for others drop only the YES ask", async () => {
+    const { sms } = await takenWith({ instructions: "Get the guest room ready." });
+    const body = `${OFFER} Note from the host: Get the guest room ready.`;
+    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([body]);
+    expect(offerForOthers(body)).toBe(
+      `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm. Note from the host: Get the guest room ready.`,
+    );
   });
 });

@@ -12,6 +12,8 @@ import { spokenTimes } from "../core/spokenTime";
 import { formatWhen, zonedInstant } from "./calendar";
 import { joinSplitDigits, openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
+import { publicBaseUrl } from "../messaging/publicUrl";
+import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
@@ -72,6 +74,10 @@ const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save th
 const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
 const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
 const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
+const NO_PHOTO_JOB = "There's no cleaning with that day to get photos for.";
+const PHOTO_LINKS_OFF = "I can't make photo links until the server's public address is saved.";
+/** A kept message's text for an MMS photo. */
+const PHOTO_MARK = "[photo]";
 /** A host message is 1 to 600 characters, and at most 10 go out in any hour. */
 const MAX_HOST_MESSAGE = 600;
 const HOST_MESSAGES_PER_HOUR = 10;
@@ -162,6 +168,15 @@ interface Message {
   handled: MessageHandled;
 }
 
+/** An inbound text or MMS. */
+interface Inbound {
+  id: string;
+  from: string;
+  text: string;
+  channel?: "group";
+  media?: InboundMedia[];
+}
+
 interface PinSend {
   sid: string;
   outcome: "accepted" | "undelivered" | "settled";
@@ -225,6 +240,8 @@ interface LiveFile {
   messages?: Message[];
   /** Ids of the messages `check_now` has already returned. */
   messagesShown?: string[];
+  /** Ids of the finished cleanings `check_now` has already returned as completed. */
+  completedShown?: string[];
   released?: boolean;
   /** Ids of the jobs the host gave both times for through confirm_times. */
   timedJobs?: string[];
@@ -785,6 +802,8 @@ export class LiveDesk {
       ...(instructions ? { instructions } : {}),
     };
     this.persist();
+    // The engine reads the checklist, the photo rule, supply notes, and the offer note when it opens.
+    this.engine = undefined;
     return this.reply({ next: this.setupNext() });
   }
 
@@ -860,10 +879,16 @@ export class LiveDesk {
     const newMessages = messages.filter((message) => !seen.has(message.id));
     // Only ids still kept, so the list stays as short as the messages.
     this.file.messagesShown = messages.map((message) => message.id);
+    const jobs = engine.jobs();
+    const shownDone = new Set(this.file.completedShown ?? []);
+    const finished = jobs.filter((job) => job.doneAt && !shownDone.has(job.id));
+    this.file.completedShown = [...shownDone, ...finished.map((job) => job.id)];
+    prunePhotos(this.root, jobs, this.now());
     this.persist();
     return this.reply({
       alerts: fresh.map((note) => note.body),
       messages: newMessages,
+      ...(finished.length > 0 ? { completed: finished.map((job) => this.completedFacts(job)) } : {}),
       turns: this.turns(),
       ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
       ...(read.unread.length > 0 ? { unread: read.unread } : {}),
@@ -1003,6 +1028,53 @@ export class LiveDesk {
       if (!job.checkoutAt || Date.parse(job.checkoutAt) > now) continue;
       engine.keepHostNote(`nudge:${job.id}`, `Checkout time at ${name}. Have the guests left?`);
     }
+  }
+
+  /**
+   * A finished cleaning's facts, for Grok to summarize in its own words. Times are local at the
+   * property. Notes were redacted when they were kept, and the reply's leak check still runs.
+   */
+  private completedFacts(job: JobView): Record<string, unknown> {
+    const zone = this.file.timeZone ?? "UTC";
+    const local = (iso: string | undefined) => {
+      if (!iso) return null;
+      const when = formatWhen(iso, zone);
+      return `${when.day}, ${when.time}`;
+    };
+    return {
+      nickname: this.file.nickname ?? this.file.address ?? "the property",
+      day: formatWhen(zonedInstant(job.checkoutDate, "12:00", zone), zone).day,
+      arrivalTime: job.arrivalTime ?? null,
+      startedAt: local(job.startedAt),
+      doneAt: local(job.doneAt),
+      checklist: job.checklist ?? [],
+      photos: job.photos ?? 0,
+      notes: job.notes ?? [],
+    };
+  }
+
+  /**
+   * Links to the cleaner's photos for one job, each good for one hour. `job` is a checkout date like
+   * 2026-10-18 or the day check_now named, like Sunday, Oct 18. Without it, the latest job with
+   * photos. The signing key is CLEANER_CORE_PHOTO_KEY, or one made once and saved through `save`.
+   */
+  getJobPhotos(input: { job?: string }, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): ToolReply {
+    this.resume();
+    const engine = this.engine;
+    if (!this.file.checked || !engine) return this.fail("Run the checks first.");
+    const wanted = input.job?.trim().toLowerCase() ?? "";
+    const zone = this.file.timeZone ?? "UTC";
+    const dayOf = (job: JobView) => formatWhen(zonedInstant(job.checkoutDate, "12:00", zone), zone).day.toLowerCase();
+    const jobs = engine.jobs();
+    const job = wanted
+      ? jobs.find((item) => item.checkoutDate === wanted || dayOf(item) === wanted || item.id.toLowerCase() === wanted)
+      : [...jobs].reverse().find((item) => photoCount(this.root, item.id) > 0);
+    if (wanted && !job) return this.fail(NO_PHOTO_JOB);
+    if (!job) return this.reply({ photos: [] });
+    const base = publicBaseUrl(this.env());
+    const key = base ? photoKey(this.env(), save) : undefined;
+    if (!base || !key) return this.fail(PHOTO_LINKS_OFF);
+    return this.reply({ photos: photoLinks(this.root, job.id, base, key, this.now()) });
   }
 
   getTurns(): ToolReply {
@@ -1245,6 +1317,7 @@ export class LiveDesk {
     delete this.file.alertsQueued;
     delete this.file.messages;
     delete this.file.messagesShown;
+    delete this.file.completedShown;
     delete this.file.timedJobs;
     this.approvals.clear();
     this.held = false;
@@ -1365,14 +1438,15 @@ export class LiveDesk {
 
   /**
    * A text from the host, the cleaner, or the group. Grok does not see it, so a new host note or a
-   * new message wakes the routine.
+   * new message wakes the routine. `media` is an MMS's attachments: during a cleaning, the cleaner's
+   * photos are downloaded and kept under the job. A media URL is never saved or returned.
    */
-  inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  inbound(input: Inbound): Promise<{ sent: CleanerText[] }> {
     return this.serial(() => this.inboundSerial(input));
   }
 
   /** The body of `inbound`, for a caller already inside the serial queue. */
-  private async inboundSerial(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  private async inboundSerial(input: Inbound): Promise<{ sent: CleanerText[] }> {
     const before = this.visibleNoteIds();
     const lastBefore = this.file.messages?.at(-1)?.id;
     const result = await this.inboundNow(input);
@@ -1380,7 +1454,7 @@ export class LiveDesk {
     return result;
   }
 
-  private async inboundNow(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
+  private async inboundNow(input: Inbound): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -1399,10 +1473,7 @@ export class LiveDesk {
   }
 
   /** Handles one inbound text. `handled` is what Cleaner Core did, or undefined when the text was not taken. */
-  private async routeInbound(
-    input: { id: string; from: string; text: string; channel?: "group" },
-    from: string,
-  ): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
+  private async routeInbound(input: Inbound, from: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
     if (from === this.file.host) return this.hostText(input.id, from, input.text);
     this.resume();
     const keyword = messagingKeyword(input.text);
@@ -1411,7 +1482,16 @@ export class LiveDesk {
       return { sent, handled: keyword === "stop" || keyword === "start" ? keyword : "none" };
     }
     const offered = new Set(this.engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
-    const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
+    const media = input.media ?? [];
+    const photoJob = media.length > 0 ? this.engine.photoJobFor({ id: input.id, from }) : undefined;
+    const photos = photoJob ? await savePhotos(this.root, photoJob, media, cleanerPhotoFetch(), this.env()) : 0;
+    const result = await this.engine.receive({
+      id: input.id,
+      from,
+      text: input.text,
+      ...(input.channel ? { channel: input.channel } : {}),
+      ...(media.length > 0 ? { media: media.length, photos } : {}),
+    });
     this.noteCleanerYes(offered);
     this.noteSeen(input.id);
     this.syncHold();
@@ -1429,10 +1509,13 @@ export class LiveDesk {
    * read. Every run of 4 or more digits is redacted, so the door code never reaches a message even
    * when this desk doesn't hold it in memory. The last 200 are kept.
    */
-  private keepMessage(from: string, input: { text: string; channel?: "group" }, handled: MessageHandled): void {
+  private keepMessage(from: string, input: Inbound, handled: MessageHandled): void {
     const who = this.speaker(from, input.channel);
     if (!who) return;
-    const message: Message = { id: messageId(), from: who.from, name: who.name, text: this.messageText(input.text), at: this.messageAt(), handled };
+    const words = this.messageText(input.text);
+    // An MMS shows as [photo], after its words when it has any. Its media URL is never kept.
+    const text = (input.media?.length ?? 0) > 0 ? (words ? `${words} ${PHOTO_MARK}` : PHOTO_MARK).slice(0, MAX_MESSAGE_TEXT) : words;
+    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: this.messageAt(), handled };
     this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
     this.persist();
   }
@@ -1639,6 +1722,18 @@ export class LiveDesk {
     };
   }
 
+  /** The engine options for the saved preferences. The offer note is set only when instructions are saved. */
+  private preferenceOptions(): Partial<Parameters<typeof openCleanerCore>[0]> {
+    const preferences = this.file.preferences;
+    if (!preferences) return {};
+    return {
+      ...(preferences.checklist.length > 0 ? { checklist: { name: this.file.nickname ?? this.file.address ?? "the property", items: [...preferences.checklist] } } : {}),
+      ...(preferences.photosRequired ? { photosRequired: true } : {}),
+      ...(preferences.supplyNotes ? { supplyNotes: true } : {}),
+      ...(preferences.instructions ? { offerNote: preferences.instructions } : {}),
+    };
+  }
+
   /** Group texts are on when the server allows them and the host didn't choose cleaner-only. */
   private groupOn(): boolean {
     return groupChatEnabled(this.env()) && this.file.groupChat !== "cleaner-only";
@@ -1728,6 +1823,7 @@ export class LiveDesk {
       ...this.scheduleOptions(),
       reminderAsksArrival: true,
       grokReadsMessages: true,
+      ...this.preferenceOptions(),
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
       ...(this.pin ? { pin: this.pin } : {}),
