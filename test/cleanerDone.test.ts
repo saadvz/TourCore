@@ -25,6 +25,7 @@ const BEFORE_CODE = "I'll text you the door code after the guests leave. Reply D
 const ALREADY = "This cleaning is already marked done.";
 const NEXT_DONE = "Reply DONE when the cleaning is finished.";
 const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
+const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory and Maria. Reply YES to join that group, or STOP to opt out.";
 const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
 
 function sink() {
@@ -248,7 +249,7 @@ describe("group chat flag", () => {
       CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     };
-    expect(await invite(base)).toEqual([GROUP_INVITE]);
+    expect(await invite(base)).toEqual([GROUP_INVITE, OBSERVER_INVITE]);
     expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "0" })).toEqual([SOLO_INVITE]);
     expect(await invite({ ...base, CLEANER_CORE_GROUP_CHAT: "false" })).toEqual([SOLO_INVITE]);
   });
