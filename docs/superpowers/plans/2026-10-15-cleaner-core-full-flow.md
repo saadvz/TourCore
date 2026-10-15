@@ -7,7 +7,7 @@
 **Architecture:** OAuth grows a second protected resource and scope for `/mcp/cleaner-core`. `LiveDesk` gains one thin tool per setup step and passes the saved choices into `openCleanerCore`. The engine gains:
 - sources keyed by id, persisted across a restart;
 - an offer trigger;
-- arrival time;
+- every inbound message handed to Grok, a Grok-saved arrival time, and host-approved messages Grok can send;
 - photos Grok can see, notes, and timestamps;
 - a completed record that Grok summarizes.
 
@@ -36,6 +36,7 @@ New `cleaner-template/` files and a `CLEANER_CORE_BOOTSTRAP.md` let a Grok Bot s
 3. A cleaner message the server could misread: a time with no AM or PM, or a text holding the door code. Expected: it reaches Grok in `messages` (code redacted), with no automatic reply, and the server never guesses a time. The test is in Task 5.
 4. An MMS photo arrives with no text body. Expected: it is counted, it never triggers the generic guide reply, and it is never treated as a keyword. The test is in Task 6.
 5. After a restart, one of two iCal links fails. Expected: the jobs from that source are not cancelled; the source is unread. The test is in Task 2.
+6. Grok changes the wording after the host approved a message, or reuses an approval. Expected: refused, and nothing is sent. The test is in Task 5b.
 
 ---
 
@@ -170,52 +171,82 @@ Behavior:
 ### Task 5: Grok reads every message and saves the arrival time
 
 **Files:**
-- Modify: :  / , so each outcome reports a  label; ; - Modify: : , , - Modify: - Test: 
+- Modify: `src/cleaner-core/core.ts`: `receive` / `receiveClaimed`, so each outcome reports a `handled` label; `Job`; `JobView`
+- Modify: `src/cleaner-core/liveDesk.ts`: `inbound`, `checkNow`, `queueNewAlerts`
+- Modify: `src/cleaner-core/mcp.ts`
+- Test: `test/cleanerFullSetup.test.ts`
+
 **Interfaces:**
-- Produces: every inbound text from the cleaner or a saved contact, one-to-one or in the group, is kept in  as .
-  -  is trimmed to 300 characters, with the door code redacted.
-  -  is one of , , , , , , , , , taken from the engine's  and the texts it sent.
-  - The last 200 messages are kept. They are cleared by .
-- Produces: each new message queues a wake (the existing  path, with one pending wake).
-- Produces:  returns  new since the last check, tracked by id like .
+- Produces: every inbound text from the cleaner or a saved contact, one-to-one or in the group, is kept in `LiveFile.messages` as `{ id, from: "cleaner" | "host" | "contact", name, text, at, handled }`.
+  - `text` is trimmed to 300 characters, with the door code redacted.
+  - `handled` is one of `opted-in`, `confirmed`, `declined`, `done`, `stop`, `start`, `injury`, `code-held`, `none`, taken from the engine's `ReceiveResult.reason` and the texts it sent.
+  - The last 200 messages are kept. They are cleared by `reset_scratch`.
+- Produces: each new message queues a wake (the existing `queueNewAlerts` path, with one pending wake).
+- Produces: `check_now` returns `messages` new since the last check, tracked by id like `alertsShown`.
 - Produces: a non-keyword cleaner text no longer gets the generic guide reply. Grok decides what happens next. Keyword handling (YES, DONE, STOP, START, injury, the code gate, no reply to HELP) is unchanged.
-- Produces:  and the tool .
-  -  is "11:30 AM" style and must have AM or PM ().
-  - It sets  on the open job's checkout day. With no open job it fails:   - Tool description: - Produces:  is shown in .
-- Produces: the  instructions add: - The server parses no arrival time. Server host notes stay as the fallback.
+- Produces: `LiveDesk.saveArrival(input: { time?: string }): ToolReply` and the tool `save_arrival`.
+  - `time` is "11:30 AM" style and must have AM or PM (`statedClock`).
+  - It sets `job.arrivalAt` on the open job's checkout day. With no open job it fails: `There's no open cleaning to save an arrival time for.`
+  - Tool description: `Saves the cleaner's arrival time after you read it in their message. Use AM or PM.`
+- Produces: `JobView.arrivalTime` is shown in `turns`.
+- Produces: the `initialize` instructions add: `Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.`
+- The server parses no arrival time. Server host notes stay as the fallback.
 
 - [ ] **Step 1: Write the failing tests.**
-  - "Yes I'll be there around 11:30" from a confirmed cleaner appears in  with , and the cleaner gets no reply.
-  - A YES appears with .
-  - DONE appears with .
-  - STOP appears with , and the host still gets the existing note.
-  - An injury appears with , and the host's direct injury text still goes out.
+  - "Yes I'll be there around 11:30" from a confirmed cleaner appears in `messages` with `handled: "none"`, and the cleaner gets no reply.
+  - A YES appears with `handled: "confirmed"`.
+  - DONE appears with `handled: "done"`.
+  - STOP appears with `handled: "stop"`, and the host still gets the existing note.
+  - An injury appears with `handled: "injury"`, and the host's direct injury text still goes out.
   - A text holding the door code is redacted.
   - A group message appears.
   - Each new message wakes the routine, with one pending wake.
-  - A second  doesn't repeat messages.
-  -  sets ,  fails, and with no open job it fails.
-- [ ] **Step 2: Run**  RUN  v5.0.3 C:/Users/saadk/OneDrive/Desktop/TourCore/.claude/worktrees/modest-perlman-85d6a1. Expected: FAIL.
+  - A second `check_now` doesn't repeat messages.
+  - `save_arrival "11:30 AM"` sets `arrivalTime`, `"11:30"` fails, and with no open job it fails.
+- [ ] **Step 2: Run** `npx vitest run test/cleanerFullSetup.test.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** the interfaces above.
-- [ ] **Step 4: Run**  RUN  v5.0.3 C:/Users/saadk/OneDrive/Desktop/TourCore/.claude/worktrees/modest-perlman-85d6a1
+- [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerCoreGroup.test.ts test/cleanerCore.test.ts test/cleanerGrokDemo.test.ts test/cleanerDone.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failures. Update any existing test that pinned the guide reply for a non-keyword cleaner text, and say so in the report.
+- [ ] **Step 5: Commit** `feat(cleaner-core): Grok reads every message and saves the arrival time`.
 
- ❯ test/cleanerCore.test.ts (61 tests | 7 failed) 770ms
-   ❯ one Scratch turnover (14)
-     × the smoke command exits 2 when the flag is off and prints the host questions when it is on 10ms
-     × injects the given Scratch replies and does not add YES 2ms
-     × sends nothing when the flag is off, including when a Scratch reply is injected 1ms
-     × refuses an extra argument or a non-Scratch reply and prints no turnover 1ms
-   ❯ step D private door code (13)
-     × prints the private door code redacted and leaves it out of the smoke log 1ms
-     × tells the cleaner to call the host when the injury alert fails once 1ms
-   ❯ step E second source and second tenant (10)
-     × drives the closed sync and the court tenant from the smoke command 1ms
+### Task 5b: Send a message the host approved
 
- Test Files  1 failed | 2 passed (3)
-      Tests  7 failed | 148 passed (155)
-   Start at  06:45:33
-   Duration  12.74s (tests 70%, transform 16%, import 14%) and . Expected: PASS, except the known baseline failures. Update any existing test that pinned the guide reply for a non-keyword cleaner text, and say so in the report.
-- [ ] **Step 5: Commit** .
+**Files:**
+- Modify: `src/cleaner-core/liveDesk.ts`
+- Modify: `src/cleaner-core/core.ts`: one send path for a host-approved free-text message through the existing `emit`, with a new `TextKind` `host-message`
+- Modify: `src/cleaner-core/mcp.ts`
+- Test: `test/cleanerFullSetup.test.ts`
+
+**Interfaces:**
+- Produces: `LiveDesk.sendMessage(input: { to?: string; text?: string; confirmation?: string }): Promise<ToolReply>` and the tool `send_message`.
+  - `to` is `"cleaner"`, `"group"`, or a saved contact's name.
+  - `text` is 1–600 characters.
+- **Without `confirmation`,** it validates and returns `{ preview: { to: <display name>, text }, confirmation: { code, question, expiresInMinutes } }` from a `ConfirmationBook` (`src/operator/confirmations.ts`). The question is `Send to {name}: "{text}"?`. The action is `cleaner-message`, the target is the recipient, and the fingerprint is the sha256 of `to|text`.
+- **With `confirmation`,** it redeems the code for the same action, target, and fingerprint, then sends through the engine. It returns `{ next: "Sent to {name}." }`. The send is serialized.
+- Refused, with plain copy and nothing sent, when:
+  - the text carries the door code (`chatCarriesDoorCode`): `DOOR_CODE_IN_CHAT`;
+  - the recipient is unknown, hasn't opted in, has texted STOP, or isn't on the allowlist: `I can't text {name} right now.`;
+  - `group` is used with group chat off or set to `cleaner-only`: `There's no group chat for this property.`;
+  - more than 10 host messages were sent in the past hour: `That's a lot of messages this hour. Try again later.`;
+  - the code is expired or already used, or `to` or `text` changed after approval: `That approval has expired or doesn't match. Ask the host again.`
+- The message is recorded in `LiveFile.messages` with `from: "host"` and `handled: "sent"`, and in the engine outbox as kind `host-message`.
+- Quiet hours don't hold a host-approved message, because the host chose to send it now.
+- Tool description: `Sends the host's own message to the cleaner, the group, or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.`
+- The `initialize` instructions add: `When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.`
+
+- [ ] **Step 1: Write the failing tests.**
+  - A preview returns a code and sends nothing.
+  - Redeeming with the same `to` and `text` sends exactly one text to the cleaner, and it is recorded.
+  - Review Focus 6: the same code with a changed text is refused and sends nothing.
+  - A reused code is refused.
+  - A text holding the door code is refused at preview.
+  - `group` with `cleaner-only` is refused.
+  - An opted-out cleaner is refused.
+  - The 11th message in an hour is refused.
+  - Messages go to Scratch numbers only.
+- [ ] **Step 2: Run** `npx vitest run test/cleanerFullSetup.test.ts`. Expected: FAIL.
+- [ ] **Step 3: Implement** the interfaces above.
+- [ ] **Step 4: Run** `npx vitest run test/cleanerFullSetup.test.ts test/cleanerCoreGroup.test.ts test/cleanerCoreWiring.test.ts` and `npm run typecheck`. Expected: PASS, except the known baseline failure.
+- [ ] **Step 5: Commit** `feat(cleaner-core): send a message the host approved`.
 
 ### Task 6: Checklist, photos Grok can see, and the completed record
 
@@ -263,7 +294,7 @@ Behavior:
     - nothing is served with the flag off.
   - In `test/cleanerFullSetup.test.ts`:
     - the checklist goes after the code, once;
-    - a photo-only MMS has no guide reply and no relay;
+    - a photo-only MMS has no guide reply and appears in `messages` as `[photo]`;
     - DONE is blocked without a photo when photos are required;
     - `completed` has exact counts and times, appears once, and holds no door code;
     - `get_job_photos` returns working links.
@@ -290,6 +321,7 @@ Content decisions:
   - the setup order (the diagram's 8 steps, naming each tool);
   - after Activate, create the Check routine and the Alerts routine (link their docs) and save the alert routine on the secure card;
   - every booking: what each alert means and which tool answers it (`confirm_times`, `mark_guests_left`, `needsTimes`, the nudge);
+  - reading `messages` and alerting the host when needed, saving the arrival time, and drafting a reply the host approves before `send_message` sends it;
   - the rules: no secrets in chat; the door code only on the secure card and only after the host says the guests left; live texts only to approved numbers.
 - **`template.json`.**
   - `hostedCleanerCoreUrl: "https://tourcore-production-72ec.up.railway.app"`;
@@ -325,7 +357,7 @@ Content decisions:
   4. A booking appears in Google; the alert names the usual times; the host says yes (`confirm_times`).
   5. The first text waits for `days-after-check-in` 1.
   6. Cleaner YES (invite and offer).
-  7. The reminder 1 day before carries the arrival question; the cleaner replies "around 11:30"; the reply appears in `messages`; `save_arrival 11:30 AM`.
+  7. The reminder 1 day before carries the arrival question; the cleaner replies "around 11:30"; the reply appears in `messages`; `save_arrival 11:30 AM`; the host approves `send_message` "Parking is on the street today." with a code, and it reaches the cleaner once.
   8. The checkout nudge; "guests have left"; the private code with lock location to the cleaner only.
   9. The checklist; one photo; the note "need paper towels"; DONE.
   10. `check_now` returns `completed`, and `get_job_photos` returns a working link.
