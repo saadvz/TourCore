@@ -6,7 +6,8 @@ import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { cleanerOptOutHold, groupTimeLine } from "../src/cleaner-core/cleanerTexts";
 import type { CleanerCore } from "../src/cleaner-core/core";
-import { liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { DOOR_CODE_IN_CHAT, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import type { GoogleEventList } from "../src/cleaner-core/sources";
@@ -23,6 +24,7 @@ import {
   FROZEN,
   HOST,
   OBSERVER,
+  OFF_LIST,
   TEST_PIN_KEY,
   fakeSms,
   startWiredApp,
@@ -987,5 +989,262 @@ describe("Cleaner Core messages: save_arrival", () => {
     );
     const called = await mcp(desk, "tools/call", { name: "save_arrival", arguments: { time: "1:15 PM" } });
     expect(called.isError).toBe(false);
+  });
+});
+
+const LATE = "Guests are running late today. Please start at 12:30 PM instead.";
+const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
+
+interface Approval {
+  code: string;
+  question: string;
+  expiresInMinutes: number;
+}
+
+async function preview(desk: LiveDesk, to: string, text: string): Promise<Approval> {
+  const reply = ok(await desk.sendMessage({ to, text }));
+  return reply.confirmation as Approval;
+}
+
+function hostOutbox(desk: LiveDesk) {
+  const engine = (desk as unknown as { engine: CleanerCore }).engine;
+  return engine.outbox().filter((item) => item.kind === "host-message");
+}
+
+/** Group chat everyone with the host, the cleaner, and Sam in the group. */
+async function groupEveryone() {
+  const opened = openDesk([HOST, CLEANER, OBSERVER], "1");
+  await setUp(opened.desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+  await opened.desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
+  await opened.desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
+  await opened.desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
+  return opened;
+}
+
+describe("Cleaner Core send_message: the host approves first", () => {
+  it("a preview returns a code and the exact question, and sends nothing", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const before = sms.sent.length;
+    const reply = ok(await desk.sendMessage({ to: "cleaner", text: LATE }));
+    expect(reply.preview).toEqual({ to: "Ana", text: LATE });
+    const approval = reply.confirmation as Approval;
+    expect(approval.code).toMatch(/^[A-Z2-9]{6}$/);
+    expect(approval.question).toBe(`Send to Ana: "${LATE}"?`);
+    expect(approval.expiresInMinutes).toBe(10);
+    expect(sms.sent).toHaveLength(before);
+    expect(hostOutbox(desk)).toEqual([]);
+  });
+
+  it("redeeming with the same to and text sends exactly one text to the cleaner, and records it", async () => {
+    const { desk, sms, root } = await confirmedCleaner();
+    const approval = await preview(desk, "cleaner", LATE);
+    await messagesNow(desk);
+    const before = sms.sent.length;
+    expect(ok(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code }))).toEqual({ next: "Sent to Ana." });
+    expect(sms.sent.slice(before)).toEqual([expect.objectContaining({ to: CLEANER, body: LATE })]);
+    expect(hostOutbox(desk)).toEqual([expect.objectContaining({ to: CLEANER, body: LATE, kind: "host-message", status: "sent" })]);
+    const file = JSON.parse(readFileSync(join(root, "cleaner-live.json"), "utf8")) as { messages: Message[] };
+    expect(file.messages.at(-1)).toEqual(expect.objectContaining({ from: "host", name: "Host", to: "Ana", text: LATE, handled: "sent" }));
+    // Grok sent it, so check_now doesn't hand it back as new.
+    expect(await messagesNow(desk)).toEqual([]);
+  });
+
+  it("refuses the same code with a changed text or recipient, and sends nothing", async () => {
+    const { desk, sms, groups } = await groupEveryone();
+    const sentBefore = sms.sent.length;
+    const postsBefore = groups.posts.length;
+    const changedText = await preview(desk, "cleaner", LATE);
+    expect(await desk.sendMessage({ to: "cleaner", text: `${LATE} Thanks!`, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    const changedTo = await preview(desk, "cleaner", LATE);
+    expect(await desk.sendMessage({ to: "Sam", text: LATE, confirmation: changedTo.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    // A refused code is used up, so the original text can't go with it either.
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    expect(sms.sent).toHaveLength(sentBefore);
+    expect(groups.posts).toHaveLength(postsBefore);
+    expect(hostOutbox(desk)).toEqual([]);
+  });
+
+  it("refuses a reused code", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const approval = await preview(desk, "cleaner", LATE);
+    ok(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code }));
+    const after = sms.sent.length;
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    expect(sms.sent).toHaveLength(after);
+    expect(hostOutbox(desk)).toHaveLength(1);
+  });
+
+  it("refuses an expired code", async () => {
+    let clock = new Date(FROZEN);
+    const { desk } = openDesk([HOST, CLEANER], "0", () => clock);
+    await setUp(desk, { groupChat: "cleaner-only" });
+    await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+    const approval = await preview(desk, "cleaner", LATE);
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    expect(hostOutbox(desk)).toEqual([]);
+  });
+
+  it("refuses a text holding the door code at preview, also after a restart with the code sealed", async () => {
+    const { desk, root } = await confirmedCleaner();
+    expect(await desk.sendMessage({ to: "cleaner", text: `The code is ${DOOR_CODE}` })).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+    resetLiveDesks();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: [HOST, CLEANER].join(","),
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const restarted = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(await restarted.sendMessage({ to: "cleaner", text: `Use ${DOOR_CODE} at the back` })).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+    expect(await restarted.sendMessage({ to: "cleaner", text: `Use ${DOOR_CODE} at the back` }, PIN_KEY)).toEqual({ ok: false, error: DOOR_CODE_IN_CHAT });
+    const res = await handleCleanerMcpMessage(
+      restarted,
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "send_message", arguments: { to: "cleaner", text: `Use ${DOOR_CODE} at the back` } } },
+      PIN_KEY,
+    );
+    const body = res.body as { result: { isError: boolean; content: { text: string }[] } };
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0]?.text).toBe(DOOR_CODE_IN_CHAT);
+  });
+
+  it("refuses an empty or too long text, and an unknown recipient", async () => {
+    const { desk } = await confirmedCleaner();
+    expect((await desk.sendMessage({ to: "cleaner", text: "  " })).ok).toBe(false);
+    expect((await desk.sendMessage({ to: "cleaner", text: "a".repeat(601) })).ok).toBe(false);
+    expect((await desk.sendMessage({ to: "cleaner", text: "a".repeat(600) })).ok).toBe(true);
+    expect(await desk.sendMessage({ to: "Jordan", text: LATE })).toEqual({ ok: false, error: "I can't text Jordan right now." });
+  });
+
+  it("refuses group with group chat off or set to cleaner-only", async () => {
+    const off = openDesk([HOST, CLEANER], "0");
+    await setUp(off.desk, {});
+    expect(await off.desk.sendMessage({ to: "group", text: LATE })).toEqual({ ok: false, error: "There's no group chat for this property." });
+    const only = openDesk([HOST, CLEANER], "1");
+    await setUp(only.desk, { groupChat: "cleaner-only" });
+    expect(await only.desk.sendMessage({ to: "group", text: LATE })).toEqual({ ok: false, error: "There's no group chat for this property." });
+  });
+
+  it("refuses an opted-out cleaner, even with a code issued before the STOP", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const approval = await preview(desk, "cleaner", LATE);
+    await desk.inbound({ id: "stop", from: CLEANER, text: "STOP" });
+    const before = sms.sent.length;
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE })).toEqual({ ok: false, error: "I can't text Ana right now." });
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code })).toEqual({ ok: false, error: "I can't text Ana right now." });
+    expect(sms.sent).toHaveLength(before);
+    expect(hostOutbox(desk)).toEqual([]);
+  });
+
+  it("refuses a cleaner who hasn't opted in yet", async () => {
+    const { desk } = openDesk([HOST, CLEANER], "0");
+    await setUp(desk, { groupChat: "cleaner-only" });
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE })).toEqual({ ok: false, error: "I can't text Ana right now." });
+  });
+
+  it("refuses the 11th message in an hour, and allows one after the hour", async () => {
+    let clock = new Date(FROZEN);
+    const { desk, sms } = openDesk([HOST, CLEANER], "0", () => clock);
+    await setUp(desk, { groupChat: "cleaner-only" });
+    await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+    for (let count = 1; count <= 10; count++) {
+      const text = `Note number ${count}`;
+      const approval = await preview(desk, "cleaner", text);
+      ok(await desk.sendMessage({ to: "cleaner", text, confirmation: approval.code }));
+      clock = new Date(clock.getTime() + 60_000);
+    }
+    const tooMany = "That's a lot of messages this hour. Try again later.";
+    expect(await desk.sendMessage({ to: "cleaner", text: "Note number 11" })).toEqual({ ok: false, error: tooMany });
+    expect(hostOutbox(desk)).toHaveLength(10);
+    const before = sms.sent.length;
+    clock = new Date(new Date(FROZEN).getTime() + 61 * 60_000);
+    const approval = await preview(desk, "cleaner", "Note number 11");
+    ok(await desk.sendMessage({ to: "cleaner", text: "Note number 11", confirmation: approval.code }));
+    expect(sms.sent).toHaveLength(before + 1);
+  });
+
+  it("sends a host message that says ready, and the job's status doesn't change", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const statuses = () => (ok(desk.getTurns()).turns as { status: string }[]).map((turn) => turn.status);
+    const before = statuses();
+    const text = "The unit is ready for you whenever you arrive.";
+    const approval = await preview(desk, "Ana", text);
+    ok(await desk.sendMessage({ to: "cleaner", text, confirmation: approval.code }));
+    expect(sms.sent.at(-1)).toEqual(expect.objectContaining({ to: CLEANER, body: text }));
+    expect(statuses()).toEqual(before);
+  });
+
+  it("is not held by quiet hours", async () => {
+    let clock = new Date(FROZEN);
+    const { desk, sms } = openDesk([HOST, CLEANER], "0", () => clock);
+    await setUp(desk, { groupChat: "cleaner-only" });
+    ok(desk.saveSchedule({ quietFrom: "9:00 PM", quietUntil: "8:00 AM" }));
+    await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
+    // 10:00 PM in New York.
+    clock = new Date("2026-10-15T02:00:00.000Z");
+    const approval = await preview(desk, "cleaner", LATE);
+    const before = sms.sent.length;
+    ok(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: approval.code }));
+    expect(sms.sent.slice(before)).toEqual([expect.objectContaining({ to: CLEANER, body: LATE })]);
+  });
+
+  it("sends to the group thread and to a saved contact who opted in", async () => {
+    const { desk, sms, groups } = await groupEveryone();
+    const group = await preview(desk, "group", LATE);
+    expect(group.question).toBe(`Send to the group: "${LATE}"?`);
+    expect(ok(await desk.sendMessage({ to: "group", text: LATE, confirmation: group.code }))).toEqual({ next: "Sent to the group." });
+    expect(groups.posts.filter((post) => post.body === LATE)).toEqual([{ to: [HOST, CLEANER, OBSERVER].sort(), body: LATE }]);
+    const note = "Sam, the spare towels are in the hall closet.";
+    const contact = await preview(desk, "sam", note);
+    expect(contact.question).toBe(`Send to Sam: "${note}"?`);
+    expect(ok(await desk.sendMessage({ to: "Sam", text: note, confirmation: contact.code }))).toEqual({ next: "Sent to Sam." });
+    expect(sms.sent.filter((item) => item.body === note)).toEqual([expect.objectContaining({ to: OBSERVER })]);
+    expect(hostOutbox(desk).map((item) => item.kind)).toEqual(["host-message", "host-message"]);
+  });
+
+  it("sends only to Scratch numbers on the allowlist, and refuses a contact who isn't on it", async () => {
+    const { desk, sms, groups } = openDesk([HOST, CLEANER, OBSERVER], "1");
+    await setUp(desk, {
+      contacts: [
+        { name: "Sam", role: "co-host", phone: OBSERVER },
+        { name: "Lee", role: "assistant", phone: OFF_LIST },
+      ],
+      groupChat: "cleaner-and-host",
+    });
+    await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-lee", from: OFF_LIST, text: "YES" });
+    expect(await desk.sendMessage({ to: "Lee", text: LATE })).toEqual({ ok: false, error: "I can't text Lee right now." });
+    for (const to of ["cleaner", "group"]) {
+      const approval = await preview(desk, to, LATE);
+      ok(await desk.sendMessage({ to, text: LATE, confirmation: approval.code }));
+    }
+    const recipients = [...sms.sent.map((item) => item.to), ...groups.posts.flatMap((post) => post.to)];
+    expect(recipients.length).toBeGreaterThan(0);
+    expect(recipients.every((phone) => isScratchTestNumber(phone))).toBe(true);
+    expect(recipients).not.toContain(OFF_LIST);
+    expect(hostOutbox(desk).every((item) => isScratchTestNumber(item.to))).toBe(true);
+  });
+
+  it("lists send_message and tells Grok to draft replies for the host to approve", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    const tools = ((await mcp(desk, "tools/list")).tools as { name: string; description: string }[]) ?? [];
+    expect(tools.find((tool) => tool.name === "send_message")?.description).toBe(
+      "Sends the host's own message to the cleaner, the group, or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
+    );
+    const text = String((await mcp(desk, "initialize")).instructions);
+    expect(text).toContain(
+      "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
+    );
+    const first = await mcp(desk, "tools/call", { name: "send_message", arguments: { to: "cleaner", text: LATE } });
+    expect(first.isError).toBe(false);
+    const code = (first.structuredContent as { confirmation: Approval }).confirmation.code;
+    const before = sms.sent.length;
+    const second = await mcp(desk, "tools/call", { name: "send_message", arguments: { to: "cleaner", text: LATE, confirmation: code } });
+    expect(second.isError).toBe(false);
+    expect(second.structuredContent).toEqual({ next: "Sent to Ana." });
+    expect(sms.sent).toHaveLength(before + 1);
   });
 });

@@ -5,6 +5,7 @@ import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alert
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
 import { FileRuntimeStore } from "../storage/runtimeStore";
+import { ConfirmationBook } from "../operator/confirmations";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
@@ -71,6 +72,17 @@ const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save th
 const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
 const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
 const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
+/** A host message is 1 to 600 characters, and at most 10 go out in any hour. */
+const MAX_HOST_MESSAGE = 600;
+const HOST_MESSAGES_PER_HOUR = 10;
+const HOUR_MS = 60 * 60_000;
+/** The approval action for a host message. Its target is the recipient, its fingerprint the recipient and the exact text. */
+const SEND_ACTION = "cleaner-message";
+const MESSAGE_NEEDED = `Write the message in 1 to ${MAX_HOST_MESSAGE} characters.`;
+const RECIPIENT_NEEDED = "Say who to text: the cleaner, the group, or a saved contact's name.";
+const NO_GROUP = "There's no group chat for this property.";
+const TOO_MANY = "That's a lot of messages this hour. Try again later.";
+const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
 /** Messages kept for Grok, newest last. */
 const MAX_MESSAGES = 200;
 const MAX_MESSAGE_TEXT = 300;
@@ -132,12 +144,17 @@ interface Preferences {
 /** The name a legacy single calendar link reads as. Its source id stays `guesty-lite`. */
 const LEGACY_CALENDAR = "Guesty Lite";
 
-/** An inbound text from the cleaner, the host in the group, or a saved contact, for Grok to read. */
+/**
+ * An inbound text from the cleaner, the host in the group, or a saved contact, for Grok to read.
+ * A message the host approved and Cleaner Core sent is kept too, from host with handled sent.
+ */
 interface Message {
   /** Letters only, so an id can never hold a run of digits like a door code. */
   id: string;
   from: "cleaner" | "host" | "contact";
   name: string;
+  /** Who a sent host message went to, like Ana or the group. */
+  to?: string;
   /** Trimmed to 300 characters, with every run of 4 or more digits redacted. */
   text: string;
   /** Local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
@@ -398,6 +415,8 @@ export class LiveDesk {
   private held = false;
   private readonly path: string;
   private readonly alerts: OperatorEventOutbox;
+  /** Approvals for host messages. They live only in this process, so a restart means asking again. */
+  private readonly approvals: ConfirmationBook;
 
   constructor(
     private readonly root: string,
@@ -405,6 +424,7 @@ export class LiveDesk {
     private readonly now: () => Date,
   ) {
     this.path = join(root, "cleaner-live.json");
+    this.approvals = new ConfirmationBook(10 * 60_000, () => this.now().getTime());
     this.load();
     // The routine's address and key are read from the env on every delivery, never saved here.
     this.alerts = new OperatorEventOutbox(
@@ -1109,6 +1129,97 @@ export class LiveDesk {
     return this.reply({ next: resumeNote(this.file.address) });
   }
 
+  /**
+   * Sends the host's own message to the cleaner, the group, or a saved contact. Without a
+   * confirmation it only checks the message and returns the exact text with an approval code.
+   * With the code it sends through the engine, and only when the recipient and the text are the
+   * ones the host approved. The door code never goes out this way.
+   */
+  sendMessage(input: { to?: string; text?: string; confirmation?: string }, pinKey?: Buffer): Promise<ToolReply> {
+    return this.serial(() => this.sendMessageNow(input, pinKey));
+  }
+
+  private async sendMessageNow(input: { to?: string; text?: string; confirmation?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    const text = input.text?.trim() ?? "";
+    if (!text || text.length > MAX_HOST_MESSAGE) return this.fail(MESSAGE_NEEDED);
+    if (pinKey && !this.pin) this.unlock(pinKey);
+    if (this.hostTextCarriesCode(text)) return this.fail(DOOR_CODE_IN_CHAT);
+    const to = input.to?.trim() ?? "";
+    if (!to) return this.fail(RECIPIENT_NEEDED);
+    const recipient = this.recipientOf(to);
+    if ("error" in recipient) return this.fail(recipient.error);
+    const cant = `I can't text ${recipient.name} right now.`;
+    this.resume();
+    const engine = this.engine;
+    if (this.pin) engine?.rememberPin(this.pin);
+    if (!this.file.checked || !engine || !this.reachable(recipient.send, engine)) return this.fail(cant);
+    // The engine's outbox counts them, so this desk saves no timestamp that could hold the door code's digits.
+    if (engine.hostMessagesSince(new Date(this.now().getTime() - HOUR_MS)) >= HOST_MESSAGES_PER_HOUR) return this.fail(TOO_MANY);
+    const fingerprint = createHash("sha256").update(`${recipient.key}|${text}`).digest("hex");
+    const code = input.confirmation?.trim() ?? "";
+    if (!code) {
+      const question = `Send to ${recipient.name}: "${text}"?`;
+      return this.reply({ preview: { to: recipient.name, text }, confirmation: this.approvals.issue(SEND_ACTION, recipient.key, fingerprint, question) });
+    }
+    try {
+      this.approvals.redeem(code, SEND_ACTION, recipient.key, fingerprint);
+    } catch {
+      return this.fail(APPROVAL_STALE);
+    }
+    let sent: CleanerText | null;
+    try {
+      sent = await engine.sendHostMessage({ to: recipient.send, body: text });
+    } catch {
+      sent = null;
+    }
+    if (!sent) return this.fail(cant);
+    this.keepSent(recipient.name, text);
+    return this.reply({ next: `Sent to ${recipient.name}.` });
+  }
+
+  /**
+   * True when a host message could carry the door code. When the code is sealed and this desk
+   * can't open it, any run of 4 or more digits might be it, so that is refused too.
+   */
+  private hostTextCarriesCode(text: string): boolean {
+    if (this.chatCarriesDoorCode(text)) return true;
+    return !this.pin && Boolean(this.file.pinSeal) && /\d{4,}/.test(text);
+  }
+
+  /**
+   * The saved person or thread a host message goes to: "cleaner" (or the cleaner's saved name),
+   * "group", or a saved contact's name. `key` binds an approval to that exact person's phone.
+   */
+  private recipientOf(to: string): { key: string; send: string; name: string } | { error: string } {
+    const wanted = to.toLowerCase();
+    const cleanerName = this.file.cleanerName;
+    if (wanted === "cleaner" || (cleanerName && wanted === cleanerName.toLowerCase())) {
+      if (!this.file.cleaner) return { error: "I can't text the cleaner right now." };
+      return { key: `cleaner:${this.file.cleaner}`, send: this.file.cleaner, name: cleanerName ?? "the cleaner" };
+    }
+    if (wanted === "group") {
+      if (!this.groupOn()) return { error: NO_GROUP };
+      return { key: "group", send: "group", name: "the group" };
+    }
+    const contact = contactsOf(this.file).find((item) => item.name.toLowerCase() === wanted);
+    if (!contact) return { error: `I can't text ${to.slice(0, MAX_NAME)} right now.` };
+    return { key: `contact:${contact.phone}`, send: contact.phone, name: contact.name };
+  }
+
+  /** The engine holds consent, STOP, and the group's members. A one-to-one text also needs the allowlist now. */
+  private reachable(send: string, engine: CleanerCore): boolean {
+    if (send === "group") return this.groupOn() && engine.canSendHostMessage("group");
+    return isAllowlisted(this.env(), send) && engine.canSendHostMessage(send);
+  }
+
+  /** Keeps a sent host message in the history. Grok sent it, so check_now doesn't return it as new. */
+  private keepSent(to: string, text: string): void {
+    const message: Message = { id: messageId(), from: "host", name: "Host", to, text: this.messageText(text), at: this.messageAt(), handled: "sent" };
+    this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
+    this.file.messagesShown = [...(this.file.messagesShown ?? []), message.id];
+    this.persist();
+  }
+
   resetScratch(): Promise<ToolReply> {
     return this.serial(async () => this.resetScratchNow());
   }
@@ -1131,6 +1242,7 @@ export class LiveDesk {
     delete this.file.messages;
     delete this.file.messagesShown;
     delete this.file.timedJobs;
+    this.approvals.clear();
     this.held = false;
     this.persist();
     return this.reply({ next: SCRATCH_RESET_LINE });
@@ -1316,11 +1428,20 @@ export class LiveDesk {
   private keepMessage(from: string, input: { text: string; channel?: "group" }, handled: MessageHandled): void {
     const who = this.speaker(from, input.channel);
     if (!who) return;
-    const text = this.hideCode(input.text).replace(/\d{4,}/g, "[redacted]").trim().slice(0, MAX_MESSAGE_TEXT);
-    const when = formatWhen(this.now().toISOString(), this.file.timeZone ?? "UTC");
-    const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: `${when.day}, ${when.time}`, handled };
+    const message: Message = { id: messageId(), from: who.from, name: who.name, text: this.messageText(input.text), at: this.messageAt(), handled };
     this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
     this.persist();
+  }
+
+  /** A kept message's text: every run of 4 or more digits redacted, trimmed to 300 characters. */
+  private messageText(text: string): string {
+    return this.hideCode(text).replace(/\d{4,}/g, "[redacted]").trim().slice(0, MAX_MESSAGE_TEXT);
+  }
+
+  /** Now, as local time at the property, like "Wednesday, Oct 14, 11:00 AM". */
+  private messageAt(): string {
+    const when = formatWhen(this.now().toISOString(), this.file.timeZone ?? "UTC");
+    return `${when.day}, ${when.time}`;
   }
 
   /** Who sent a text Grok reads. The host counts only in the group thread. */
