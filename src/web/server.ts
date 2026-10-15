@@ -28,7 +28,7 @@ import { attachToolListStream, isInitializedNotification, noteInitialized } from
 import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
 import { type ConnectorScope } from "../mcp/scopes";
 import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
-import { CLEANER_SCOPE, endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth, OPERATOR_SCOPE } from "../mcp/oauth";
+import { CLEANER_SCOPE, endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth, OAuthGrantStore, OPERATOR_SCOPE } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { AuditExportLinks } from "../operator/auditExportLinks";
 import { ConfirmationBook } from "../operator/confirmations";
@@ -952,8 +952,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.env.TOURCORE_HOSTED_OWNER_RESET === HOSTED_OWNER_RESET && clearHostedTenant(installation.files)) {
       console.log("  Cleared the hosted demo owner. The next approved Grok connection becomes the owner. Tour records were not deleted. Remove TOURCORE_HOSTED_OWNER_RESET after this deploy.");
     }
-    if (resetHostedCleanerOwner(process.env, installation.files)) {
-      console.log("  Cleared the hosted Cleaner Core owner. The next approved Grok Bot becomes the owner. Cleaning records were not deleted. Remove CLEANER_CORE_HOSTED_OWNER_RESET after this deploy.");
+    if (resetHostedCleanerOwner(process.env, installation.files, () => new OAuthGrantStore(installation.runtime).revokeForPath(CLEANER_MCP_PATH))) {
+      console.log("  Cleared the hosted Cleaner Core owner and signed out its Grok Bot. The next approved Grok Bot becomes the owner. Cleaning records were not deleted. Remove CLEANER_CORE_HOSTED_OWNER_RESET after this deploy.");
     }
   }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";

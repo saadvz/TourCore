@@ -124,7 +124,7 @@ async function hostedApp(extra: NodeJS.ProcessEnv = {}, existing?: { root: strin
     http(`/oauth/requests/${id}/approve`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ matchCode: code }) });
 
   /** The whole dance for one resource. Returns the access token. */
-  const connect = async (clientId: string, resource: string, scope: string) => {
+  const connect = async (clientId: string, resource: string, scope: string, tokenResource = resource) => {
     const { verifier, challenge } = pkce();
     const page = await authorize(clientId, challenge, resource, scope);
     expect(page.status).toBe(200);
@@ -136,12 +136,19 @@ async function hostedApp(extra: NodeJS.ProcessEnv = {}, existing?: { root: strin
     const token = await http("/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code: location.searchParams.get("code")!, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT, resource }).toString(),
+      body: new URLSearchParams({ grant_type: "authorization_code", code: location.searchParams.get("code")!, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT, resource: tokenResource }).toString(),
     });
     expect(token.status).toBe(200);
-    const body = (await token.json()) as { access_token: string; scope: string };
-    return { access: body.access_token, scope: body.scope, verifier };
+    const body = (await token.json()) as { access_token: string; refresh_token: string; scope: string };
+    return { access: body.access_token, refresh: body.refresh_token, scope: body.scope, verifier };
   };
+
+  const refresh = (clientId: string, refreshToken: string, resource: string) =>
+    http("/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: clientId, resource }).toString(),
+    });
 
   const rpc = (path: string, method: string, token?: string) =>
     http(path, {
@@ -150,7 +157,7 @@ async function hostedApp(extra: NodeJS.ProcessEnv = {}, existing?: { root: strin
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: {} }),
     });
 
-  return { inst, root, env, logs, http, register, authorize, pageParts, approve, connect, rpc };
+  return { inst, root, env, logs, http, register, authorize, pageParts, approve, connect, refresh, rpc };
 }
 
 describe("Cleaner Core OAuth", () => {
@@ -205,6 +212,30 @@ describe("Cleaner Core OAuth", () => {
     const html = await page.text();
     expect(html).toContain("<title>Connect to Tour Core</title>");
     expect(html).not.toContain("Cleaner Core");
+  });
+
+  it("Tour Core still exchanges and refreshes with the bare origin", async () => {
+    const app = await hostedApp();
+    const clientId = await app.register("Grok");
+    const tour = await app.connect(clientId, BASE, OPERATOR_SCOPE, BASE);
+    expect(tour.scope).toBe(OPERATOR_SCOPE);
+    expect((await app.rpc("/mcp", "tools/list", tour.access)).status).toBe(200);
+    const refreshed = await app.refresh(clientId, tour.refresh, BASE);
+    expect(refreshed.status).toBe(200);
+    const next = (await refreshed.json()) as { access_token: string };
+    expect((await app.rpc("/mcp", "tools/list", next.access_token)).status).toBe(200);
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", next.access_token)).status).toBe(401);
+  });
+
+  it("a cleaner refresh can't name Tour Core", async () => {
+    const app = await hostedApp();
+    const clientId = await app.register("Grok");
+    const cleaner = await app.connect(clientId, CLEANER_RESOURCE, CLEANER_SCOPE);
+    for (const resource of [BASE, `${BASE}/mcp`]) {
+      const res = await app.refresh(clientId, cleaner.refresh, resource);
+      expect(res.status).toBe(400);
+      expect(await res.text()).not.toContain("access_token");
+    }
   });
 
   it("tokens do not cross", async () => {
@@ -302,18 +333,32 @@ describe("Cleaner Core OAuth", () => {
   it("reset clears the cleaner owner", async () => {
     const app = await hostedApp();
     const owner = await app.register("Grok");
-    await app.connect(owner, CLEANER_RESOURCE, CLEANER_SCOPE);
-    bindHostedTenant(app.inst.files, "tour-owner", new Date());
+    const cleaner = await app.connect(owner, CLEANER_RESOURCE, CLEANER_SCOPE);
+    const tourClient = await app.register("Grok tours");
+    const tour = await app.connect(tourClient, `${BASE}/mcp`, OPERATOR_SCOPE);
+    expect(app.inst.files.state().hostedTenant?.clientId).toBe(tourClient);
     expect(CLEANER_HOSTED_OWNER_RESET).toBe("reset-cleaner-owner");
+    const revoke = () => new OAuthGrantStore(new FileRuntimeStore(join(app.root, "runtime"))).revokeForPath("/mcp/cleaner-core");
 
-    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "yes" }, app.inst.files)).toBe(false);
-    expect(resetHostedCleanerOwner({}, app.inst.files)).toBe(false);
+    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "yes" }, app.inst.files, revoke)).toBe(false);
+    expect(resetHostedCleanerOwner({}, app.inst.files, revoke)).toBe(false);
     expect(app.inst.files.state().hostedCleanerTenant?.clientId).toBe(owner);
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", cleaner.access)).status).toBe(200);
 
-    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "reset-cleaner-owner" }, app.inst.files)).toBe(true);
+    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "reset-cleaner-owner" }, app.inst.files, revoke)).toBe(true);
     expect(app.inst.files.state().hostedCleanerTenant).toBeUndefined();
-    expect(app.inst.files.state().hostedTenant?.clientId).toBe("tour-owner");
-    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "reset-cleaner-owner" }, app.inst.files)).toBe(false);
+    expect(app.inst.files.state().hostedTenant?.clientId).toBe(tourClient);
+    expect(resetHostedCleanerOwner({ CLEANER_CORE_HOSTED_OWNER_RESET: "reset-cleaner-owner" }, app.inst.files, revoke)).toBe(false);
+
+    // The previous owner's cleaner access ends now: its access token and its refresh token.
+    expect((await app.rpc("/mcp/cleaner-core", "tools/list", cleaner.access)).status).toBe(401);
+    const refused = await app.refresh(owner, cleaner.refresh, CLEANER_RESOURCE);
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).not.toContain("access_token");
+
+    // Tour Core's grant is untouched.
+    expect((await app.rpc("/mcp", "tools/list", tour.access)).status).toBe(200);
+    expect((await app.refresh(tourClient, tour.refresh, `${BASE}/mcp`)).status).toBe(200);
 
     const next = await app.register("Next Grok");
     const page = await app.authorize(next, pkce().challenge, CLEANER_RESOURCE, CLEANER_SCOPE);
