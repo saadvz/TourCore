@@ -21,6 +21,7 @@ const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner r
 const OWNER_HOLD = `The cleaning at ${ADDRESS} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
 const HOST_START_HELD = `You'll get cleaning texts for ${ADDRESS} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`;
+const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
 
 const HOST_KIND_RULE = {
   "host-checkout": "blocked",
@@ -192,8 +193,8 @@ describe("one opt-out check for every text to Cory", () => {
     const beforeDone = box.sent.length;
     await job.receive({ id: "done", from: CLEANER, text: "DONE" });
     expect(box.sent.slice(beforeDone).filter((text) => text.to === OWNER)).toEqual([]);
-    expect(box.sent.slice(beforeDone).some((text) => text.to === CLEANER && text.kind === "done")).toBe(true);
-    expect(job.jobs().some((item) => item.status === "done")).toBe(true);
+    expect(box.sent.slice(beforeDone)).toEqual([{ to: CLEANER, body: ON_HOLD, kind: "next" }]);
+    expect(job.jobs().some((item) => item.status === "done")).toBe(false);
 
     const beforeCleanerStop = box.sent.length;
     await job.receive({ id: "cleaner-stop", from: CLEANER, text: "STOP" });
@@ -210,7 +211,7 @@ describe("one opt-out check for every text to Cory", () => {
     expect(resumed?.body).toContain("is back on");
     expect(job.hostNotes().some((line) => line.includes("is back on"))).toBe(true);
     expect(job.outbox().find((item) => item.kind === "resume")?.status).toBe("unsent");
-    expect(job.outbox().filter((item) => item.to === OWNER && item.kind === "done").map((item) => item.status)).toEqual(["unsent"]);
+    expect(job.outbox().filter((item) => item.to === OWNER && item.kind === "done")).toEqual([]);
     expect(job.outbox().find((item) => item.kind === "review")?.status).toBe("unsent");
 
     const ownerKinds = new Set(box.sent.slice(marked).filter((text) => text.to === OWNER).map((text) => text.kind));
@@ -263,7 +264,7 @@ describe("one opt-out check for every text to Cory", () => {
 });
 
 describe("ordered STOP, reminder, and DONE on the Twilio log", () => {
-  it("texts Cory nothing after STOP, records DONE, and shows the owner hold line", async () => {
+  it("texts Cory nothing after STOP, leaves DONE unfinished, and shows the owner hold line", async () => {
     if (!LANE) throw new Error("missing lane");
     const root = mkdtempSync(join(tmpdir(), "cleaner-opt-out-"));
     roots.push(root);
@@ -314,14 +315,14 @@ describe("ordered STOP, reminder, and DONE on the Twilio log", () => {
     await desk.inbound({ id: "done", from: LANE.cleanerPhone, text: "DONE" });
     const after = sms.sent.slice(afterStop).map((item) => ({ to: item.to, body: item.body.split(LANE.pin).join("[redacted]") }));
     expect(after.filter((item) => item.to === HOST)).toEqual([]);
-    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "Thanks, cleaning marked done." }]);
+    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "The cleaning is on hold. I'll text you when it can start again." }]);
     const state = desk.getState();
     if (!state.ok) throw new Error("missing state");
     expect(state.result.next).toBe(OWNER_HOLD);
     const turns = desk.getTurns();
     if (!turns.ok) throw new Error("missing turns");
-    const rows = turns.result.turns;
-    expect(Array.isArray(rows) && rows.some((row) => Boolean(row) && typeof row === "object" && "status" in row && row.status === "done")).toBe(true);
+    expect(turns.result.turns && JSON.stringify(turns.result.turns).includes("\"status\":\"done\"")).toBe(false);
+    expect(JSON.stringify(turns.result.turns).includes("\"status\":\"in_progress\"")).toBe(true);
     expect(JSON.stringify(sms.sent.map((item) => item.body.split(LANE.pin).join("[redacted]"))).includes(LANE.pin)).toBe(false);
     const again = sms.sent.length;
     await desk.inbound({ id: "stop-again", from: HOST, text: "STOP" });

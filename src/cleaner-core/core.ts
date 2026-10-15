@@ -1270,7 +1270,7 @@ class Engine implements CleanerCore {
 
   private async finish(from: string, id: string): Promise<ReceiveResult> {
     if (this.cleanerConsent !== "in") return this.markIgnored(id);
-    if (this.problemHold && this.holdCause === "injury") return this.guide(from, id);
+    if (this.problemHold) return this.guide(from, id);
     const job = this.ordered().find((item) => !item.done && !item.canceled && !item.declined && this.pinDelivered(item));
     if (!job) {
       for (const finished of this.ordered()) {
@@ -1729,8 +1729,12 @@ class Engine implements CleanerCore {
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
+  private ownerStillGetsDone(draft: Draft): boolean {
+    return draft.kind === "done" && Boolean(this.owner) && draft.to === this.owner;
+  }
+
   private ownerDeclined(draft: Draft): boolean {
-    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind)) return false;
+    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind) || this.ownerStillGetsDone(draft)) return false;
     if (this.groupChat && this.hostGroup === "out") return true;
     return this.ownerOptedOut;
   }
@@ -1767,8 +1771,8 @@ class Engine implements CleanerCore {
     } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
-    if (this.optedOut && !SAFETY.has(draft.kind)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
-    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) {
+    if (this.optedOut && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind) && !this.ownerStillGetsDone(draft)) {
       return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
     }
     const existing = this.outboxState.find((item) => item.id === draft.id);
