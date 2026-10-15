@@ -34,6 +34,16 @@ const TOOLS = [
     input: z.object({ url: z.string().optional(), google: z.boolean().optional() }),
   },
   {
+    name: "save_sources",
+    title: "Save the booking calendars",
+    description:
+      "Saves every place bookings come from, replacing what was saved before. Pass each calendar link as a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8, and google true when the host also uses Google Calendar. The reply never repeats a link.",
+    input: z.object({
+      calendars: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
+      google: z.boolean().optional(),
+    }),
+  },
+  {
     name: "save_door_code",
     title: "Save the door code",
     description: "Stores the door code. The reply never includes the digits. The code is not returned later.",
@@ -72,7 +82,8 @@ const TOOLS = [
   {
     name: "check_now",
     title: "Check the calendars now",
-    description: "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar.",
+    description:
+      "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar. unread names any calendar link that didn't read; its saved bookings are kept.",
     input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
@@ -214,6 +225,11 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
     if (name === "save_door_code" && key === "code") continue;
     if (typeof value === "string" && desk.chatCarriesDoorCode(value)) return true;
   }
+  // Calendar names are shown back, so a door code can't hide in one.
+  if (name === "save_sources") {
+    const calendars = (args as { calendars?: { name: string }[] }).calendars ?? [];
+    if (calendars.some((calendar) => desk.chatCarriesDoorCode(calendar.name))) return true;
+  }
   return false;
 }
 
@@ -227,6 +243,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.savePeople(args as { host: string; cleaner: string; observer?: string });
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url?: string; google?: boolean });
+    case "save_sources":
+      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean });
     case "save_door_code":
       return desk.saveDoorCode(args as { code: string }, pinKey);
     case "set_up_texting":
