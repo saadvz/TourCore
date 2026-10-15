@@ -204,3 +204,20 @@ This replaces the "Cleaner replies" point in the Grok-first revision.
   - the door-code gate;
   - the no-reply-to-HELP rule.
 - **The server-written host notes stay** as a fallback when Grok isn't running.
+
+## The host sends a message through Grok (Saad, 2026-10-15)
+
+- The host can ask Grok to text the cleaner, the group thread, or a saved contact: "Tell Maria the guests are running late."
+- When a cleaner message needs a reply that Cleaner Core doesn't send itself, Grok drafts one and offers it.
+- **One-click approval.**
+  1. `send_message` called without a code returns a preview and a 10-minute approval code. The code is tied to the exact recipient and text, following Tour Core's `ConfirmationBook` pattern.
+  2. Grok shows the host the exact text.
+  3. After the host says yes, Grok calls `send_message` again with the code, and Cleaner Core sends it.
+  4. Any change to the text after approval is refused.
+- **The send goes through Cleaner Core's send point**, never from Grok directly.
+  - It goes only to the saved cleaner, the group, or a saved contact who has opted in.
+  - STOP and the allowlist are respected.
+  - It never carries the door code.
+  - It is capped at 600 characters and 10 messages an hour.
+  - It is recorded in the message history.
+  - Quiet hours don't hold it, because the host chose to send it now.
