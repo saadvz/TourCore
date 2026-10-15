@@ -1,0 +1,26 @@
+[
+  {
+    "id": "host-checkout:stay-a:2026-10-18:660",
+    "to": "+15555550100",
+    "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "kind": "host-checkout",
+    "status": "sent",
+    "jobId": "stay-a"
+  },
+  {
+    "id": "host-checkin:stay-a:2026-10-18:960",
+    "to": "+15555550100",
+    "body": "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
+    "kind": "host-checkin",
+    "status": "sent",
+    "jobId": "stay-a"
+  },
+  {
+    "id": "hold:stay-a:2026-10-18",
+    "to": "+15555550100",
+    "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.",
+    "kind": "held",
+    "status": "sent",
+    "jobId": "stay-a"
+  }
+]

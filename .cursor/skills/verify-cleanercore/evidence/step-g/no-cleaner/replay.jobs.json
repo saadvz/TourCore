@@ -1,0 +1,40 @@
+[
+  {
+    "id": "stay-a",
+    "departingUid": "stay-a",
+    "arrivingUid": "stay-b",
+    "status": "host_confirmed",
+    "live": true,
+    "textsBlocked": false,
+    "checkoutDate": "2026-10-18",
+    "nextCheckInDate": "2026-10-18",
+    "sameDay": true,
+    "checkoutTime": "11:00 AM",
+    "nextCheckInTime": "4:00 PM",
+    "checkoutAt": "2026-10-18T15:00:00.000Z",
+    "nextCheckInAt": "2026-10-18T20:00:00.000Z",
+    "version": 1,
+    "hostCheckoutVersion": 1,
+    "hostCheckInVersion": 1,
+    "asking": null
+  },
+  {
+    "id": "stay-b",
+    "departingUid": "stay-b",
+    "arrivingUid": null,
+    "status": "discovered",
+    "live": true,
+    "textsBlocked": false,
+    "checkoutDate": "2026-10-20",
+    "nextCheckInDate": null,
+    "sameDay": false,
+    "checkoutTime": null,
+    "nextCheckInTime": null,
+    "checkoutAt": null,
+    "nextCheckInAt": null,
+    "version": 1,
+    "hostCheckoutVersion": 0,
+    "hostCheckInVersion": 0,
+    "asking": null
+  }
+]

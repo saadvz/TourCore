@@ -1,0 +1,1 @@
+smoke --group-mode cleaner-only --participant observer=+15555550122 --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json --reply +15555550101=I'm injured --reply +15555550122=I'm injured

@@ -32,8 +32,6 @@ function trackedPaths() {
 }
 
 function bannedTracked(rel) {
-  if (rel === ".cursor/skills/verify-cleanercore/evidence/README.md") return false;
-  if (rel.startsWith(".cursor/skills/verify-cleanercore/evidence/")) return true;
   const base = rel.split("/").pop() ?? rel;
   return /\.db$/i.test(base) || /\.sqlite/i.test(base) || /\.bak$/i.test(base);
 }
@@ -126,7 +124,7 @@ if (trackedOnly) {
   const banned = trackedPaths().filter((rel) => bannedTracked(rel));
   if (banned.length > 0) {
     const sample = banned.slice(0, 20).join("\n");
-    process.stderr.write(`tracked scan found evidence or a database file (${banned.length}):\n${sample}\n`);
+    process.stderr.write(`tracked scan found a database file (${banned.length}):\n${sample}\n`);
     process.exit(1);
   }
   for (const rel of trackedPaths()) files.push(join(root, rel));

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "review:airbnb-exception:smoke-op-0",
+    "to": "+15555550100",
+    "body": "I saved a manual Airbnb booking exception for 12 Scratch Lane, Teaneck, NJ 07666. I did not change the cleaning until you confirm it.",
+    "kind": "review",
+    "status": "sent"
+  }
+]

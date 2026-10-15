@@ -1,0 +1,2 @@
+feature: recovery-after-restart
+pass

@@ -1,0 +1,8 @@
+{
+  "missing": "I can't send the door code yet. Let's finish setting up Cleaner Core first.",
+  "sent": "I sent the door code to the cleaner. I'll tell you if it doesn't go through.",
+  "again": "I already sent the door code to the cleaner.",
+  "fetchesAfterPin": 6,
+  "groupSawCode": false,
+  "emptyAllowlist": "no-fetch"
+}
