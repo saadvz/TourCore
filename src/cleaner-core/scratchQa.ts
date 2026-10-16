@@ -100,6 +100,7 @@ export function whoTheyAre(phone: string, people: { host?: string; cleaner?: str
 }
 
 export function outboxLabel(kind: TextKind, role: string): string {
+  if (kind === "intro" && role === "the group") return "Group intro";
   if (kind === "emergency" && role === "the host") return "Injury alert to the host";
   if (kind === "emergency") return `Injury reply to ${role}`;
   if (kind === "stop" && role === "the host") return "Hold note to the host";

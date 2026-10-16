@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupIntroBody, groupInviteBody, groupUnconfirmedLine, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
+import { hostDoneLine, groupIntroBody, groupInviteBody, groupUnconfirmedLine, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { outboxLabel } from "../src/cleaner-core/scratchQa";
@@ -31,6 +31,11 @@ describe("group-first: copy", () => {
     expect(groupIntroBody(["Saad", "Mike"], "Saad", "145 Tenafly Road")).toBe(
       "Hi Saad and Mike! This is the cleaning group for 145 Tenafly Road. I'm Saad's cleaning assistant, and I'll post cleaning times and updates here. Reply STOP anytime to leave.",
     );
+  });
+
+  it("drops the extra s after a landlord name that ends in s", () => {
+    expect(groupIntroBody(["Harbor Rentals", "Mike"], "Harbor Rentals", "145 Tenafly Road")).toContain("I'm Harbor Rentals' cleaning assistant,");
+    expect(groupIntroBody(["Saad", "Mike"], "Saad", "145 Tenafly Road")).toContain("I'm Saad's cleaning assistant,");
   });
 
   it("names the cleaner in a Reply ask", () => {
@@ -635,13 +640,18 @@ describe("group-first: door code", () => {
     noLeak(job);
   });
 
-  it("refuses a split code in a group checklist", async () => {
+  it("holds a split code in a group checklist and opens a review, and the step still succeeds", async () => {
     const sent: CleanerText[] = [];
     const split = PIN.split("").join(" ");
     const job = await toYes(sent, { checklist: { name: "Turnover", items: [`lock box ${split}`] } });
-    await expect(say(job, "left", OWNER, "guests have left")).rejects.toThrow("The door code leaked into a group text.");
+    const result = await say(job, "left", OWNER, "guests have left");
+    expect(result.handled).toBe(true);
+    expect(sent.filter((text) => text.kind === "checklist")).toEqual([]);
+    expect(pins(sent)).toHaveLength(1);
     expect(withCode(sent).filter((text) => text.kind !== "pin")).toEqual([]);
     expect(sent.some((text) => joinDigits(text.body).includes(PIN) && text.kind !== "pin")).toBe(false);
+    expect(job.reviews().some((item) => item.kind === "possible-code-exposure" && item.status === "open")).toBe(true);
+    noLeak(job);
   });
 });
 
@@ -851,5 +861,185 @@ describe("group-first: Grok's tools", () => {
     expect(withCode).toHaveLength(1);
     expect([...(withCode[0]?.to ?? [])].sort()).toEqual([HOST, CLEANER].sort());
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+  });
+});
+
+describe("group-first: final review fixes", () => {
+  const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+  const EMPTY = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//scratch//EN\r\nEND:VCALENDAR\r\n";
+  const LANE = "12 Scratch Lane, Teaneck, NJ 07666";
+  const OWNER = "+15555550100";
+  const MIKE = "+15555550101";
+  const ANA = "+15555550122";
+  const PIN = SCRATCH_TENANTS[0]!.pin;
+  const TIMES = { checkout: "11:00 AM", checkIn: "4:00 PM" };
+  const DUE = "2026-10-18T12:00:00.000Z";
+  const clock = { at: "2026-10-14T15:00:00.000Z" };
+
+  function engine(sent: CleanerText[], extra: Partial<Parameters<typeof openCleanerCore>[0]> = {}) {
+    return openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: LANE, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: MIKE, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      cleanerConsent: "in",
+      sink: { send: async (text) => void sent.push(text) },
+      now: () => new Date(clock.at),
+      groupChat: { hostName: "Saad", cleanerName: "Mike" },
+      reminderAsksArrival: true,
+      ...extra,
+    });
+  }
+  const say = (job: ReturnType<typeof engine>, id: string, from: string, text: string) => job.receive({ id, from, text });
+  const intros = (sent: CleanerText[]) => sent.filter((text) => text.kind === "intro");
+
+  async function toDone(job: ReturnType<typeof engine>) {
+    clock.at = "2026-10-14T15:00:00.000Z";
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes(TIMES);
+    await say(job, "yes", MIKE, "YES");
+    await say(job, "left", OWNER, "guests have left");
+    await say(job, "start", MIKE, "START");
+    await say(job, "done", MIKE, "DONE");
+  }
+
+  it("replay after a group flow sends nothing new", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent);
+    await toDone(job);
+    const before = sent.length;
+    const replayed = await job.replay();
+    expect(replayed.sent).toEqual([]);
+    expect(sent).toHaveLength(before);
+  });
+
+  it("does not post a one-to-one text again into the group after a reopen", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-oneonone-"));
+    const sent: CleanerText[] = [];
+    // The earlier run had no group: every text went one-to-one.
+    clock.at = "2026-10-14T15:00:00.000Z";
+    const base = engine(sent, { dataDir: dir, groupChat: undefined, cleanerConsent: undefined, reminderAsksArrival: undefined });
+    await base.pollFeed(FEED);
+    await say(base, "opt-yes", MIKE, "YES");
+    await say(base, "y-out", OWNER, "YES");
+    await say(base, "y-in", OWNER, "YES");
+    await say(base, "y-offer", MIKE, "YES");
+    await say(base, "left", OWNER, "guests have left");
+    await say(base, "start", MIKE, "START");
+    await say(base, "done", MIKE, "DONE");
+    const oneToOne = sent.filter((text) => text.channel === undefined && ["offer", "confirm", "started", "done"].includes(text.kind));
+    expect(oneToOne.map((text) => text.kind)).toEqual(expect.arrayContaining(["offer", "confirm", "started", "done"]));
+    expect(sent.some((text) => text.channel === "group")).toBe(false);
+    const before = sent.length;
+    const reopened = engine(sent, { dataDir: dir });
+    await say(reopened, "done-again", MIKE, "DONE");
+    await reopened.replay();
+    await reopened.runReminders();
+    expect(sent.slice(before).filter((text) => text.channel === "group" && ["offer", "confirm", "started", "done", "corrected", "reminder"].includes(text.kind))).toEqual([]);
+  });
+
+  it("posts a cancellation into the group, not one-to-one", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent);
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes(TIMES);
+    await say(job, "yes", MIKE, "YES");
+    const before = sent.length;
+    await job.pollFeed(EMPTY);
+    const cancels = sent.slice(before).filter((text) => text.kind === "cancel-update");
+    expect(cancels).toHaveLength(1);
+    expect(cancels[0]).toMatchObject({ to: MIKE, channel: "group", audience: [OWNER, MIKE] });
+  });
+
+  it("keeps the landlord's injury alert out of the group when the landlord has left it", async () => {
+    const sent: CleanerText[] = [];
+    // The landlord has left the group, so it is Mike and Ana.
+    const job = engine(sent, { cleanerConsent: undefined, groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [{ phone: ANA, name: "Ana" }] } });
+    clock.at = "2026-10-14T15:00:00.000Z";
+    await job.pollFeed(EMPTY);
+    await say(job, "yes-mike", MIKE, "YES");
+    await say(job, "yes-ana", ANA, "YES");
+    await say(job, "stop-owner", OWNER, "STOP");
+    const before = sent.length;
+    const result = await say(job, "hurt", MIKE, "someone got hurt, I need an ambulance");
+    const after = sent.slice(before);
+    const groupHost = after.filter((text) => text.channel === "group" && text.kind === "emergency" && text.body.includes("says someone is hurt"));
+    expect(groupHost).toEqual([]);
+    expect(after.some((text) => text.kind === "emergency" && text.to === OWNER && text.channel === undefined && text.body.includes("says someone is hurt"))).toBe(true);
+    for (const text of after.filter((item) => item.channel === "group")) expect(text.audience).not.toContain(OWNER);
+    expect(result.sent.every((text) => text.channel !== "group" || !text.audience?.includes(OWNER))).toBe(true);
+  });
+
+  it("retries a failed group reminder and lists it as failed", async () => {
+    const sent: CleanerText[] = [];
+    let fail = true;
+    const job = engine(sent, {
+      sink: {
+        send: async (text) => {
+          if (fail && text.channel === "group" && text.kind === "reminder") throw new Error("boom");
+          sent.push(text);
+        },
+      },
+    });
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes(TIMES);
+    await say(job, "yes", MIKE, "YES");
+    clock.at = DUE;
+    const first = await job.runReminders();
+    expect(first.failed).toHaveLength(1);
+    expect(first.failed[0]).toMatch(/^reminder:/);
+    expect(sent.some((text) => text.kind === "reminder")).toBe(false);
+    fail = false;
+    const second = await job.runReminders();
+    expect(second.sent.filter((text) => text.kind === "reminder")).toHaveLength(1);
+    const third = await job.runReminders();
+    expect(third.sent.filter((text) => text.kind === "reminder")).toEqual([]);
+  });
+
+  it("labels group posts as posts to the group", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent);
+    await toDone(job);
+    const groupRows = job.outbox().filter((item) => item.kind === "done");
+    expect(groupRows.length).toBeGreaterThan(0);
+    for (const row of groupRows) expect(row.group).toBe(true);
+    expect(outboxLabel("done", "the group")).toBe("Done note to the group");
+    expect(outboxLabel("intro", "the group")).toBe("Group intro");
+  });
+
+  it("posts a fresh intro after a STOP shrinks the group to a membership that was introduced before", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [{ phone: ANA, name: "Ana" }] }, cleanerConsent: undefined });
+    clock.at = "2026-10-14T15:00:00.000Z";
+    await job.pollFeed(EMPTY);
+    await say(job, "yes-mike", MIKE, "YES");
+    await say(job, "yes-ana", ANA, "YES");
+    expect(intros(sent).map((text) => text.audience)).toEqual([[OWNER, MIKE], [OWNER, MIKE, ANA]]);
+    await say(job, "stop-ana", ANA, "STOP");
+    await job.pollFeed(EMPTY);
+    expect(intros(sent).map((text) => text.audience)).toEqual([[OWNER, MIKE], [OWNER, MIKE, ANA], [OWNER, MIKE]]);
+    expect(intros(sent)[2]?.body).toBe(groupIntroBody(["Saad", "Mike"], "Saad", LANE));
+    // The same membership is not introduced again.
+    await job.pollFeed(EMPTY);
+    expect(intros(sent)).toHaveLength(3);
+  });
+
+  it("keeps the last introduced membership across a reopen", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-lastintro-"));
+    const sent: CleanerText[] = [];
+    const extra = { dataDir: dir, groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [{ phone: ANA, name: "Ana" }] } };
+    const first = engine(sent, { ...extra, cleanerConsent: undefined });
+    await first.pollFeed(EMPTY);
+    await say(first, "yes-mike", MIKE, "YES");
+    await say(first, "yes-ana", ANA, "YES");
+    await say(first, "stop-ana", ANA, "STOP");
+    await first.pollFeed(EMPTY);
+    expect(intros(sent)).toHaveLength(3);
+    const again = engine(sent, { ...extra, cleanerConsent: "in" });
+    await again.pollFeed(EMPTY);
+    expect(intros(sent)).toHaveLength(3);
   });
 });

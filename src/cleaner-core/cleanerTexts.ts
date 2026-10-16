@@ -180,7 +180,7 @@ export function nameList(names: readonly string[]): string {
 
 /** The first message in the group chat. It names everyone in the group. */
 export function groupIntroBody(names: readonly string[], landlordName: string, address: string): string {
-  return `Hi ${nameList(names)}! This is the cleaning group for ${address}. I'm ${landlordName}'s cleaning assistant, and I'll post cleaning times and updates here. Reply STOP anytime to leave.`;
+  return `Hi ${nameList(names)}! This is the cleaning group for ${address}. I'm ${landlordName}${landlordName.endsWith("s") ? "'" : "'s"} cleaning assistant, and I'll post cleaning times and updates here. Reply STOP anytime to leave.`;
 }
 
 /** Lowercases a sentence's first letter, unless the word is "I" or an all-caps word. */

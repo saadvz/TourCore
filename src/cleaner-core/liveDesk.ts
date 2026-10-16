@@ -2243,7 +2243,7 @@ export class LiveDesk {
       const saved = shown ? undefined : this.file.deliveries?.find((row) => row.id === item.id)?.status;
       const stored = item.status === "uncertain" ? "waiting" : item.status;
       const status = shown ?? saved ?? stored;
-      const role = whoTheyAre(item.to, people);
+      const role = item.group ? "the group" : whoTheyAre(item.to, people);
       return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status), status, body: item.body };
     });
     const localRows = (this.file.localSends ?? []).map((item) => {

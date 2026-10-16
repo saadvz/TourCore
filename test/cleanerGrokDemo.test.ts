@@ -526,7 +526,7 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     expect(got[0]?.body).not.toContain("3:00 PM");
   });
 
-  it("with group chat on, a removed stay sends the cleaner one cancellation", async () => {
+  it("with group chat on, a removed stay posts one cancellation into the group", async () => {
     const stub = groupStub();
     setCleanerGroupFetch(stub.impl);
     const wired = await app({ groupChat: true });
@@ -535,8 +535,8 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     const posts = stub.posts.length;
     const removed = await call(wired, "check_now", { googleEvents: googleList([]) });
     expect(removed.isError).toBe(false);
-    expect(wired.cleanerSent.slice(sms).map(textKind)).toEqual(["cancel-update"]);
-    expect(stub.posts).toHaveLength(posts);
+    expect(wired.cleanerSent).toHaveLength(sms);
+    expect(stub.posts.slice(posts).map(textKind)).toEqual(["cancel-update"]);
     expect(turnsOf(removed).every((turn) => turn.status === "canceled")).toBe(true);
   });
 });
@@ -1602,10 +1602,10 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     // The second YES takes the offer.
     await fromCleaner("YES");
     // The offer goes once, into the group, and asks the cleaner by name. There is no one-to-one copy.
-    const offers = await labelled("Cleaning offer to the cleaner");
+    const offers = await labelled("Cleaning offer to the group");
     expect(offers.map((item) => item.body.startsWith(`Turnover at ${address} on Wednesday, Oct 14. Checkout 10:00 AM`))).toEqual([true]);
     await fromCleaner("YES");
-    expect(await labelled("Confirmation to the cleaner")).toHaveLength(1);
+    expect(await labelled("Confirmation to the group")).toHaveLength(1);
     const heard = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
     expect([...heard, ...(await notesNow())]).toContain(yesNote);
     await safe("4 cleaner YES");
@@ -1613,17 +1613,17 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     expect(routine.map((post) => JSON.parse(post.body).eventType)).toContain("cleaning.update");
 
     // 5. The reminder goes out on the first check at or after 8 AM on the cleaning day.
-    expect(await labelled("Reminder to the cleaner")).toEqual([]);
+    expect(await labelled("Reminder to the group")).toEqual([]);
     now = new Date(zonedInstant("2026-10-14", "08:00", ZONE));
     await say("check_now", { googleEvents: googleList([today]) });
-    expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
+    expect(await labelled("Reminder to the group")).toHaveLength(1);
     await say("check_now", { googleEvents: googleList([today]) });
-    expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
+    expect(await labelled("Reminder to the group")).toHaveLength(1);
     await safe("5 reminder");
 
     // 6. The guests leave. The code goes into the group of the host and the cleaner, shown redacted.
     expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT);
-    const door = await labelled("Door code text to the cleaner");
+    const door = await labelled("Door code text to the group");
     expect(door).toHaveLength(1);
     expect(door[0]?.body).toContain("Door code: [redacted].");
     expect(door[0]?.body).not.toContain(DOOR_CODE);
@@ -1635,9 +1635,10 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await fromCleaner("DONE");
     const ready = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
     expect([...ready, ...(await notesNow())]).toContain(readyNote);
-    // Both done lines are group posts now, so the outbox shows both under the cleaner who sent the group post.
+    // Both done lines are group posts now, so the outbox shows both as posts to the group.
     expect(await labelled("Done note to the host")).toEqual([]);
-    expect(await labelled("Done note to the cleaner")).toHaveLength(2);
+    expect(await labelled("Done note to the cleaner")).toEqual([]);
+    expect(await labelled("Done note to the group")).toHaveLength(2);
     await safe("7 done");
 
     // Booking changes run on the same property, with no reset, as on the real phones.
@@ -1660,10 +1661,10 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     const secondTimes = await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
     expect(secondTimes.structured?.next).toBe("Times saved. I sent the cleaner the cleaning offer. They reply YES to take it.");
     expect(await labelled("Opt-in text to the cleaner")).toHaveLength(1);
-    const secondOffers = (await labelled("Cleaning offer to the cleaner")).filter((item) => item.body.includes("Oct 24"));
+    const secondOffers = (await labelled("Cleaning offer to the group")).filter((item) => item.body.includes("Oct 24"));
     expect(secondOffers.map((item) => item.body.startsWith(`Turnover at ${address} on Saturday, Oct 24. Checkout 11:00 AM`))).toEqual([true]);
     await fromCleaner("YES");
-    const confirmations = (await labelled("Confirmation to the cleaner")).map((item) => item.body);
+    const confirmations = (await labelled("Confirmation to the group")).map((item) => item.body);
     expect(confirmations).toEqual([expect.stringContaining("Wednesday, Oct 14 at 10:00 AM"), expect.stringContaining("Saturday, Oct 24 at 11:00 AM")]);
     await firstDone();
     await safe("9 second times and YES");
@@ -1672,9 +1673,9 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     const moved = { id: "g2", start: "2026-10-20", end: "2026-10-25" };
     const movedCheck = await say("check_now", { googleEvents: googleList([today, moved]) });
     expect(movedCheck.structured?.needsTimes).toBe(true);
-    expect(await labelled("Time correction to the cleaner")).toEqual([]);
+    expect(await labelled("Time correction to the group")).toEqual([]);
     await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
-    const corrected = await labelled("Time correction to the cleaner");
+    const corrected = await labelled("Time correction to the group");
     expect(corrected).toHaveLength(1);
     expect(corrected[0]?.body).toContain("Oct 25 at 11:00 AM");
     await firstDone();
@@ -1682,10 +1683,10 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
 
     // 11. Saad deletes the second stay. The cleaner gets one cancellation, and the finished job stays done.
     await say("check_now", { googleEvents: googleList([today]) });
-    const canceled = await labelled("Cancellation to the cleaner");
+    const canceled = await labelled("Cancellation to the group");
     expect(canceled).toHaveLength(1);
     expect(canceled[0]?.body).toContain("Oct 25");
-    expect(await labelled("Time correction to the cleaner")).toHaveLength(1);
+    expect(await labelled("Time correction to the group")).toHaveLength(1);
     await firstDone();
     // Nothing more went out about the first job after it was done.
     expect(await aboutFirstJob()).toBe(firstJobTexts);

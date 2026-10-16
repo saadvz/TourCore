@@ -126,6 +126,8 @@ export interface OutboxView {
   kind: TextKind;
   status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
+  /** Posted to the group, not texted one-to-one. */
+  group?: true;
 }
 
 export interface Counters {
@@ -667,6 +669,7 @@ interface Stored {
   pinFailurePending?: boolean;
   pinPhase?: { id: string; phase: "accepted" | "delivered" | "failed" | "undelivered" }[];
   groupPinTerminal?: boolean;
+  lastIntro?: string;
   hostNotes?: { id: string; body: string }[];
 }
 
@@ -759,6 +762,8 @@ class Engine implements CleanerCore {
   private pinFailurePending = false;
   private pinPhase = new Map<string, "accepted" | "delivered" | "failed" | "undelivered">();
   private groupPinTerminal = false;
+  /** The members (sorted, comma-joined) of the last group that was introduced. A different membership gets a fresh intro. */
+  private lastIntro: string | undefined;
   private hostNoteState: { id: string; body: string }[] = [];
   private session: OnboardingSession | undefined;
   private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
@@ -976,8 +981,8 @@ class Engine implements CleanerCore {
         if (!this.triggerDue(trigger, job.checkoutDate)) continue;
         const id = `reminder:${job.id}:${trigger.id}:${job.checkoutDate}:${fact.version}:${fact.minutes}`;
         this.cancelOtherReminders(job.id, trigger.id, id);
-        const existing = this.outboxState.find((item) => item.id === id);
-        if (existing?.status === "sent" || existing?.status === "canceled") continue;
+        const existing = this.delivery(id);
+        if (existing === "sent" || existing === "canceled") continue;
         const replaced = (trigger.replaces ?? []).some((other) => this.delivery(`reminder:${job.id}:${other}:${job.checkoutDate}:${fact.version}:${fact.minutes}`) === "sent");
         if (replaced) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
@@ -996,7 +1001,7 @@ class Engine implements CleanerCore {
           body: addressed.body,
         });
         if (text) sent.push(text);
-        else if (this.outboxState.find((item) => item.id === id)?.status === "failed") failed.push(id);
+        else if (this.delivery(id) === "failed") failed.push(id);
       }
     }
     if (this.pin) {
@@ -1022,6 +1027,7 @@ class Engine implements CleanerCore {
       kind: item.kind,
       status: item.status,
       ...(item.jobId ? { jobId: item.jobId } : {}),
+      ...(item.group ? { group: true as const } : {}),
     }));
   }
 
@@ -2155,6 +2161,8 @@ class Engine implements CleanerCore {
         const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
         if (!addressed) return null;
         routed = { ...draft, to: addressed.to, body: addressed.body };
+      } else if (draft.kind === "cancel-update" && this.cleanerPhone) {
+        routed = { ...draft, to: this.cleanerPhone };
       }
       const grouped = await this.emitRouted(routed);
       if (grouped !== undefined) return grouped;
@@ -2231,7 +2239,12 @@ class Engine implements CleanerCore {
 
   private routesToGroup(draft: Draft): boolean {
     if (!GROUP_ROUTED.has(draft.kind) || !this.groupRouted()) return false;
-    if (this.owner && draft.to === this.owner) return draft.kind === "done" || draft.kind === "emergency";
+    if (this.owner && draft.to === this.owner) {
+      // The cancellation is for the cleaner, so it goes to the group whoever it is addressed to.
+      if (draft.kind === "cancel-update") return true;
+      // The landlord's own line only goes there when the landlord is in the group.
+      return (draft.kind === "done" || draft.kind === "emergency") && this.groupAudience().includes(this.owner);
+    }
     return true;
   }
 
@@ -2256,13 +2269,19 @@ class Engine implements CleanerCore {
   private async emitRouted(draft: Draft): Promise<CleanerText | null | undefined> {
     if (!this.groupChat) return undefined;
     const id = `${draft.id}:group`;
-    if (this.delivery(id) === "sent") return null;
+    // A text already sent one-to-one (an older store, an earlier fallback) is never posted again.
+    if (this.delivery(draft.id) === "sent" || this.delivery(id) === "sent") return null;
     await this.ensureIntro();
     const audience = this.groupAudience();
     const name = this.seatName(draft.to);
     // The landlord's approved words are posted exactly as approved.
     const body = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name && draft.kind !== "host-message" ? namedAsk(name, draft.body) : draft.body;
     if (this.groupDuplicate(draft, id, body)) return null;
+    // A group text with the code in split digits is held, not sent, and not sent one-to-one either.
+    if (this.pin && draft.kind !== "pin" && joinSplitDigits(body).includes(this.pin)) {
+      await this.openReview("possible-code-exposure", id, true);
+      return null;
+    }
     const text = await this.emitOne({
       id,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -2415,7 +2434,8 @@ class Engine implements CleanerCore {
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
     } else if (this.pin && draft.channel === "group" && joinSplitDigits(draft.body).includes(this.pin)) {
-      throw new Error("The door code leaked into a group text.");
+      // A group text that holds the code in split digits is held back, not sent, and goes to review.
+      return this.openReview("possible-code-exposure", draft.id, true);
     } else if (draft.kind === "host-message" && this.pin && joinSplitDigits(draft.body).includes(this.pin)) {
       throw new Error("The door code leaked into a host message.");
     } else if (!this.pin && /\bdoor code\b/i.test(ownWords) && draft.kind !== "opt-in" && draft.kind !== "review") {
@@ -2669,27 +2689,29 @@ class Engine implements CleanerCore {
     return this.groupSeats().filter((seat) => seat.consent === "in").map((seat) => seat.phone);
   }
 
-  /** The id of the intro for the people in the group now. None until the cleaner and one more person are in. */
-  private introId(): { id: string; seats: GroupSeat[] } | undefined {
+  /** The intro for the people in the group now. None until the cleaner and one more person are in. */
+  private introId(): { id: string; members: string; seats: GroupSeat[] } | undefined {
     if (!this.groupChat) return undefined;
     const seats = this.groupSeats().filter((seat) => seat.consent === "in");
     // The group starts once the cleaner has joined the host or a contact. Contacts alone don't start it.
     if (seats.length < 2 || !seats.some((seat) => seat.phone === this.cleanerPhone)) return undefined;
-    return { id: `intro:${seats.map((seat) => seat.phone).sort().join(",")}`, seats };
+    const members = seats.map((seat) => seat.phone).sort().join(",");
+    // A membership introduced before (a member left, then came back) gets a new id, so its intro is posted again.
+    const base = `intro:${members}`;
+    let id = base;
+    for (let n = 2; this.delivery(id) !== undefined; n += 1) id = `${base}:${n}`;
+    return { id, members, seats };
   }
 
   /**
-   * Posts the intro once per set of members, as soon as two people in the group have said yes.
-   * Only engine steps call it. Opening the engine never does. A failed or uncertain intro goes to
-   * review and is not posted again, and it never holds back the group's other texts.
+   * Posts an intro whenever the people in the group differ from the last group that got one, as soon as
+   * two people in the group have said yes. Only engine steps call it. Opening the engine never does.
+   * A failed or uncertain intro goes to review and is not posted again for that membership, and it never
+   * holds back the group's other texts.
    */
-  private introDue(id: string): boolean {
-    return this.delivery(id) === undefined;
-  }
-
   private async ensureIntro(): Promise<CleanerText | null> {
     const intro = this.introId();
-    if (!intro || !this.groupChat || !this.introDue(intro.id)) return null;
+    if (!intro || !this.groupChat || this.lastIntro === intro.members) return null;
     const audience = intro.seats.map((seat) => seat.phone);
     const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
     if (!to) return null;
@@ -2701,6 +2723,8 @@ class Engine implements CleanerCore {
       channel: "group",
       audience,
     });
+    // Once an attempt is on record (sent, failed or waiting), this membership is introduced.
+    if (this.delivery(intro.id) !== undefined) this.lastIntro = intro.members;
     if (text) this.pendingIntros.push(text);
     return text;
   }
@@ -3014,7 +3038,7 @@ class Engine implements CleanerCore {
 
   private cancelOtherReminders(jobId: string, triggerId: string, keepId: string): void {
     for (const item of this.outboxState) {
-      if (item.kind !== "reminder" || item.jobId !== jobId || item.status === "sent" || item.id === keepId) continue;
+      if (item.kind !== "reminder" || item.jobId !== jobId || item.status === "sent" || item.id === keepId || item.id === `${keepId}:group`) continue;
       if (item.id.startsWith(`reminder:${jobId}:${triggerId}:`)) item.status = "canceled";
     }
   }
@@ -3283,6 +3307,12 @@ class Engine implements CleanerCore {
       }
     }
     if (record.groupPinTerminal === true) this.groupPinTerminal = true;
+    if (typeof record.lastIntro === "string") this.lastIntro = record.lastIntro;
+    else {
+      // A store from before this field: the last intro row names the last introduced membership.
+      const last = [...(record.outbox ?? [])].reverse().find((item) => item.kind === "intro" && item.id.startsWith("intro:"));
+      if (last) this.lastIntro = last.id.slice("intro:".length).split(":")[0];
+    }
     this.hostNoteState = (record.hostNotes ?? []).filter((note) => typeof note?.id === "string" && typeof note?.body === "string");
     if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
@@ -3323,7 +3353,7 @@ class Engine implements CleanerCore {
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
-      ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal, ...(this.lastIntro ? { lastIntro: this.lastIntro } : {}) } : {}),
       ...(this.problemHold ? { problemHold: true } : {}),
       ...(this.ownerOptedOut ? { ownerOptedOut: true } : {}),
       ...(this.holdCause ? { holdCause: this.holdCause } : {}),
