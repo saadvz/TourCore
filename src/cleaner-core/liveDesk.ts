@@ -67,6 +67,7 @@ const REVIEW_ASK = "Summarize this setup for the host in your own words, then as
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
 
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_SENT_GROUP = "I posted the door code in the cleaning group for the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
@@ -1025,10 +1026,10 @@ export class LiveDesk {
       // The code as its own token (an id that only holds the digits is fine); the key anywhere.
       if (containsCodeToken(json, code) || json.includes(key.toString("base64"))) continue;
       this.writeFile(json);
-      // The engine names the lock in the private code text, so it reopens with the new location.
+      // The engine names the lock in the door code text, so it reopens with the new location.
       if (this.file.lockLocation !== previousLock) this.stale = true;
       return this.reply({
-        next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
+        next: `Saved the door code. It goes only to the cleaner, ${this.codeGoesToGroup() ? "in the cleaning group" : "in a private text"}, after you say the guests have left.`,
       });
     }
     this.pin = previousPin;
@@ -1480,7 +1481,7 @@ export class LiveDesk {
       this.persist();
     }
     if (heldLine) return this.reply({ next: heldLine });
-    if (sentNow) return this.reply({ next: PIN_SENT });
+    if (sentNow) return this.reply({ next: privateNow ? PIN_SENT : PIN_SENT_GROUP });
     if (failed) return this.reply({ next: PIN_FAILED });
     return this.reply({ next: PIN_FAILED });
   }
@@ -2097,7 +2098,7 @@ export class LiveDesk {
     };
   }
 
-  /** The engine options for the saved preferences. The offer note is set only when instructions are saved. */
+  /** The engine options for the saved preferences. The cleaning note is set only when instructions are saved. */
   private preferenceOptions(): Partial<Parameters<typeof openCleanerCore>[0]> {
     const preferences = this.file.preferences;
     if (!preferences) return {};
@@ -2105,8 +2106,13 @@ export class LiveDesk {
       ...(preferences.checklist.length > 0 ? { checklist: { name: this.file.nickname ?? this.file.address ?? "the property", items: [...preferences.checklist] } } : {}),
       ...(preferences.photosRequired ? { photosRequired: true } : {}),
       ...(preferences.supplyNotes ? { supplyNotes: true } : {}),
-      ...(preferences.instructions ? { offerNote: preferences.instructions } : {}),
+      ...(preferences.instructions ? { cleaningNote: preferences.instructions } : {}),
     };
+  }
+
+  /** True when the door code is set to go in the group: group texts are on and the host didn't keep it private. */
+  private codeGoesToGroup(): boolean {
+    return this.groupOn() && this.file.doorCodeTo !== "cleaner";
   }
 
   /** Group texts are on when the server allows them and the host didn't choose cleaner-only. */

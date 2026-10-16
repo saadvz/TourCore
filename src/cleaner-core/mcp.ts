@@ -83,7 +83,7 @@ const TOOLS = [
     name: "save_door_code",
     title: "Save the door code",
     description:
-      "Stores the door code. The reply never includes the digits. The code is not returned later. lockLocation is optional: where the lock is, like back door lockbox, with no numbers. It is named in the cleaner's private code text.",
+      "Stores the door code. The reply never includes the digits. The code is not returned later. lockLocation is optional: where the lock is, like back door lockbox, with no numbers. It is named in the cleaner's door code text.",
     input: z.object({ code: z.string(), lockLocation: z.string().optional() }),
   },
   {

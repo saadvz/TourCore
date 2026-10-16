@@ -44,6 +44,7 @@ const STOP_ACK = "You're opted out and won't receive more messages. Reply START 
 const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_SENT_GROUP = "I posted the door code in the cleaning group for the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 /** With no alert routine saved, the step after the checks asks Grok to create the routines first. */
 const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
@@ -1191,7 +1192,7 @@ describe("live group membership", () => {
   it("posts the door code in the group and returns the sent sentence when only the landlord and the cleaner are in it", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost(false);
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT_GROUP } });
     const groupPin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. Maria, reply DONE when the cleaning is finished.`;
     expect(posts.filter((text) => text.body === groupPin)).toHaveLength(1);
     expect(sms.sent.filter((text) => text.body === privatePin || text.body.includes(DOOR_CODE))).toEqual([]);
