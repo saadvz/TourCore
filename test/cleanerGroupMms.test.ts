@@ -496,6 +496,79 @@ describe("group texting: what the webhook reads", () => {
   });
 });
 
+describe("group texting: a Scratch reset", () => {
+  const scratch = SCRATCH_TENANTS[0];
+  if (!scratch) throw new Error("Scratch Lane is missing");
+  const scratchAddress = scratch.property.address;
+  const lane = { ownerPhone: scratch.ownerPhone, cleanerPhone: scratch.cleanerPhone };
+
+  /** Scratch Lane set up through Grok's tools, both phones joined, and the offer posted to the group. */
+  async function scratchGroup(fake: FakeConversations) {
+    const wired = await startWiredApp({ groupChat: true, scratchTools: true, allowlist: `${lane.ownerPhone},${lane.cleanerPhone}` });
+    open.push(wired);
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: "Scratch", address: scratchAddress, timeZone: "America/New_York" });
+    await must(wired, "save_people", { host: lane.ownerPhone, cleaner: lane.cleanerPhone, cleanerName: "Mike", groupChat: "cleaner-and-host" });
+    await must(wired, "save_calendar_link", { url: CALENDAR_URL });
+    await must(wired, "save_door_code", { code: DOOR_CODE });
+    await must(wired, "set_up_texting");
+    await must(wired, "run_checks");
+    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect((await sms(wired, lane.ownerPhone, "YES")).status).toBe(200);
+    expect((await sms(wired, lane.cleanerPhone, "YES")).status).toBe(200);
+    const conversationSid = fake.posts[0]?.conversationSid ?? "";
+    expect(conversationSid).toMatch(/^CH/);
+    return { wired, conversationSid };
+  }
+
+  function savedSid(wired: WiredApp): string | undefined {
+    return (JSON.parse(readFileSync(join(wired.root, "cleaner-live.json"), "utf8")) as { conversationSid?: string }).conversationSid;
+  }
+
+  it("deletes the Scratch group on Twilio, so the next run starts a new one", async () => {
+    const fake = useFake();
+    const { wired, conversationSid } = await scratchGroup(fake);
+    expect(savedSid(wired)).toBe(conversationSid);
+    expect((await must(wired, "reset_scratch")).next).toBe("Scratch is reset. No jobs, notes or test texts are left.");
+    expect(fake.removed).toEqual([conversationSid]);
+    expect(fake.people(conversationSid)).toBeUndefined();
+    expect(savedSid(wired)).toBeUndefined();
+    // A second reset has nothing left to remove on Twilio.
+    const calls = fake.calls();
+    await must(wired, "reset_scratch");
+    expect(fake.calls()).toBe(calls);
+  });
+
+  it("empties the group when Twilio refuses the delete", async () => {
+    const fake = useFake({ failConversationDeletes: true });
+    const { wired, conversationSid } = await scratchGroup(fake);
+    expect((await must(wired, "reset_scratch")).next).toBe("Scratch is reset. No jobs, notes or test texts are left.");
+    expect(fake.removed).toEqual([]);
+    expect(fake.people(conversationSid)).toEqual([]);
+    expect(savedSid(wired)).toBeUndefined();
+  });
+
+  it("keeps the group's id and says so when Twilio can't remove it, so the next group text replaces it", async () => {
+    const fake = useFake({ failConversationDeletes: true });
+    const { wired, conversationSid } = await scratchGroup(fake);
+    fake.blockMembership();
+    const reset = await must(wired, "reset_scratch");
+    expect(reset.next).toBe("Scratch is reset. No jobs, notes or test texts are left. I couldn't remove the old group text on Twilio, so the next group text will replace it.");
+    expect(savedSid(wired)).toBe(conversationSid);
+    expect(JSON.stringify(reset)).not.toContain(conversationSid);
+  });
+
+  it("calls Twilio for nothing when live texts are off", async () => {
+    const fake = useFake();
+    const { wired, conversationSid } = await scratchGroup(fake);
+    wired.setEnv({ CLEANER_CORE_LIVE_SMS: undefined });
+    const calls = fake.calls();
+    expect((await must(wired, "reset_scratch")).next).toContain("I couldn't remove the old group text on Twilio");
+    expect(fake.calls()).toBe(calls);
+    expect(savedSid(wired)).toBe(conversationSid);
+  });
+});
+
 describe("group texting: the host's name", () => {
   it("refuses a host name that is too long", async () => {
     useFake();

@@ -3,6 +3,8 @@ import type { TextKind } from "./core";
 export const SCRATCH_PROPERTY_REFUSAL = "That only works on the Scratch test property.";
 export const SCRATCH_NUMBER_REFUSAL = "That only works with 555 test numbers.";
 export const SCRATCH_RESET_LINE = "Scratch is reset. No jobs, notes or test texts are left.";
+/** Added when the old group couldn't be removed on Twilio. The next group text replaces it. */
+export const SCRATCH_GROUP_KEPT = "I couldn't remove the old group text on Twilio, so the next group text will replace it.";
 export const SCRATCH_TEST_WENT_THROUGH = "The test text went through.";
 export const SCRATCH_TEXT_MISSING = "I couldn't find that test text.";
 export const SCRATCH_WHICH_NEEDED = "Say which test text you mean.";
@@ -13,7 +15,7 @@ export const SCRATCH_TOOLS = [
   {
     name: "reset_scratch",
     title: "Reset Scratch",
-    description: "Clears Scratch jobs, notes, and test texts. The door code and texting setup stay. It only works on the Scratch test property.",
+    description: "Clears Scratch jobs, notes, and test texts, and removes the Scratch group text on Twilio. The door code and texting setup stay. It only works on the Scratch test property.",
   },
   {
     name: "read_inbox",

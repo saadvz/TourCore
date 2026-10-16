@@ -18,7 +18,7 @@ import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fe
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
-import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
+import { cleanerPinStatusUrl, deleteLiveGroup, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
 import { containsCodeToken } from "./redact";
 import { isScratchTestNumber } from "./scratch";
@@ -26,6 +26,7 @@ import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource,
 import {
   SCRATCH_NUMBER_REFUSAL,
   SCRATCH_PROPERTY_REFUSAL,
+  SCRATCH_GROUP_KEPT,
   SCRATCH_RESET_LINE,
   SCRATCH_STATUS_NEEDED,
   SCRATCH_TEST_WENT_THROUGH,
@@ -1566,9 +1567,13 @@ export class LiveDesk {
     return this.serial(async () => this.resetScratchNow());
   }
 
-  private resetScratchNow(): ToolReply {
+  private async resetScratchNow(): Promise<ToolReply> {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
+    // The group goes on Twilio first. Its sid is forgotten only once it is gone, so a group that
+    // couldn't be removed is replaced by the next group text instead of holding the phones.
+    const group = this.file.conversationSid;
+    const groupGone = !group || (await deleteLiveGroup(this.env(), group));
     this.engine = undefined;
     rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
     this.file.seenInbound = [];
@@ -1576,7 +1581,7 @@ export class LiveDesk {
     this.file.released = false;
     delete this.file.pinSend;
     delete this.file.hostOut;
-    delete this.file.conversationSid;
+    if (groupGone) delete this.file.conversationSid;
     delete this.file.deliveries;
     delete this.file.localSends;
     delete this.file.alertsShown;
@@ -1588,7 +1593,7 @@ export class LiveDesk {
     this.approvals.clear();
     this.held = false;
     this.persist();
-    return this.reply({ next: SCRATCH_RESET_LINE });
+    return this.reply({ next: groupGone ? SCRATCH_RESET_LINE : `${SCRATCH_RESET_LINE} ${SCRATCH_GROUP_KEPT}` });
   }
 
   readInbox(): Promise<ToolReply> {
