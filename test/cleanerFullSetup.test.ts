@@ -457,7 +457,9 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     expect(groups.posts.find((post) => post.body === TIME)?.to).toEqual([HOST, CLEANER].sort());
     expect(sms.sent.some((item) => item.to === OBSERVER)).toBe(false);
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
-    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+    // The group holds only the host and the cleaner, so the code goes into it. The contact is never in it.
+    expect(codeRecipients(sms.sent)).toEqual([]);
+    expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
   });
 });
 
@@ -851,15 +853,18 @@ describe("Cleaner Core schedule: the new-booking alert", () => {
 describe("Cleaner Core schedule: the checkout-time nudge", () => {
   for (const groupChat of ["0", "1"] as const) {
     it(`asks the host once after the confirmed checkout time, and the code still waits for "guests have left" (group ${groupChat})`, async () => {
-      const { desk, sms, time } = await withSchedule({}, groupChat);
+      const { desk, sms, groups, time } = await withSchedule({}, groupChat);
       await optIn(desk, groupChat);
       await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
       expect((await alertsAt(desk, time, "2026-10-18T14:59:00.000Z")).includes(NUDGE)).toBe(false);
       expect((await alertsAt(desk, time, "2026-10-18T15:00:00.000Z")).filter((alert) => alert === NUDGE)).toHaveLength(1);
       expect((await alertsAt(desk, time, "2026-10-18T15:30:00.000Z")).includes(NUDGE)).toBe(false);
       expect(codeRecipients(sms.sent)).toEqual([]);
+      expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE))).toEqual([]);
       ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
-      expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+      // With the group on and only the host and the cleaner in it, the code goes into the group.
+      expect(codeRecipients(sms.sent)).toEqual(groupChat === "1" ? [] : [CLEANER]);
+      expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => post.to)).toEqual(groupChat === "1" ? [[HOST, CLEANER].sort()] : []);
       expect((await alertsAt(desk, time, "2026-10-18T16:00:00.000Z")).includes(NUDGE)).toBe(false);
     });
   }
@@ -1840,7 +1845,7 @@ describe("Cleaner Core full diagram", () => {
     const inGroup = () => groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body));
     const remindersSent = () => [...toCleaner(), ...inGroup()].filter((body) => body.startsWith("Reminder:"));
 
-    /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text. */
+    /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text or the group of the host and the cleaner. */
     const safe = async (step: string) => {
       await drainCleanerAlerts(hosted.root, () => hosted.inst.env(), clock);
       for (const item of sms.sent) {
@@ -1850,7 +1855,8 @@ describe("Cleaner Core full diagram", () => {
       }
       for (const post of groups.posts) {
         for (const to of post.to) expect(scratch.has(to), `${step}: group post to ${to}`).toBe(true);
-        expect(PLAIN_CODE.test(post.body), `${step}: group post`).toBe(false);
+        // The code may be in the group only while it holds just the host and the cleaner.
+        if (PLAIN_CODE.test(post.body)) expect([...post.to].sort(), `${step}: group post`).toEqual([host, cleaner].sort());
       }
       for (const post of routine) {
         expect(post.url, step).toBe(REHEARSAL_ROUTINE);
@@ -1954,7 +1960,7 @@ describe("Cleaner Core full diagram", () => {
     expect(groups.posts.filter((post) => post.body.includes(PARKING))).toHaveLength(1);
     await safe("7 reminder, arrival, and message");
 
-    // 8. The checkout nudge, then "guests have left", and the private code with the lock to the cleaner only.
+    // 8. The checkout nudge, then "guests have left", and the code with the lock in the group of the host and the cleaner.
     const nudge = "Checkout time at Scratch Lane. Have the guests left?";
     expect((await checkAt("2026-10-17T14:59:00.000Z")).alerts).not.toContain(nudge);
     expect((await checkAt("2026-10-17T15:00:00.000Z")).alerts.filter((alert) => alert === nudge)).toHaveLength(1);
@@ -1962,8 +1968,10 @@ describe("Cleaner Core full diagram", () => {
     expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
     at = new Date("2026-10-17T15:10:00.000Z");
     await say("mark_guests_left", { said: "guests have left" });
-    const privateCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
-    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([expect.objectContaining({ to: cleaner, body: privateCode })]);
+    // The group holds only the host and the cleaner, so the code with the lock goes into it. Nothing goes one-to-one.
+    const groupCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. Ana, reply DONE when the cleaning is finished.`;
+    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
+    expect(groups.posts.filter((post) => PLAIN_CODE.test(post.body))).toEqual([expect.objectContaining({ body: groupCode, to: [host, cleaner].sort() })]);
     await safe("8 nudge and guests left");
 
     // 9. The checklist, one photo, a note, and DONE.

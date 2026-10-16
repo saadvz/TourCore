@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -372,6 +372,8 @@ export interface CleanerCoreOptions {
     hostName: string;
     cleanerName: string;
     extra?: { phone: string; name: string }[];
+    /** Where the door code goes when the group holds anyone besides the landlord and the cleaner. */
+    doorCodeTo?: "group" | "cleaner";
   };
 }
 
@@ -1810,13 +1812,32 @@ class Engine implements CleanerCore {
       const body = doorCodeBody(this.options.property.address, pin, this.options.lockLocation?.trim() || undefined);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
-      const text = await this.emit({
-        id: key,
-        jobId: job.id,
-        to: addressed.to,
-        kind: "pin",
-        body: addressed.body,
-      });
+      let text: CleanerText | null = null;
+      let grouped = false;
+      if (this.pinChannel() === "group") {
+        await this.ensureIntro();
+        const audience = this.groupAudience();
+        text = await this.emitOne({
+          id: key,
+          jobId: job.id,
+          to: addressed.to,
+          kind: "pin",
+          body: groupDoorCodeBody(this.options.property.address, pin, this.groupChat!.cleanerName, this.options.lockLocation?.trim() || undefined),
+          channel: "group",
+          audience,
+        });
+        // Only a group that was never confirmed falls back, to the cleaner alone. A failed or uncertain post goes to review.
+        grouped = text !== null || this.delivery(key) !== undefined || Boolean(this.options.holdSends?.());
+      }
+      if (!grouped) {
+        text = await this.emit({
+          id: key,
+          jobId: job.id,
+          to: addressed.to,
+          kind: "pin",
+          body: addressed.body,
+        });
+      }
       if (text) sent.push(text);
       if (this.delivery(key) === "sent") sent.push(...(await this.sendChecklist(job)));
     }
@@ -2194,6 +2215,18 @@ class Engine implements CleanerCore {
     return audience.length >= 2 && audience.includes(this.cleanerPhone);
   }
 
+  /**
+   * Where the door code goes now. The group when it holds only the landlord and the approved cleaner,
+   * or when it holds anyone else and the landlord chose the group. Otherwise the cleaner alone.
+   */
+  private pinChannel(): "group" | "private" {
+    if (!this.groupChat || !this.groupRouted() || !this.cleanerPhone || !this.options.cleaner.approved || this.cleanerConsent !== "in") return "private";
+    const audience = this.groupAudience();
+    const onlyLandlordAndCleaner = Boolean(this.owner) && audience.length === 2 && audience.includes(this.owner!) && audience.includes(this.cleanerPhone);
+    if (onlyLandlordAndCleaner) return "group";
+    return this.groupChat.doorCodeTo === "group" ? "group" : "private";
+  }
+
   private routesToGroup(draft: Draft): boolean {
     if (!GROUP_ROUTED.has(draft.kind) || !this.groupRouted()) return false;
     if (this.owner && draft.to === this.owner) return draft.kind === "done" || draft.kind === "emergency";
@@ -2360,7 +2393,15 @@ class Engine implements CleanerCore {
     if (this.ownerDeclined(draft)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
-      if (draft.channel === "group" || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
+      if (draft.channel === "group") {
+        // The group is checked on every send, against who is in it right now.
+        const now = this.groupAudience();
+        const audience = draft.audience ?? [];
+        const same = audience.length === now.length && audience.every((phone) => now.includes(phone));
+        if (this.pinChannel() !== "group" || !same || !this.cleanerPhone || !audience.includes(this.cleanerPhone) || draft.to !== this.cleanerPhone) {
+          throw new Error("The door code only goes to the approved cleaner.");
+        }
+      } else if (this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
         throw new Error("The door code only goes to the approved cleaner.");
       }
       if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone) {
@@ -2368,6 +2409,8 @@ class Engine implements CleanerCore {
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
+    } else if (this.pin && draft.channel === "group" && joinSplitDigits(draft.body).includes(this.pin)) {
+      throw new Error("The door code leaked into a group text.");
     } else if (draft.kind === "host-message" && this.pin && joinSplitDigits(draft.body).includes(this.pin)) {
       throw new Error("The door code leaked into a host message.");
     } else if (!this.pin && /\bdoor code\b/i.test(ownWords) && draft.kind !== "opt-in" && draft.kind !== "review") {

@@ -18,6 +18,7 @@ if (!lane) throw new Error("Scratch Lane is missing");
 const PIN = lane.pin;
 const NOW = "2026-10-14T15:00:00.000Z";
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+const GROUP_PIN_TEXT = `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: ${PIN}. Maria, reply DONE when the cleaning is finished.`;
 const PIN_TEXT = `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const DONE_ACK = "Thanks, cleaning marked done.";
 const HOST_DONE = "The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 done.";
@@ -239,13 +240,14 @@ describe("DONE after the door code", () => {
   });
 });
 
-describe("door code stays out of the group", () => {
-  it("finishes from a group DONE and keeps the code in one private text", async () => {
+describe("door code in the group", () => {
+  it("finishes from a group DONE and posts the code once, in the group of the landlord and the cleaner", async () => {
     const { box, job } = await ready(true);
     await job.receive({ id: "left", from: OWNER, text: "guests have left" });
     const groups = box.sent.filter((text) => text.channel === "group");
-    expect(groups.some((text) => text.body.includes(PIN) || text.body.includes("Door code"))).toBe(false);
-    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(groups.filter((text) => text.body.includes(PIN) || text.body.includes("Door code")).map((text) => text.kind)).toEqual(["pin"]);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: GROUP_PIN_TEXT, kind: "pin", channel: "group", audience: [OWNER, CLEANER] }]);
+    expect(box.sent.filter((text) => text.body.includes(PIN) && !text.channel)).toEqual([]);
     const done = await job.receive({ id: "done-group", from: CLEANER, text: "DONE", channel: "group" });
     // Both done lines go into the group now, one post each, and nothing one-to-one.
     const groupDone = (sent: CleanerText[]) => sent.filter((text) => text.kind === "done");
@@ -257,7 +259,7 @@ describe("door code stays out of the group", () => {
     ]);
     await job.receive({ id: "done-group-2", from: CLEANER, text: "DONE", channel: "group" });
     expect(box.sent.filter((text) => text.body === HOST_DONE)).toHaveLength(1);
-    expect(box.sent.filter((text) => text.channel === "group").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
+    expect(box.sent.filter((text) => text.channel === "group" && text.kind !== "pin").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
   });
 });
 

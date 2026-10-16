@@ -251,16 +251,15 @@ describe("group texting: the offer goes to the cleaner once", () => {
     expect(job.jobs()[0]?.status).toBe("confirmed");
   });
 
-  it("never puts the door code in the group", async () => {
+  it("posts the door code into the group of the landlord and Mike, once, with no one-to-one copy", async () => {
     const sent: CleanerText[] = [];
     const job = await offered(async (text) => {
       sent.push(text);
     });
     await job.receive({ id: "mike-group-yes", from: MIKE, text: "YES", channel: "group" });
     const left = await job.receive({ id: "left", from: OWNER, text: "guests have left" });
-    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([expect.objectContaining({ to: MIKE, kind: "pin" })]);
-    expect(left.sent.find((text) => text.kind === "pin")?.channel).toBeUndefined();
-    expect(sent.filter((text) => text.channel === "group" && text.body.includes(PIN))).toEqual([]);
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([expect.objectContaining({ to: MIKE, kind: "pin", channel: "group", audience: [OWNER, MIKE] })]);
+    expect(sent.filter((text) => text.body.includes(PIN) && (text.channel !== "group" || text.kind !== "pin"))).toEqual([]);
   });
 });
 
@@ -397,12 +396,12 @@ describe("group texting: the conversation webhook", () => {
     expect((await messages(wired)).filter((item) => item.text === "Running a little behind")).toHaveLength(1);
   });
 
-  it("sends the door code only privately after a YES in the group", async () => {
+  it("posts the door code in the group of Dana and Mike after a YES in the group, and never one-to-one", async () => {
     const { wired, conversationSid, fake } = await groupReady();
     await hook(wired, groupText(conversationSid, CLEANER, "YES"));
     await must(wired, "mark_guests_left", { said: "The guests have left" });
-    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.to)).toEqual([CLEANER]);
-    expect(fake.posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
+    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+    expect(fake.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => [...post.to].sort())).toEqual([[HOST, CLEANER].sort()]);
   });
 
   it("keeps a group photo from Mike during the cleaning, read through the Conversations media service", async () => {

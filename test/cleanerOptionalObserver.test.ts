@@ -191,8 +191,9 @@ describe("optional observer", () => {
     expect(posts.filter((post) => post.body === TIME).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
     expect(posts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.some((item) => item.to === OLD || item.to === "")).toBe(false);
-    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
-    expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
+    // The group holds only the host and the cleaner, so the code goes into it and nowhere else.
+    expect(codeRecipients(sms.sent)).toEqual([]);
+    expect(posts.filter((post) => bodyHasCode(post.body)).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
   });
 
   it("keeps a three-number setup on group copies only, and never sends the code to the observer", async () => {

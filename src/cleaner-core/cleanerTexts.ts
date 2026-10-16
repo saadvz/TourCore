@@ -113,6 +113,12 @@ export function doorCodeBody(address: string, code: string, lockLocation?: strin
   return `Guests have left ${address}. ${label}: ${code}. This code is only for you. Reply DONE when the cleaning is finished.`;
 }
 
+/** The door code as the group reads it: it names the cleaner and does not say the code is private. */
+export function groupDoorCodeBody(address: string, code: string, cleanerName: string, lockLocation?: string): string {
+  const label = lockLocation ? `Door code for the ${lockLocation}` : "Door code";
+  return `Guests have left ${address}. ${label}: ${code}. ${cleanerName}, reply DONE when the cleaning is finished.`;
+}
+
 export function holdNote(address: string): string {
   return `The cleaning at ${address} is on hold until the cleaner replies YES.`;
 }

@@ -87,10 +87,11 @@ describe("host group seat", () => {
     expect(sent.sent.filter((text) => text.body === READY)).toEqual([
       { to: CLEANER, body: READY, kind: "done", channel: "group", audience: [OWNER, CLEANER] },
     ]);
+    // The group holds only the host and the cleaner, so the code goes into it, once.
     expect(sent.sent.filter((text) => text.kind === "pin")).toEqual([
-      { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },
+      expect.objectContaining({ to: CLEANER, kind: "pin", channel: "group", audience: [OWNER, CLEANER] }),
     ]);
-    expect(sent.sent.filter((text) => text.channel === "group" && text.body.includes(PIN))).toEqual([]);
+    expect(sent.sent.filter((text) => text.body.includes(PIN)).map((text) => text.kind)).toEqual(["pin"]);
     expect(job.jobs().some((item) => item.status === "done")).toBe(true);
   });
 

@@ -343,8 +343,11 @@ describe("group-first: routing", () => {
         expect(text.audience, `${kind} audience`).toEqual([OWNER, MIKE]);
       }
     }
-    expect(sent.filter((text) => text.kind === "pin").every((text) => text.channel === undefined && text.to === MIKE)).toBe(true);
-    expect(sent.filter((text) => text.channel === "group").some((text) => text.body.includes(PIN))).toBe(false);
+    // The group holds only the landlord and Mike, so the door code goes into it.
+    const pinTexts = sent.filter((text) => text.kind === "pin");
+    expect(pinTexts).toHaveLength(1);
+    expect(pinTexts[0]).toMatchObject({ channel: "group", audience: [OWNER, MIKE] });
+    expect(sent.filter((text) => text.channel === "group" && text.kind !== "pin").some((text) => text.body.includes(PIN))).toBe(false);
   });
 
   it("names Mike in the time change and the reminder", async () => {
@@ -475,3 +478,168 @@ describe("group-first: routing", () => {
     expect(sent.filter((text) => text.to === ANA && text.channel === undefined && text.kind !== "opt-in")).toEqual([]);
   });
 });
+
+describe("group-first: door code", () => {
+  const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+  const LANE = "12 Scratch Lane, Teaneck, NJ 07666";
+  const OWNER = "+15555550100";
+  const MIKE = "+15555550101";
+  const ANA = "+15555550122";
+  const PIN = SCRATCH_TENANTS[0]!.pin;
+  const TIMES = { checkout: "11:00 AM", checkIn: "4:00 PM" };
+  const ANA_SEAT = { phone: ANA, name: "Ana" };
+
+  const clock = { at: "2026-10-14T15:00:00.000Z" };
+  const DUE = "2026-10-18T12:00:00.000Z";
+  function engine(sent: CleanerText[], extra: Partial<Parameters<typeof openCleanerCore>[0]> = {}) {
+    return openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: LANE, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: MIKE, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      cleanerConsent: "in",
+      sink: { send: async (text) => void sent.push(text) },
+      now: () => new Date(clock.at),
+      groupChat: { hostName: "Saad", cleanerName: "Mike" },
+      ...extra,
+    });
+  }
+  const say = (job: ReturnType<typeof engine>, id: string, from: string, text: string) => job.receive({ id, from, text });
+  const pins = (sent: CleanerText[]) => sent.filter((text) => text.kind === "pin");
+  const withCode = (sent: CleanerText[]) => sent.filter((text) => text.body.includes(PIN));
+
+  async function toYes(sent: CleanerText[], extra: Partial<Parameters<typeof openCleanerCore>[0]> = {}, ana?: "yes") {
+    clock.at = "2026-10-14T15:00:00.000Z";
+    const job = engine(sent, extra);
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes(TIMES);
+    await say(job, "yes-mike", MIKE, "YES");
+    if (ana) await say(job, "yes-ana", ANA, "YES");
+    return job;
+  }
+  const noLeak = (job: ReturnType<typeof engine>) => {
+    expect(JSON.stringify(job.outbox())).not.toContain(PIN);
+    expect(JSON.stringify(job.transcript())).not.toContain(PIN);
+  };
+
+  it("posts the code into the group when it holds only the landlord and Mike", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent);
+    expect(withCode(sent)).toEqual([]);
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ kind: "pin", channel: "group", audience: [OWNER, MIKE] });
+    expect(pins(sent)[0]?.body).toContain(PIN);
+    expect(sent.filter((text) => text.kind === "pin" && !text.channel)).toEqual([]);
+    expect(withCode(sent).every((text) => text.kind === "pin")).toBe(true);
+    noLeak(job);
+  });
+
+  it("sends the code to Mike alone when Ana is in and the landlord chose cleaner", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "cleaner" } }, "yes");
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ to: MIKE, kind: "pin" });
+    expect(pins(sent)[0]?.channel).toBeUndefined();
+    expect(withCode(sent)).toEqual(pins(sent));
+    noLeak(job);
+  });
+
+  it("posts the code to the whole group when Ana is in and the landlord chose group", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "group" } }, "yes");
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ channel: "group", audience: [OWNER, MIKE, ANA] });
+    expect(withCode(sent)).toEqual(pins(sent));
+    noLeak(job);
+  });
+
+  it("checks the group when the code is sent: Ana's STOP before the guests leave puts it in the group for the two", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "cleaner" } }, "yes");
+    await say(job, "stop-ana", ANA, "STOP");
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ channel: "group", audience: [OWNER, MIKE] });
+    expect(sent.filter((text) => text.to === ANA && text.body.includes(PIN))).toEqual([]);
+    noLeak(job);
+  });
+
+  it("checks the group when the code is sent: Ana joining before the guests leave follows the landlord's choice", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "cleaner" } });
+    await say(job, "yes-ana", ANA, "YES");
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ to: MIKE });
+    expect(pins(sent)[0]?.channel).toBeUndefined();
+  });
+
+  it("sends the code one-to-one to Mike alone when the group can't be made", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, {
+      groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "group" },
+      sink: {
+        send: async (text) => {
+          if (text.channel === "group") throw new GroupNotConfirmed();
+          sent.push(text);
+        },
+      },
+    });
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ to: MIKE, kind: "pin" });
+    expect(pins(sent)[0]?.channel).toBeUndefined();
+    expect(sent.filter((text) => text.body.includes(PIN) && text.to !== MIKE)).toEqual([]);
+    noLeak(job);
+  });
+
+  it("falls back to Mike alone with just the landlord and Mike when the group can't be made", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, {
+      sink: {
+        send: async (text) => {
+          if (text.channel === "group") throw new GroupNotConfirmed();
+          sent.push(text);
+        },
+      },
+    });
+    clock.at = DUE;
+    await say(job, "left", OWNER, "guests have left");
+    expect(pins(sent)).toHaveLength(1);
+    expect(pins(sent)[0]).toMatchObject({ to: MIKE });
+    expect(pins(sent)[0]?.channel).toBeUndefined();
+    expect(sent.filter((text) => text.body.includes(PIN) && text.to !== MIKE)).toEqual([]);
+  });
+
+  it("sends the code nowhere before the guests have left", async () => {
+    const sent: CleanerText[] = [];
+    const job = await toYes(sent, { groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [ANA_SEAT], doorCodeTo: "group" } }, "yes");
+    expect(withCode(sent)).toEqual([]);
+    noLeak(job);
+  });
+
+  it("refuses a split code in a group checklist", async () => {
+    const sent: CleanerText[] = [];
+    const split = PIN.split("").join(" ");
+    const job = await toYes(sent, { checklist: { name: "Turnover", items: [`lock box ${split}`] } });
+    await expect(say(job, "left", OWNER, "guests have left")).rejects.toThrow("The door code leaked into a group text.");
+    expect(withCode(sent).filter((text) => text.kind !== "pin")).toEqual([]);
+    expect(sent.some((text) => joinDigits(text.body).includes(PIN) && text.kind !== "pin")).toBe(false);
+  });
+});
+
+function joinDigits(text: string): string {
+  return text.replace(/(\d)[\s.\-_/]+(?=\d)/g, "$1");
+}

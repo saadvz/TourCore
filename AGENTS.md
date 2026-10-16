@@ -12,7 +12,7 @@ Tests and Scratch runs use only 555 numbers. Saad's own phones and the Twilio nu
 
 Door codes in this repo are made-up. A real lock code stays out of tests, fixtures, logs, and prompts.
 
-The door code goes only in a private text to the approved cleaner. The proof for that gate is [docs/cleaner-core-safety-gates.md](docs/cleaner-core-safety-gates.md).
+The door code goes only to the approved cleaner: in the group when it holds only the landlord and the approved cleaner, or as the landlord chose when the group holds anyone else. The proof for that gate is [docs/cleaner-core-safety-gates.md](docs/cleaner-core-safety-gates.md).
 
 Secrets stay out of code, logs, and prompts. [GROK_BOOTSTRAP.md](GROK_BOOTSTRAP.md) already says not to ask for a secret in chat, and not to repeat one if someone pastes it.
 

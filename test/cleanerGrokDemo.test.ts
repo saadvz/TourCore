@@ -1548,11 +1548,11 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     const safe = async (step: string) => {
       await drain(wired, clock);
       for (const sms of [...wired.cleanerSent, ...wired.tourSent]) expect(scratchNumbers.has(sms.to), `${step}: text to ${sms.to}`).toBe(true);
-      // The door code goes only in a private text to the cleaner, never to the group.
+      // The door code goes to the cleaner, in a private text or in a group of only the host and the cleaner.
       for (const sms of wired.cleanerSent) if (sms.body.includes(DOOR_CODE)) expect(sms.to, step).toBe(LANE.cleanerPhone);
       for (const post of group.posts) {
         for (const to of post.to) expect(scratchNumbers.has(to), `${step}: group post to ${to}`).toBe(true);
-        expect(post.body, step).not.toContain(DOOR_CODE);
+        if (post.body.includes(DOOR_CODE)) expect([...post.to].sort(), step).toEqual([LANE.ownerPhone, LANE.cleanerPhone].sort());
       }
       for (const post of routine) {
         expect(post.url, step).toBe(ROUTINE_URL);
@@ -1621,13 +1621,14 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     expect(await labelled("Reminder to the cleaner")).toHaveLength(1);
     await safe("5 reminder");
 
-    // 6. The guests leave. The private code text goes to the cleaner, shown redacted.
+    // 6. The guests leave. The code goes into the group of the host and the cleaner, shown redacted.
     expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT);
     const door = await labelled("Door code text to the cleaner");
     expect(door).toHaveLength(1);
     expect(door[0]?.body).toContain("Door code: [redacted].");
     expect(door[0]?.body).not.toContain(DOOR_CODE);
-    expect(wired.cleanerSent.filter((sms) => sms.body.includes(DOOR_CODE)).map((sms) => sms.to)).toEqual([LANE.cleanerPhone]);
+    expect(wired.cleanerSent.filter((sms) => sms.body.includes(DOOR_CODE))).toEqual([]);
+    expect(group.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => [...post.to].sort())).toEqual([[LANE.ownerPhone, LANE.cleanerPhone].sort()]);
     await safe("6 guests left");
 
     // 7. The cleaner says DONE. The host's ready note comes back to Grok.

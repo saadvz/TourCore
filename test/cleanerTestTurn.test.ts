@@ -512,7 +512,8 @@ describe("Scratch test turnover", () => {
     expect(sent.some((item) => item.kind === "pin")).toBe(false);
     await job.receive({ id: "left", from: HOST, text: "guests have left" });
     expect(sent.filter((item) => item.kind === "pin").map((item) => item.to)).toEqual([CLEANER]);
-    expect(sent.filter((item) => item.kind === "pin").every((item) => item.channel !== "group")).toBe(true);
+    // The group holds only the host and the cleaner, so the code goes into it.
+    expect(sent.filter((item) => item.kind === "pin").every((item) => item.channel === "group" && item.audience?.length === 2)).toBe(true);
     expect(sent.filter((item) => item.kind !== "pin").every((item) => !containsCode(item.body))).toBe(true);
     expect(treeContainsCode(root)).toBe(false);
     expect(job.jobs()).toHaveLength(1);
