@@ -148,6 +148,7 @@ describe("Scratch test tools", () => {
       "save_alert_routine",
       "send_message",
       "resume_job",
+      "reset_property",
       "reset_scratch",
       "read_inbox",
       "read_outbox",

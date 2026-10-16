@@ -59,7 +59,7 @@ Ask the host to enter each stay as a timed event, from check-in to checkout.
 - **`completed`.** Call `get_job_photos` and look at the photos. Compare them with the checklist. Summarize the cleaning in your own words.
 
 The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning. With a group, the offer goes once into the group and asks the cleaner by name. Replies in the group show in `messages` with `channel: "group"`. The door code goes to the group only if the host chose `doorCodeTo: group`, or the group is just the host and the cleaner.
-When a cleaning is on hold, call `resume_job` only when the host asks.
+When a cleaning is on hold, call `resume_job` only when the host asks. To start over, call `reset_property`, show the host the preview, and call again with the code only after they say yes.
 
 ## Messages
 

@@ -106,6 +106,13 @@ const NO_GROUP = "There's no group chat for this property.";
 const GROUP_ONLY = "Messages go to the group. Send it with to: group.";
 const DOOR_CODE_QUESTION = "You added other people to the group. Should the door code go to the whole group, or only privately to the cleaner?";
 const TOO_MANY = "That's a lot of messages this hour. Try again later.";
+/** The approval action for a property reset. It is bound to this property's group, so a changed group voids it. */
+const RESET_ACTION = "cleaner-reset-property";
+const RESET_TARGET = "property";
+const RESET_GROUP_KEPT = "I couldn't remove the group text on Twilio, so nothing was reset. Try again in a few minutes.";
+const RESET_NOT_DONE = "I couldn't reset Cleaner Core just now, so nothing else was changed. Try again in a few minutes.";
+const RESET_UNFINISHED = "I couldn't finish resetting Cleaner Core. Try reset_property again.";
+const ROUTINE_SECRETS = ["CLEANER_CORE_ROUTINE_URL", "CLEANER_CORE_ROUTINE_KEY"] as const;
 const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
 /** Messages kept for Grok, newest last. */
 const MAX_MESSAGES = 200;
@@ -1574,6 +1581,63 @@ export class LiveDesk {
     this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
     this.file.messagesShown = [...(this.file.messagesShown ?? []), message.id];
     this.persist();
+  }
+
+  /**
+   * Wipes this property's Cleaner Core state, as if it was never set up, after the host confirms.
+   * Without a confirmation it changes nothing and returns the exact words with an approval code.
+   * With the code it removes the group on Twilio first; if Twilio won't, nothing else is touched.
+   * Then the two alert routine secrets go through `deleteSecrets` (a failure stops here), then the desk's file, job folder and alert queue.
+   * It never texts anyone.
+   */
+  resetProperty(input: { confirmation?: string }, deleteSecrets: (names: (typeof ROUTINE_SECRETS)[number][]) => void): Promise<ToolReply> {
+    return this.serial(() => this.resetPropertyNow(input, deleteSecrets));
+  }
+
+  private async resetPropertyNow(input: { confirmation?: string }, deleteSecrets: (names: (typeof ROUTINE_SECRETS)[number][]) => void): Promise<ToolReply> {
+    const address = this.file.address ?? "this property";
+    const group = this.file.conversationSid;
+    const fingerprint = createHash("sha256").update(`reset|${group ?? ""}|${this.file.address ?? ""}`).digest("hex");
+    const code = input.confirmation?.trim() ?? "";
+    if (!code) {
+      const next = `This resets Cleaner Core for ${address}. It deletes the setup, jobs, messages, everyone's YES and STOP replies, the saved door code, the alert routine connection, and the group text on Twilio. Your Twilio settings and Grok logins stay. Reply yes to reset.`;
+      return this.reply({ next, confirmation: this.approvals.issue(RESET_ACTION, RESET_TARGET, fingerprint, next) });
+    }
+    try {
+      this.approvals.redeem(code, RESET_ACTION, RESET_TARGET, fingerprint);
+    } catch {
+      return this.fail(APPROVAL_STALE);
+    }
+    // Twilio first. A group that can't be removed stops everything, so the next try starts from the same state.
+    if (group && !(await deleteLiveGroup(this.env(), group))) return this.fail(RESET_GROUP_KEPT);
+    // Secrets before files: if the store can't delete them, nothing else is touched.
+    try {
+      deleteSecrets([...ROUTINE_SECRETS]);
+    } catch {
+      return this.fail(RESET_NOT_DONE);
+    }
+    // A drain still running would recreate the alert folder with a stale record. With the secrets gone it delivers nothing.
+    await this.alerts.drain().catch(() => undefined);
+    let wiped = true;
+    try {
+      rmSync(this.path, { force: true });
+      rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
+      // The queued wake-ups belong to the old setup, so they can't deliver to a routine connected later.
+      rmSync(join(this.root, "cleaner-alerts"), { recursive: true, force: true });
+    } catch {
+      wiped = false;
+    } finally {
+      // The secrets are already gone, so the desk forgets what it held either way.
+      this.file = {};
+      this.pin = undefined;
+      this.uploadKey = undefined;
+      this.engine = undefined;
+      this.stale = false;
+      this.held = false;
+      this.approvals.clear();
+    }
+    if (!wiped) return this.fail(RESET_UNFINISHED);
+    return this.reply({ next: `Cleaner Core is reset for ${address}. Start setup again whenever you're ready.` });
   }
 
   resetScratch(): Promise<ToolReply> {

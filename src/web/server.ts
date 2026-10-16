@@ -687,6 +687,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
           saveSecrets: (values) => installation.secrets.set(values),
+          deleteSecrets: (names) => installation.secrets.delete(names),
           // Token checked before the body is read; failures have already been answered (401/403/503).
           ...(oauth ? { oauth: { authenticate: async () => !!(await oauth.authenticate(req, res, CLEANER_MCP_PATH)) } } : {}),
         });

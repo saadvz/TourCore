@@ -1,7 +1,7 @@
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
 import { ALERT_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
-import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type SaveSecrets } from "./mcp";
+import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type DeleteSecrets, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
@@ -29,6 +29,8 @@ export async function handleCleanerMcpHttp(input: {
   now: () => Date;
   /** Writes to the secret store. Only `save_alert_routine` uses it. */
   saveSecrets: SaveSecrets;
+  /** Removes from the secret store. Only `reset_property` uses it. */
+  deleteSecrets: DeleteSecrets;
   /**
    * OAuth for /mcp/cleaner-core. True when the bearer is a live cleaner grant;
    * false after it has answered the request itself.
@@ -69,7 +71,7 @@ export async function handleCleanerMcpHttp(input: {
   // The header wins. Without it (a Grok Bot connected by OAuth), the server's own key, made once.
   const pinKey = pinKeyFromHeader(input.pinKeyHeader) ?? serverPinKey(input.env(), input.saveSecrets);
   const desk = liveDeskFor(input.root, input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets);
+  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets, input.deleteSecrets);
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }
