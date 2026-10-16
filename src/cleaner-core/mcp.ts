@@ -12,14 +12,15 @@ const TOOLS = [
   {
     name: "get_state",
     title: "See what's done",
-    description: "Call this first and follow its next step. Ask one plain question, then call it again. Pass said only when the host just answered that question.",
+    description:
+      "Call this first and follow its next step. During setup it returns ask: the questions for this step, each with the field it fills, any options, and a default. Ask them one at a time in your own short words, show options as a choice card, then call the step's tool. Pass said only when the host just answered get_state's own question.",
     input: z.object({ said: z.string().optional() }),
   },
   {
     name: "save_property",
     title: "Save the property",
     description:
-      "Saves the business name, the property address, and the time zone. Optional: the property's nickname, its type, and the usual checkoutTime and checkInTime, each a clock time like 11:00 AM.",
+      "Saves the business name, the property address, the time zone, and the usual checkoutTime and checkInTime, each a clock time like 11:00 AM. Setup asks for the usual times before it moves on. Optional: the property's nickname and its type.",
     input: z.object({
       business: z.string(),
       address: z.string(),
@@ -56,11 +57,12 @@ const TOOLS = [
     name: "save_sources",
     title: "Save the booking calendars",
     description:
-      "Saves where bookings come from. calendars replaces every saved link: each is a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8. Pass google true or false only to change Google Calendar; leaving it out keeps it. If the change would call off an upcoming cleaning, it is refused with wouldCancel: ask the host, then save again with dropJobs true. The reply never repeats a link.",
+      "Saves where bookings come from. calendars replaces every saved link: each is a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8. A link on your secure card can't be passed here: pass uploadLink with the calendar's name instead, and post the link from your own computer to the one-time uploadUrl in the reply. Pass google true or false only to change Google Calendar; leaving it out keeps it. If the change would call off an upcoming cleaning, it is refused with wouldCancel: ask the host, then save again with dropJobs true. The reply never repeats a link.",
     input: z.object({
       calendars: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
       google: z.boolean().optional(),
       dropJobs: z.boolean().optional(),
+      uploadLink: z.object({ name: z.string().optional() }).optional(),
     }),
   },
   {
@@ -120,8 +122,9 @@ const TOOLS = [
   {
     name: "confirm_times",
     title: "Confirm the times",
-    description: "Saves the checkout time and the next check-in time the host just stated. It does not invent a time.",
-    input: z.object({ checkout: z.string(), checkIn: z.string() }),
+    description:
+      "Saves the checkout time and the next check-in time the host just stated, for the next turnover. With all true, the same times go on every upcoming turnover that has none yet, only after the host chose that; the cleaner still gets one offer at a time. It does not invent a time.",
+    input: z.object({ checkout: z.string(), checkIn: z.string(), all: z.boolean().optional() }),
   },
   {
     name: "mark_guests_left",
@@ -263,7 +266,7 @@ export async function handleCleanerMcpMessage(
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
       instructions: [
-        "Call get_state first and follow its next step. Ask one plain question, then call get_state again. Do not skip ahead. Do not read out a door code.",
+        "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a choice card. Offer the default when there is one. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
         "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
         "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
@@ -320,6 +323,8 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
   if (name === "save_sources") {
     const calendars = (args as { calendars?: { name: string }[] }).calendars ?? [];
     if (calendars.some((calendar) => desk.chatCarriesDoorCode(calendar.name))) return true;
+    const upload = (args as { uploadLink?: { name?: string } }).uploadLink;
+    if (upload?.name && desk.chatCarriesDoorCode(upload.name)) return true;
   }
   if (name === "save_people") {
     const contacts = (args as { contacts?: { name: string }[] }).contacts ?? [];
@@ -343,7 +348,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url?: string; google?: boolean }, pinKey);
     case "save_sources":
-      return desk.saveSources(args as { calendars?: { name: string; url: string }[]; google?: boolean; dropJobs?: boolean }, pinKey);
+      return desk.saveSources(args as Parameters<LiveDesk["saveSources"]>[0], pinKey);
     case "save_schedule":
       return desk.saveSchedule(args as Parameters<LiveDesk["saveSchedule"]>[0], pinKey);
     case "save_door_code":
@@ -357,7 +362,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "get_turns":
       return desk.getTurns();
     case "confirm_times":
-      return desk.confirmTimes(args as { checkout: string; checkIn: string });
+      return desk.confirmTimes(args as { checkout: string; checkIn: string; all?: boolean });
     case "mark_guests_left":
       return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":

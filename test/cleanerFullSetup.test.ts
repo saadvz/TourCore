@@ -48,15 +48,10 @@ const LOCK = "back door lockbox";
 /** LiveDesk names the business when no host name is saved. */
 const TIME = groupTimeLine(BUSINESS);
 
-const PROPERTY_NEXT = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
-const SOURCES_NEXT = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like \"Lake House bookings\", works best. I'll read only that calendar, not your main one unless the bookings are there.";
-const PEOPLE_NEXT =
-  "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
-const SCHEDULE_NEXT =
-  "When should the cleaner get texts? The first cleaning text goes when you confirm the times, or a set number of days after check-in. The reminder goes the morning of checkout, or a set number of days before at a set time. Any quiet hours, and who should hear about problems? If the defaults are fine, save an empty schedule.";
-const DOOR_NEXT = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
-const PREFERENCES_NEXT =
-  "Any cleaning preferences? A checklist, whether photos are required, whether the cleaner may send supply notes, and other instructions. If there are none, save empty preferences.";
+/** The setup step get_state is asking about. */
+function askStep(state: Record<string, unknown> | undefined): string | undefined {
+  return (state?.ask as { step?: string } | undefined)?.step;
+}
 const REVIEW_NEXT = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code for the ${LOCK}: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
 
@@ -133,17 +128,17 @@ describe("Cleaner Core full setup: the diagram order", () => {
   it("saves each step, advances in diagram order, and reviews every choice without the code or a full phone", async () => {
     const wired = await app();
     await call(wired, "get_state", { said: "2" });
-    expect((await state(wired)).next).toBe(PROPERTY_NEXT);
+    expect(askStep((await state(wired)))).toBe("property");
 
     const property = await call(wired, "save_property", PROPERTY);
     expect(property.isError).toBe(false);
-    expect(property.structured?.next).toBe(SOURCES_NEXT);
-    expect((await state(wired)).next).toBe(SOURCES_NEXT);
+    expect(askStep(property.structured)).toBe("sources");
+    expect(askStep((await state(wired)))).toBe("sources");
 
     const sources = await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
     expect(sources.isError).toBe(false);
-    expect(sources.structured?.next).toBe(PEOPLE_NEXT);
-    expect((await state(wired)).next).toBe(PEOPLE_NEXT);
+    expect(askStep(sources.structured)).toBe("people");
+    expect(askStep((await state(wired)))).toBe("people");
 
     const people = await call(wired, "save_people", {
       host: HOST,
@@ -154,18 +149,18 @@ describe("Cleaner Core full setup: the diagram order", () => {
       doorCodeTo: "cleaner",
     });
     expect(people.isError).toBe(false);
-    expect(people.structured?.next).toBe(SCHEDULE_NEXT);
-    expect((await state(wired)).next).toBe(SCHEDULE_NEXT);
+    expect(askStep(people.structured)).toBe("schedule");
+    expect(askStep((await state(wired)))).toBe("schedule");
 
     const schedule = await call(wired, "save_schedule", SCHEDULE);
     expect(schedule.isError).toBe(false);
-    expect(schedule.structured?.next).toBe(DOOR_NEXT);
-    expect((await state(wired)).next).toBe(DOOR_NEXT);
+    expect(askStep(schedule.structured)).toBe("door-code");
+    expect(askStep((await state(wired)))).toBe("door-code");
 
     const door = await call(wired, "save_door_code", { code: DOOR_CODE, lockLocation: LOCK });
     expect(door.isError).toBe(false);
     const atPreferences = await state(wired);
-    expect(atPreferences.next).toBe(PREFERENCES_NEXT);
+    expect(askStep(atPreferences)).toBe("preferences");
     expect(atPreferences.setup).toBeUndefined();
 
     const early = await call(wired, "activate");
@@ -222,12 +217,12 @@ describe("Cleaner Core full setup: the diagram order", () => {
   it("takes save_preferences({}) as no preferences and moves to review", async () => {
     const wired = await app();
     await call(wired, "get_state", { said: "2" });
-    expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE })).isError).toBe(false);
+    expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" })).isError).toBe(false);
     expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
     expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
     expect((await call(wired, "save_schedule", {})).isError).toBe(false);
     expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
-    expect((await state(wired)).next).toBe(PREFERENCES_NEXT);
+    expect(askStep((await state(wired)))).toBe("preferences");
     expect((await call(wired, "save_preferences", {})).isError).toBe(false);
     const review = await state(wired);
     expect(review.next).toBe(REVIEW_NEXT);
@@ -268,7 +263,7 @@ describe("Cleaner Core full setup: the diagram order", () => {
 describe("Cleaner Core full setup: refusals", () => {
   async function atDoor(wired: WiredApp) {
     await call(wired, "get_state", { said: "2" });
-    expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE })).isError).toBe(false);
+    expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" })).isError).toBe(false);
     expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
     expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
     expect((await call(wired, "save_schedule", {})).isError).toBe(false);
@@ -313,7 +308,7 @@ describe("Cleaner Core full setup: refusals", () => {
     expect(inItem.isError).toBe(true);
     expect(inItem.raw.includes(DOOR_CODE)).toBe(false);
     expect((await call(wired, "save_preferences", { instructions: `Use ${DOOR_CODE} at the side door` })).isError).toBe(true);
-    expect((await state(wired)).next).toBe(PREFERENCES_NEXT);
+    expect(askStep((await state(wired)))).toBe("preferences");
   });
 });
 
@@ -896,7 +891,7 @@ describe("Cleaner Core schedule: save_schedule", () => {
   it("refuses days outside 1 to 14, a bad time, one-sided quiet hours, and a door code", async () => {
     const { desk } = openDesk([HOST, CLEANER], "0");
     ok(await desk.getState("2"));
-    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE }));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" }));
     expect((await desk.saveSchedule({})).ok).toBe(false);
     ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
     ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
@@ -910,8 +905,8 @@ describe("Cleaner Core schedule: save_schedule", () => {
     expect((await desk.saveSchedule({ quietFrom: "9:00 PM" })).ok).toBe(false);
     expect((await desk.saveSchedule({ escalateTo: `Sam ${DOOR_CODE}` })).ok).toBe(false);
     expect((await desk.saveSchedule({ firstText: "never" as never })).ok).toBe(false);
-    expect(ok(await desk.getState()).next).toBe(SCHEDULE_NEXT);
-    expect(ok(await desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "7:30 AM" })).next).toBe(PREFERENCES_NEXT);
+    expect(askStep(ok(await desk.getState()))).toBe("schedule");
+    expect(askStep(ok(await desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "7:30 AM" })))).toBe("preferences");
   });
 });
 
@@ -2092,12 +2087,12 @@ describe("Cleaner Core full diagram", () => {
     const codeTexts = () => sms.sent.filter((item) => PLAIN_CODE.test(item.body));
 
     await say("get_state", { said: "2" });
-    await say("save_property", { business: LANE.hostName, address, timeZone: ZONE });
+    await say("save_property", { business: LANE.hostName, address, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
     await say("save_sources", { google: true });
     await say("save_people", { host, cleaner, cleanerName: "Ana", groupChat: "cleaner-only" });
     await say("save_schedule", {});
     expect(String((await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK })).next)).toContain("Saved the door code.");
-    expect((await say("get_state")).next).toBe(PREFERENCES_NEXT);
+    expect(askStep((await say("get_state")))).toBe("preferences");
     await say("save_preferences", {});
     await say("activate", { googleEvents: googleList([{ id: "g-oauth", start: "2026-10-14", end: "2026-10-17" }]) });
     await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
@@ -2114,7 +2109,7 @@ describe("Cleaner Core full diagram", () => {
     // A redeploy: the desk opens the seal with the server's key, so it doesn't ask for the code again.
     resetLiveDesks();
     const after = await say("get_state");
-    expect(after.next).not.toBe(DOOR_NEXT);
+    expect(askStep(after)).not.toBe("door-code");
     expect(after.done).toContain("Door code saved.");
     const again = await tool("mark_guests_left", { said: "guests have left" });
     expect(again.text).toContain("I already sent the door code to the cleaner.");
