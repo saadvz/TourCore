@@ -112,7 +112,19 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     const people = askOf((await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] })).structured);
     const group = people.questions.find((question) => question.field === "groupChat");
     expect(group?.default).toBe("cleaner-and-host");
+    // The group greets the host by name, so the name is asked and the business name is never the default.
+    const hostName = people.questions.find((question) => question.field === "hostName");
+    expect(hostName?.required).toBe(true);
+    expect(hostName?.default).toBeUndefined();
     expect(group?.options?.map((option) => option.value)).toEqual(["cleaner-and-host", "everyone", "cleaner-only"]);
+  });
+
+  it("shows the host's name in the review and greets the host by it in the group intro", async () => {
+    const { desk, groups } = await activatedGroup({ hostName: "Saad" });
+    expect(((ok(await desk.getState()).setup ?? {}) as Record<string, unknown>).people).toBeUndefined();
+    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM" }));
+    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    expect(groups.posts[0]?.body).toMatch(/^Hi Saad and Maria! .* I'm Saad's cleaning assistant,/);
   });
 
   it("keeps asking for the usual times until both are saved, then moves on", async () => {
@@ -212,7 +224,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 });
 
 /** A group setup with the two test stays, activated, with the alert routine saved. */
-async function activatedGroup(options: { uploadCode?: boolean } = {}) {
+async function activatedGroup(options: { uploadCode?: boolean; hostName?: string } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-setup-ask-"));
   roots.push(root);
   const sms = fakeSms();
@@ -235,7 +247,7 @@ async function activatedGroup(options: { uploadCode?: boolean } = {}) {
   ok(await desk.getState("2"));
   ok(await desk.saveProperty(PROPERTY));
   ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
-  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host" }));
+  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host", ...(options.hostName ? { hostName: options.hostName } : {}) }));
   ok(await desk.saveSchedule({}));
   if (options.uploadCode) {
     const link = String(ok(await desk.saveDoorCode({}, PIN_KEY)).uploadUrl);
@@ -243,6 +255,10 @@ async function activatedGroup(options: { uploadCode?: boolean } = {}) {
     expect(posted.status).toBe(200);
   } else ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
   ok(await desk.savePreferences({}));
+  if (options.hostName) {
+    const review = ok(await desk.getState()).setup as { people: { host: Record<string, unknown> } };
+    expect(review.people.host).toEqual({ name: options.hostName, phoneLast4: HOST.slice(-4) });
+  }
   ok(await desk.activate());
   return { desk, sms, groups };
 }
