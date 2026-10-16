@@ -28,6 +28,19 @@ export class UnsetTimeZoneError extends Error {
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
+const cachedFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** Building an Intl.DateTimeFormat is slow, and every text formats the same few shapes. */
+export function dateFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = JSON.stringify(options);
+  let f = cachedFormats.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", options);
+    cachedFormats.set(key, f);
+  }
+  return f;
+}
+
 function zoneForDates(timeZone: string): string {
   if (!isValidTimeZone(timeZone)) throw new UnsetTimeZoneError();
   return timeZone;
@@ -52,14 +65,21 @@ function partsFormatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+const validZones = new Map<string, boolean>();
+
 export function isValidTimeZone(timeZone: string): boolean {
   if (!timeZone || (timeZone !== "UTC" && !timeZone.includes("/"))) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone });
-    return true;
-  } catch {
-    return false;
+  let valid = validZones.get(timeZone);
+  if (valid === undefined) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone });
+      valid = true;
+    } catch {
+      valid = false;
+    }
+    validZones.set(timeZone, valid);
   }
+  return valid;
 }
 
 /** Returns the canonical spelling (e.g. "america/new_york" -> "America/New_York"), or undefined. */
@@ -111,7 +131,7 @@ export function weekdayOf(date: LocalDate): Weekday {
 const clean = (s: string) => s.replace(/[\u202f\u00a0]/g, " ");
 
 export function formatTime(date: Date, timeZone: string): string {
-  return clean(date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: zoneForDates(timeZone) }));
+  return clean(dateFormat({ hour: "numeric", minute: "2-digit", timeZone: zoneForDates(timeZone) }).format(date));
 }
 
 /** Same clock as other visitor texts, without ":00". "3 PM" or "3:30 PM". */
@@ -125,25 +145,25 @@ export function timeOnDay(date: Date, timeZone: string): string {
 }
 
 export function formatDay(date: Date, timeZone: string): string {
-  return clean(date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: zoneForDates(timeZone) }));
+  return clean(dateFormat({ weekday: "long", month: "short", day: "numeric", timeZone: zoneForDates(timeZone) }).format(date));
 }
 
 /** "Monday" */
 export function formatWeekday(date: Date, timeZone: string): string {
-  return clean(date.toLocaleDateString("en-US", { weekday: "long", timeZone: zoneForDates(timeZone) }));
+  return clean(dateFormat({ weekday: "long", timeZone: zoneForDates(timeZone) }).format(date));
 }
 
 /** "Mon, Oct 5 at 2:00 PM" — operator confirmation stamps that name the day and time. */
 export function formatConfirmStamp(date: Date, timeZone: string): string {
   const zone = zoneForDates(timeZone);
-  const day = clean(date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: zone }));
+  const day = clean(dateFormat({ weekday: "short", month: "short", day: "numeric", timeZone: zone }).format(date));
   return `${day} at ${formatTime(date, zone)}`;
 }
 
 /** "Sep 27, 2:14 PM" */
 export function formatShortDateTime(date: Date, timeZone: string): string {
   const zone = zoneForDates(timeZone);
-  const day = clean(date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: zone }));
+  const day = clean(dateFormat({ month: "short", day: "numeric", timeZone: zone }).format(date));
   return `${day}, ${formatTime(date, zone)}`;
 }
 

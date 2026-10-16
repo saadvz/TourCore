@@ -110,20 +110,25 @@ export class LocalSecretStore implements SecretStore {
     private readonly clock: () => number = Date.now,
   ) {}
 
-  private read(): SecretFile {
+  /** The cached document itself. Callers must not change it; use read() for a copy. */
+  private current(): SecretFile {
     if (!existsSync(this.path)) return empty();
     const { mtimeMs, size } = statSync(this.path);
     const stamp = `${mtimeMs}:${size}`;
-    if (this.cached?.stamp === stamp) return structuredClone(this.cached.doc);
+    if (this.cached?.stamp === stamp) return this.cached.doc;
     try {
       const raw = JSON.parse(readFileSync(this.path, "utf8")) as SecretFile;
       const hostedOwner = parseHostedOwner(raw.hostedOwner);
       const doc: SecretFile = { schemaVersion: 1, values: raw.values ?? {}, updatedAt: raw.updatedAt ?? {}, ...(hostedOwner ? { hostedOwner } : {}) };
       this.cached = { stamp, doc };
-      return structuredClone(doc);
+      return doc;
     } catch {
       throw new Error("The saved provider settings couldn't be read. Re-enter them on the secure setup page.");
     }
+  }
+
+  private read(): SecretFile {
+    return structuredClone(this.current());
   }
 
   private write(doc: SecretFile): void {
@@ -137,7 +142,7 @@ export class LocalSecretStore implements SecretStore {
   }
 
   get(name: SettingName): string | undefined {
-    return this.read().values[name]?.trim() || undefined;
+    return this.current().values[name]?.trim() || undefined;
   }
 
   set(values: Partial<Record<SettingName, string>>, now = new Date(this.clock())): void {

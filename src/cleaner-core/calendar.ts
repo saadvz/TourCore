@@ -1,3 +1,5 @@
+import { dateFormat } from "../core/timezone";
+
 export interface FeedBlock {
   uid: string;
   summary: string;
@@ -69,8 +71,8 @@ export function zonedInstant(ymd: string, hm: string, timeZone: string): string 
 export function formatWhen(iso: string, timeZone: string): { day: string; time: string } {
   const date = new Date(iso);
   return {
-    day: new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long", month: "short", day: "numeric" }).format(date),
-    time: new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(date),
+    day: dateFormat({ timeZone, weekday: "long", month: "short", day: "numeric" }).format(date),
+    time: dateFormat({ timeZone, hour: "numeric", minute: "2-digit" }).format(date),
   };
 }
 
@@ -154,7 +156,7 @@ function byCheckIn(a: ParsedEvent, b: ParsedEvent): number {
 }
 
 function zoneOffsetMs(instant: Date, timeZone: string): number {
-  const fmt = new Intl.DateTimeFormat("en-US", {
+  const fmt = dateFormat({
     timeZone,
     hourCycle: "h23",
     year: "numeric",
