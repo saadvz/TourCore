@@ -130,6 +130,11 @@ export function groupDoorCodeBody(address: string, code: string, cleanerName: st
   return `Guests have left ${address}. ${label}: ${code}. ${cleanerName}, reply DONE when the cleaning is finished.`;
 }
 
+/** The host's note while a cleaning waits for the cleaner's first YES. Nothing is on hold, and the host has nothing to do. */
+export function waitingForYesNote(address: string): string {
+  return `The cleaning at ${address} is waiting for the cleaner to reply YES.`;
+}
+
 export function holdNote(address: string): string {
   return `The cleaning at ${address} is on hold until the cleaner replies YES.`;
 }

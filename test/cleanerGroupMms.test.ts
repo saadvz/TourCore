@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { groupInviteBody, groupOfferBody } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
-import { CLEANER_GROUP_IDENTITY, sendLiveGroup, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { CLEANER_GROUP_IDENTITY, sendLiveGroup, setCleanerGroupFetch, setCleanerGroupPause, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { twilioSignature } from "../src/messaging/twilio/signature";
@@ -29,6 +29,7 @@ const open: WiredApp[] = [];
 
 afterEach(async () => {
   setCleanerGroupFetch(undefined);
+  setCleanerGroupPause(undefined);
   setCleanerTwilioClient(undefined);
   setCleanerPhotoFetch(undefined);
   while (open.length > 0) await open.pop()?.close();
@@ -75,6 +76,17 @@ describe("group texting: how the group is made", () => {
     expect(fake.participantPosts).toHaveLength(3);
     expect(fake.webhooks).toHaveLength(1);
     expect(fake.posts.map((post) => post.body)).toEqual(["One", "Two"]);
+  });
+
+  it("waits after the first text in a new group, so the next one reaches phones after it, and not after a text to the same group", async () => {
+    useFake();
+    setCleanerGroupPause(80);
+    let started = Date.now();
+    const first = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Intro" });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(75);
+    started = Date.now();
+    await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Offer", conversationSid: first?.conversationSid });
+    expect(Date.now() - started).toBeLessThan(75);
   });
 
   it("replaces an old proxy-style conversation, and frees its numbers for one-to-one texts", async () => {

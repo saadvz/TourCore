@@ -40,7 +40,7 @@ const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const INJURY_HOLD = `The cleaning at ${LANE} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${LANE}. Reply YES to get cleaning texts, or STOP to opt out.`;
-const HOLD = `The cleaning at ${LANE} is on hold until the cleaner replies YES.`;
+const HOLD = `The cleaning at ${LANE} is waiting for the cleaner to reply YES.`;
 const COURT_MONDAY = `Is checkout at ${COURT} on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.`;
 const REVIEWS = [
   ["stale-source", STALE],
