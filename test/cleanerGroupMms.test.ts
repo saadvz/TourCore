@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOfferBody, groupOptInBody } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, groupOfferBody } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { CLEANER_GROUP_IDENTITY, sendLiveGroup, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -592,7 +592,7 @@ describe("group texting: the host's name", () => {
     await must(wired, "run_checks");
     await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
     const invite = wired.cleanerSent.find((item) => item.to === CLEANER)?.body;
-    expect(invite).toBe(groupOptInBody("Mike", "Dana", ADDRESS));
+    expect(invite).toBe(groupInviteBody("Dana", ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
     expect(fake.posts.some((post) => post.body.includes("Cory"))).toBe(false);
   });
@@ -608,7 +608,7 @@ describe("group texting: the host's name", () => {
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
     await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(wired.cleanerSent.find((item) => item.to === CLEANER)?.body).toBe(groupOptInBody("Mike", BUSINESS, ADDRESS));
+    expect(wired.cleanerSent.find((item) => item.to === CLEANER)?.body).toBe(groupInviteBody(BUSINESS, ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
   });
 });

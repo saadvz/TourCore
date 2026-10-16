@@ -1590,7 +1590,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     const optIn = await labelled("Opt-in text to the cleaner");
     expect(optIn).toHaveLength(1);
     // With group chat on, the opt-in is the invitation to the cleaning group.
-    expect(optIn[0]?.body).toContain(`you're invited to the cleaning group for ${address}`);
+    expect(optIn[0]?.body).toContain(`wants to set up a group chat with you for cleaner services at ${address}`);
     expect(optIn[0]?.body).toContain("Reply YES");
     await safe("3 times");
 

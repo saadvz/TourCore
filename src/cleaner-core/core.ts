@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -1163,7 +1163,7 @@ class Engine implements CleanerCore {
     this.addFact(TEST_TURN_ID, "checkin", checkIn);
     this.deferCleaner = false;
     if (this.groupChat && !this.ownerOptedOut && this.hostGroup !== "out") {
-      this.hostGroup = "pending";
+      this.hostGroup = "in";
       this.hostGroupSaved = true;
     }
     await this.sendHostOptIn();
@@ -1316,7 +1316,7 @@ class Engine implements CleanerCore {
         id: `opt-in:${phone}`,
         to: phone,
         kind: "opt-in",
-        body: groupOptInBody(extra.name, `${this.groupChat.hostName} and ${this.groupChat.cleanerName}`, this.options.property.address),
+        body: groupInviteBody(this.groupChat.hostName, this.options.property.address),
       });
       if (text) sent.push(text);
     }
@@ -1575,18 +1575,17 @@ class Engine implements CleanerCore {
   }
 
   private async sendHostOptIn(): Promise<CleanerText | null> {
-    if (!this.owner || this.ownerOptedOut || (this.groupChat && this.hostGroup === "out")) return null;
+    if (this.groupChat) return null;
+    if (!this.owner || this.ownerOptedOut) return null;
     const id = `opt-in:${this.owner}`;
     if (this.delivery(id) === "sent") return null;
-    const body = this.groupChat
-      ? groupOptInBody(this.groupChat.hostName, this.groupChat.cleanerName, this.options.property.address)
-      : `Hi, this is ${this.hostName} at ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
+    const body = `Hi, this is ${this.hostName} at ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
     return this.emit({ id, to: this.owner, kind: "opt-in", body });
   }
 
   private cleanerOptInBody(): string {
     if (this.groupChat && this.cleanerPhone) {
-      return groupOptInBody(this.groupChat.cleanerName, this.groupChat.hostName, this.options.property.address);
+      return groupInviteBody(this.groupChat.hostName, this.options.property.address);
     }
     return this.options.optInBody ?? `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
   }

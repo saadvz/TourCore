@@ -429,8 +429,8 @@ describe("Cleaner Core full setup: who gets the texts", () => {
       ],
       groupChat: "everyone",
     });
-    expect(sms.sent.find((item) => item.to === OBSERVER)?.body).toContain("Sam, you're invited to the cleaning group");
-    expect(sms.sent.find((item) => item.to === CLEANER)?.body).toContain("Ana, you're invited to the cleaning group");
+    expect(sms.sent.find((item) => item.to === OBSERVER)?.body).toContain("wants to set up a group chat with you for cleaner services at");
+    expect(sms.sent.find((item) => item.to === CLEANER)?.body).toContain("wants to set up a group chat with you for cleaner services at");
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
@@ -1907,7 +1907,7 @@ describe("Cleaner Core full diagram", () => {
     const booked = await checkAt("2026-10-14T14:05:00.000Z");
     expect(booked.alerts).toContain("New booking at Scratch Lane: check-in Wednesday, Oct 14, checkout Saturday, Oct 17. Use the usual 11:00 AM checkout and 4:00 PM check-in?");
     await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(toCleaner().filter((body) => body.includes("you're invited to the cleaning group"))).toHaveLength(1);
+    expect(toCleaner().filter((body) => body.includes("wants to set up a group chat with you for cleaner services at"))).toHaveLength(1);
     await safe("4 booking and times");
 
     // 5 and 6. The cleaner's first YES takes the invite. The offer waits for check-in + 1 day at 9:00 AM, then the second YES takes it.

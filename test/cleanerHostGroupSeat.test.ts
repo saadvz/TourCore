@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupTimeLine } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, groupTimeLine } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerCoreOptions, type CleanerText } from "../src/cleaner-core/core";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 
@@ -22,8 +22,8 @@ const READY = "The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 0
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const TIME_LINE = groupTimeLine("Cory");
 const SOLO_OPT = "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
-const CLEANER_OPT = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory. Reply YES to join that group, or STOP to opt out.";
-const EXTRA_OPT = "Alex, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Cory and Maria. Reply YES to join that group, or STOP to opt out.";
+const CLEANER_OPT = groupInviteBody("Cory", "12 Scratch Lane, Teaneck, NJ 07666");
+const EXTRA_OPT = CLEANER_OPT;
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
 const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const roots: string[] = [];

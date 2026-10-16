@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOfferBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, groupOfferBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
@@ -20,8 +20,8 @@ const NOW = "2026-10-14T15:00:00.000Z";
 const lane = SCRATCH_TENANTS[0];
 if (!lane) throw new Error("Scratch Lane is missing");
 const PIN = lane.pin;
-const OPT_CLEANER = groupOptInBody("Maria", "Cory", ADDRESS);
-const OPT_EXTRA = groupOptInBody("Alex", "Cory and Maria", ADDRESS);
+const OPT_CLEANER = groupInviteBody("Cory", ADDRESS);
+const OPT_EXTRA = groupInviteBody("Cory", ADDRESS);
 const OFFER_COPY = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const PRIVATE_LINE = privateCodeLine("Maria");
@@ -1743,7 +1743,7 @@ describe("live group membership", () => {
       },
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    const invite = groupOptInBody("Maria", "Harbor", PRACTICE);
+    const invite = groupInviteBody("Harbor", PRACTICE);
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);

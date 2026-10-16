@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { groupIntroBody, groupInviteBody, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
+import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
+import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 
 describe("group-first: copy", () => {
   it("builds the group invite", () => {
@@ -59,5 +63,60 @@ describe("group-first: copy", () => {
       expect(text).not.toContain("door code");
       expect(text).not.toContain("ready");
     }
+  });
+});
+
+describe("group-first: invites", () => {
+  const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+  const LANE = "12 Scratch Lane, Teaneck, NJ 07666";
+  const OWNER = "+15555550100";
+  const MIKE = "+15555550101";
+  const ANA = "+15555550122";
+  const PIN = SCRATCH_TENANTS[0]!.pin;
+
+  function engine(sent: CleanerText[], extra: Partial<Parameters<typeof openCleanerCore>[0]> = {}) {
+    return openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: LANE, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: MIKE, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      sink: { send: async (text) => void sent.push(text) },
+      now: () => new Date("2026-10-14T15:00:00.000Z"),
+      groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [{ phone: ANA, name: "Ana" }] },
+      ...extra,
+    });
+  }
+  const optIns = (sent: CleanerText[]) => sent.filter((text) => text.kind === "opt-in").map(({ to, kind, body }) => ({ to, kind, body }));
+
+  it("invites the cleaner and each contact, and never the landlord", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent);
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(optIns(sent)).toEqual([
+      { to: MIKE, kind: "opt-in", body: groupInviteBody("Saad", LANE) },
+      { to: ANA, kind: "opt-in", body: groupInviteBody("Saad", LANE) },
+    ]);
+    expect(sent.some((text) => text.to === OWNER && text.kind === "opt-in")).toBe(false);
+  });
+
+  it("does not re-invite a cleaner who already said yes", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent, { cleanerConsent: "in" });
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(optIns(sent).some((text) => text.to === MIKE)).toBe(false);
+  });
+
+  it("test turn texts the owner nothing and keeps the owner seated", async () => {
+    const sent: CleanerText[] = [];
+    const job = engine(sent);
+    await job.addTestTurn({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(sent.some((text) => text.to === OWNER)).toBe(false);
+    expect(optIns(sent).map((text) => text.to)).toEqual([MIKE]);
+    expect(sent.find((text) => text.to === MIKE)?.body).toBe(groupInviteBody("Saad", LANE));
   });
 });
