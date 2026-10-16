@@ -155,7 +155,7 @@ describe("Scratch test tools", () => {
       "report_delivery",
       "add_test_turn",
     ]);
-    expect(listed.raw).toContain("Clears Scratch jobs, notes, and test texts. The door code and texting setup stay. It only works on the Scratch test property.");
+    expect(listed.raw).toContain("Clears Scratch jobs, notes, and test texts, and removes the Scratch group text on Twilio. The door code and texting setup stay. It only works on the Scratch test property.");
     expect(listed.raw).toContain("Lists test texts that came in, in everyday words. It never includes a door code.");
     expect(listed.raw).toContain("Lists test texts that went out. Each line names who it went to and whether it was delivered. It never includes a door code.");
     expect(listed.raw).toContain("Sends a test text as the host, the cleaner, or the observer. It follows the same path as a real text. It only works with 555 test numbers on the Scratch test property.");

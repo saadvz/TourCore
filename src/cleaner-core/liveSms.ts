@@ -203,6 +203,24 @@ async function makeGroup(api: GroupApi, audience: string[], from: string, hookUr
   return sid;
 }
 
+/**
+ * Deletes a saved group conversation on Twilio, so a Scratch reset leaves nothing that holds the
+ * phones or captures their texts. If the delete is refused, its people are removed instead. True
+ * when it is gone or empty. False with live texts off, without the Twilio login, or on any failure,
+ * so the caller keeps the sid and the next group text replaces it.
+ */
+export async function deleteLiveGroup(env: NodeJS.ProcessEnv, conversationSid: string): Promise<boolean> {
+  if (!liveSmsOn(env)) return false;
+  const api = groupApi(env);
+  if (!api) return false;
+  const res = await request(api, "DELETE", `${CONVERSATIONS_ROOT}/Conversations/${encodeURIComponent(conversationSid)}`);
+  if (res && (res.ok || res.status === 404)) return true;
+  return emptyConversation(api, conversationSid).then(
+    () => true,
+    () => false,
+  );
+}
+
 /** Removes every participant. A conversation that is already gone counts as empty. */
 async function emptyConversation(api: GroupApi, conversationSid: string): Promise<void> {
   const members = await listMembers(api, conversationSid);

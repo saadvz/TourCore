@@ -33,6 +33,8 @@ export interface FakeConversations {
   webhooks: { conversationSid: string; params: Record<string, string> }[];
   deleted: { conversationSid: string; participantSid: string }[];
   created: string[];
+  /** Conversations deleted whole. */
+  removed: string[];
   people(conversationSid: string): FakeParticipant[] | undefined;
   calls(): number;
   blockMembership(): void;
@@ -48,8 +50,9 @@ function fields(init: RequestInit | undefined): Record<string, string> {
   return out;
 }
 
-export function fakeConversations(options: { failMessages?: boolean; failWebhooks?: boolean } = {}): FakeConversations {
+export function fakeConversations(options: { failMessages?: boolean; failWebhooks?: boolean; failConversationDeletes?: boolean } = {}): FakeConversations {
   const conversations = new Map<string, FakeParticipant[]>();
+  const removed: string[] = [];
   const posts: ConversationPost[] = [];
   const messages: FakeConversations["messages"] = [];
   const participantPosts: FakeConversations["participantPosts"] = [];
@@ -80,6 +83,12 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
     if (!people) return reply(404, {});
     const tail = rest.join("/").split("?")[0] ?? "";
     if (tail === "" && method === "GET") return reply(200, { sid: conversationSid, state: closed.has(conversationSid) ? "closed" : "active" });
+    if (tail === "" && method === "DELETE") {
+      if (options.failConversationDeletes) return reply(500, {});
+      conversations.delete(conversationSid);
+      removed.push(conversationSid);
+      return reply(204, {});
+    }
     if (tail === "Messages" && method === "POST") {
       if (options.failMessages || closed.has(conversationSid)) return reply(500, {});
       const params = fields(init);
@@ -153,6 +162,7 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
     webhooks,
     deleted,
     created,
+    removed,
     people: (sid) => conversations.get(sid),
     calls: () => calls,
     blockMembership() {
