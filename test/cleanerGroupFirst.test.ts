@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { hostDoneLine, groupIntroBody, groupInviteBody, groupUnconfirmedLine, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
+import { hostDoneLine, groupIntroBody, groupInviteBody, groupUnconfirmedLine, namedAsk, nameList, withoutStopAsk } from "../src/cleaner-core/cleanerTexts";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { outboxLabel } from "../src/cleaner-core/scratchQa";
@@ -132,6 +132,20 @@ describe("group-first: invites", () => {
     expect(sent.some((text) => text.to === OWNER)).toBe(false);
     expect(optIns(sent).map((text) => text.to)).toEqual([MIKE]);
     expect(sent.find((text) => text.to === MIKE)?.body).toBe(groupInviteBody("Saad", LANE));
+  });
+});
+
+describe("group-first: STOP only in the intro", () => {
+  it("drops Cleaner Core's STOP ask and keeps the host's note as it is", () => {
+    expect(withoutStopAsk("Update: checkout moved to Monday. Mike, reply YES to keep the cleaning, or STOP to opt out.")).toBe(
+      "Update: checkout moved to Monday. Mike, reply YES to keep the cleaning.",
+    );
+    expect(withoutStopAsk("Update: the cleaning on Monday is canceled, so no need to come. Reply STOP to opt out.")).toBe(
+      "Update: the cleaning on Monday is canceled, so no need to come.",
+    );
+    expect(withoutStopAsk("Guests have left. Mike, reply DONE when the cleaning is finished. Note from the host: Reply STOP to skip the lamp.")).toBe(
+      "Guests have left. Mike, reply DONE when the cleaning is finished. Note from the host: Reply STOP to skip the lamp.",
+    );
   });
 });
 
@@ -860,6 +874,8 @@ describe("group-first: Grok's tools", () => {
     const withCode = fake.posts.filter((post) => post.body.includes(DOOR_CODE));
     expect(withCode).toHaveLength(1);
     expect([...(withCode[0]?.to ?? [])].sort()).toEqual([HOST, CLEANER].sort());
+    // Only the intro says how to leave. No later group text ends on STOP.
+    expect(fake.posts.filter((post) => /\bSTOP\b/.test(post.body)).map((post) => post.body)).toEqual([fake.posts[0]?.body]);
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
   });
 });

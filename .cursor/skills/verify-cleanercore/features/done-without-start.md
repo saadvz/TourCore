@@ -5,7 +5,7 @@ After the private door code, DONE finishes the cleaning. START is not required. 
 ## Sub-features
 
 - `done-without-start` answers the first DONE with `Thanks, cleaning marked done.` and sends `The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 done.` once. The second DONE answers `This cleaning is already marked done.` The job `status` is `done`.
-- `done-early` answers DONE before departure with `I'll text you the door code after the guests leave. Reply DONE after that.` The job stays `awaiting_departure`. No door code and no host done line go out.
+- `done-early` answers DONE before departure with `I'll text you the door code after the guests leave.` The job stays `awaiting_departure`. No door code and no host done line go out.
 
 ## How to get to it (user POV)
 

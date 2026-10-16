@@ -54,7 +54,7 @@ const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;
 /** After the cleaner's YES, LiveDesk keeps one host note for the newly confirmed job. */
 const PRACTICE_CONFIRMED = [PRACTICE_HOLD, PRACTICE_YES];
 const PRACTICE_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.";
-const PRACTICE_GROUP_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Maria, reply YES to schedule it, or STOP to opt out.";
+const PRACTICE_GROUP_OFFER = "Turnover at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Maria, reply YES to schedule it.";
 const PRACTICE_CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Practice Lane, Teaneck, NJ 07666.";
 const PRACTICE_STOP = `The cleaner opted out of cleaning texts for ${PRACTICE}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
 const PRACTICE_PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";

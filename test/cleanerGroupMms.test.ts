@@ -189,7 +189,7 @@ const OWNER = "+15555550100";
 const MIKE = "+15555550101";
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
 const OFFER = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
-const GROUP_OFFER = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Mike, reply YES to schedule it, or STOP to opt out.`;
+const GROUP_OFFER = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Mike, reply YES to schedule it.`;
 
 function engine(send: (text: CleanerText) => Promise<void>) {
   return openCleanerCore({
@@ -346,7 +346,7 @@ describe("group texting: the conversation webhook", () => {
   it("takes Mike's YES in the group, confirms the job, and shows it to Grok as a group message", async () => {
     const { wired, conversationSid, fake } = await groupReady();
     expect(fake.posts.filter((post) => post.body.startsWith("Turnover at"))).toEqual([
-      { conversationSid, to: [HOST, CLEANER].sort(), body: `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Mike, reply YES to schedule it, or STOP to opt out.` },
+      { conversationSid, to: [HOST, CLEANER].sort(), body: `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Mike, reply YES to schedule it.` },
     ]);
     expect(wired.cleanerSent.filter((item) => item.body.startsWith("Turnover at"))).toEqual([]);
     expect(await turnStatus(wired)).toBe("offered");
