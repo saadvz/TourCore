@@ -6,6 +6,19 @@ import { setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { fakeConversations, type FakeConversations } from "./fakeConversations";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FIRST_QUESTION, HOST, startWiredApp, type WiredApp } from "./wiringProof";
 
+const rm = vi.hoisted(() => ({ fail: false }));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...real,
+    rmSync: (...args: Parameters<typeof real.rmSync>) => {
+      if (rm.fail && String(args[0]).endsWith("cleaner-job")) throw new Error("busy");
+      return real.rmSync(...args);
+    },
+  };
+});
+
 const MCP = "/mcp/cleaner-core";
 const SMS_PATH = "/webhooks/twilio/cleaner-core";
 const ROUTINE_URL = "https://routine.example/hook";
@@ -222,6 +235,23 @@ describe("reset_property", () => {
     expect(existsSync(jobPath(wired))).toBe(true);
     expect(existsSync(alertsPath(wired))).toBe(true);
     expect(secretsOf(wired).key).toBe(ROUTINE_KEY);
+  });
+
+  it("forgets what the desk held and says to try again when a delete fails after the secrets are gone", async () => {
+    const { wired } = await setup();
+    saveRoutine(wired);
+    const preview = await must(wired, "reset_property");
+    const conf = preview.confirmation as { code?: string } | string;
+    rm.fail = true;
+    const refused = await call(wired, "reset_property", { confirmation: typeof conf === "string" ? conf : (conf.code ?? "") });
+    rm.fail = false;
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("I couldn't finish resetting Cleaner Core. Try reset_property again.");
+    expect(secretsOf(wired).key).toBeUndefined();
+    // Memory is reset, so the desk doesn't act on the old setup while the folder is still there.
+    expect(existsSync(livePath(wired))).toBe(false);
+    const again = await must(wired, "reset_property");
+    expect(again.next).toBe(PREVIEW("this property"));
   });
 
   it("resets a property that never texted, with no Twilio calls", async () => {

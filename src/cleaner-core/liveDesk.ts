@@ -111,6 +111,7 @@ const RESET_ACTION = "cleaner-reset-property";
 const RESET_TARGET = "property";
 const RESET_GROUP_KEPT = "I couldn't remove the group text on Twilio, so nothing was reset. Try again in a few minutes.";
 const RESET_NOT_DONE = "I couldn't reset Cleaner Core just now, so nothing else was changed. Try again in a few minutes.";
+const RESET_UNFINISHED = "I couldn't finish resetting Cleaner Core. Try reset_property again.";
 const ROUTINE_SECRETS = ["CLEANER_CORE_ROUTINE_URL", "CLEANER_CORE_ROUTINE_KEY"] as const;
 const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
 /** Messages kept for Grok, newest last. */
@@ -1615,17 +1616,27 @@ export class LiveDesk {
     } catch {
       return this.fail(RESET_NOT_DONE);
     }
-    rmSync(this.path, { force: true });
-    rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
-    // The queued wake-ups belong to the old setup, so they can't deliver to a routine connected later.
-    rmSync(join(this.root, "cleaner-alerts"), { recursive: true, force: true });
-    this.file = {};
-    this.pin = undefined;
-    this.uploadKey = undefined;
-    this.engine = undefined;
-    this.stale = false;
-    this.held = false;
-    this.approvals.clear();
+    // A drain still running would recreate the alert folder with a stale record. With the secrets gone it delivers nothing.
+    await this.alerts.drain().catch(() => undefined);
+    let wiped = true;
+    try {
+      rmSync(this.path, { force: true });
+      rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
+      // The queued wake-ups belong to the old setup, so they can't deliver to a routine connected later.
+      rmSync(join(this.root, "cleaner-alerts"), { recursive: true, force: true });
+    } catch {
+      wiped = false;
+    } finally {
+      // The secrets are already gone, so the desk forgets what it held either way.
+      this.file = {};
+      this.pin = undefined;
+      this.uploadKey = undefined;
+      this.engine = undefined;
+      this.stale = false;
+      this.held = false;
+      this.approvals.clear();
+    }
+    if (!wiped) return this.fail(RESET_UNFINISHED);
     return this.reply({ next: `Cleaner Core is reset for ${address}. Start setup again whenever you're ready.` });
   }
 
