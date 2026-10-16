@@ -72,7 +72,7 @@ function call(wired: WiredApp, name: string, args: Record<string, unknown> = {})
 async function setUpTo(wired: WiredApp, observer = false) {
   await call(wired, "get_state", { said: "2" });
   expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" })).isError).toBe(false);
-  expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, ...(observer ? { observer: OBSERVER } : {}) })).isError).toBe(false);
+  expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, ...(observer ? { observer: OBSERVER, doorCodeTo: "cleaner" } : {}) })).isError).toBe(false);
 }
 
 async function setUpGoogle(wired: WiredApp, observer = false) {

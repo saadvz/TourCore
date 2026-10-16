@@ -78,7 +78,7 @@ function open(phones: string[]) {
 async function setup(desk: ReturnType<typeof open>["desk"], observer?: string) {
   expect((await desk.getState("2")).ok).toBe(true);
   expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-  const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer });
+  const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer, doorCodeTo: "cleaner" });
   expect(saved.ok).toBe(true);
   expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
   expect((await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY)).ok).toBe(true);
@@ -200,7 +200,7 @@ describe("optional observer", () => {
     const { desk, sms, posts } = open([HOST, CLEANER, OLD]);
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-    const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD });
+    const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD, doorCodeTo: "cleaner" });
     expect(people.ok).toBe(true);
     const state = await desk.getState();
     expect(state.ok).toBe(true);

@@ -104,7 +104,7 @@ async function saveScratch(
   };
   await remember(call(wired, "get_state", { said: "2" }));
   await remember(call(wired, "save_property", { business, address: property.address, timeZone: "America/New_York" }));
-  await remember(call(wired, "save_people", { host: property.host, cleaner: property.cleaner, observer: property.observer }));
+  await remember(call(wired, "save_people", { host: property.host, cleaner: property.cleaner, observer: property.observer, doorCodeTo: "cleaner" }));
   await remember(call(wired, "save_calendar_link", { url: CALENDAR_URL }));
   const saved = await remember(call(wired, "save_door_code", { code: property.pin }));
   expect(saved.isError).toBe(false);
@@ -368,7 +368,7 @@ describe("Scratch test tools", () => {
     const mixed = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${REAL_NUMBER},${LANE_OBSERVER}` });
     await call(mixed, "get_state", { said: "2" });
     await call(mixed, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: "America/New_York" });
-    await call(mixed, "save_people", { host: LANE.ownerPhone, cleaner: REAL_NUMBER, observer: LANE_OBSERVER });
+    await call(mixed, "save_people", { host: LANE.ownerPhone, cleaner: REAL_NUMBER, observer: LANE_OBSERVER, doorCodeTo: "cleaner" });
     await call(mixed, "save_calendar_link", { url: CALENDAR_URL });
     await call(mixed, "save_door_code", { code: LANE.pin });
     await call(mixed, "set_up_texting");
@@ -385,7 +385,7 @@ describe("Scratch test tools", () => {
     const practice = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
     await call(practice, "get_state", { said: "2" });
     await call(practice, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
-    await call(practice, "save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER });
+    await call(practice, "save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, doorCodeTo: "cleaner" });
     await call(practice, "save_calendar_link", { url: CALENDAR_URL });
     await call(practice, "save_door_code", { code: DOOR_CODE });
     await call(practice, "set_up_texting");

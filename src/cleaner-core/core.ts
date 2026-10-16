@@ -627,6 +627,8 @@ interface OutboxItem {
   kind: TextKind;
   status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
+  /** Posted to the group, not texted one-to-one. */
+  group?: true;
   lease?: ActionLease;
 }
 
@@ -2258,7 +2260,8 @@ class Engine implements CleanerCore {
     await this.ensureIntro();
     const audience = this.groupAudience();
     const name = this.seatName(draft.to);
-    const body = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name ? namedAsk(name, draft.body) : draft.body;
+    // The landlord's approved words are posted exactly as approved.
+    const body = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name && draft.kind !== "host-message" ? namedAsk(name, draft.body) : draft.body;
     if (this.groupDuplicate(draft, id, body)) return null;
     const text = await this.emitOne({
       id,
@@ -2356,6 +2359,8 @@ class Engine implements CleanerCore {
     const job = this.codeJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key || this.delivery(key) !== "sent") return;
+    // A code posted to the group was not delivered privately.
+    if (this.outboxState.find((item) => item.id === key)?.group) return;
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
@@ -2485,6 +2490,7 @@ class Engine implements CleanerCore {
       kind: draft.kind,
       status,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      ...(draft.channel === "group" ? { group: true as const } : {}),
       lease: {
         version: 1,
         actor: "engine",
@@ -3163,6 +3169,8 @@ class Engine implements CleanerCore {
     if (!body || !this.canSendHostMessage(input.to)) return null;
     const id = `host-message:${randomUUID()}`;
     if (input.to === "group") {
+      // The intro goes first, so it never trails a host message.
+      await this.ensureIntro();
       const audience = this.groupAudience();
       const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
       if (!to) return null;

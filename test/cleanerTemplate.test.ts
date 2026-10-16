@@ -191,7 +191,7 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
 
   it("names who send_message can reach, and that YES comes twice in every mode", () => {
     const text = read(BOOTSTRAP);
-    expect(text).toContain("`send_message`'s `to` is `cleaner`, the cleaner's saved name, `group`, or a saved contact's name. Never a phone number.");
+    expect(text).toContain("With a group, `send_message` posts to the group: `to` is `group`. Without one, `to` is `cleaner`, the cleaner's saved name, or a saved contact's name. Never a phone number.");
     expect(text).toContain("The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.");
   });
 

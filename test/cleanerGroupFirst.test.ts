@@ -2,12 +2,17 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { groupIntroBody, groupInviteBody, groupUnconfirmedLine, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { outboxLabel } from "../src/cleaner-core/scratchQa";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
+import { setCleanerGroupFetch } from "../src/cleaner-core/liveSms";
+import { twilioSignature } from "../src/messaging/twilio/signature";
+import { fakeConversations } from "./fakeConversations";
+import { PUBLIC } from "./fakeSendblue";
+import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, HOST, startWiredApp, type WiredApp } from "./wiringProof";
 
 describe("group-first: copy", () => {
   it("builds the group invite", () => {
@@ -643,3 +648,206 @@ describe("group-first: door code", () => {
 function joinDigits(text: string): string {
   return text.replace(/(\d)[\s.\-_/]+(?=\d)/g, "$1");
 }
+
+describe("group-first: host messages in the engine", () => {
+  const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+  const LANE = "12 Scratch Lane, Teaneck, NJ 07666";
+  const OWNER = "+15555550100";
+  const MIKE = "+15555550101";
+  const PIN = SCRATCH_TENANTS[0]!.pin;
+  const DUE = "2026-10-18T12:00:00.000Z";
+  const clock = { at: "2026-10-14T15:00:00.000Z" };
+
+  function open(sent: CleanerText[]) {
+    clock.at = "2026-10-14T15:00:00.000Z";
+    return openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: LANE, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: MIKE, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      cleanerConsent: "in",
+      sink: { send: async (text) => void sent.push(text) },
+      now: () => new Date(clock.at),
+      groupChat: { hostName: "Saad", cleanerName: "Mike" },
+    });
+  }
+
+  it("posts the intro before a host message to the group", async () => {
+    const sent: CleanerText[] = [];
+    const job = open(sent);
+    await job.sendHostMessage({ to: "group", body: "Running late today." });
+    expect(sent.map((text) => text.kind)).toEqual(["intro", "host-message"]);
+  });
+
+  it("posts the landlord's approved words exactly, with no name added to an ask", async () => {
+    const sent: CleanerText[] = [];
+    const job = open(sent);
+    const words = "Can you come by 10? Reply yes if that works, or tell me what time you can do.";
+    await job.sendHostMessage({ to: "group", body: words });
+    expect(sent.find((text) => text.kind === "host-message")?.body).toBe(words);
+  });
+
+  it("writes no private-delivery note for a code posted to the group", async () => {
+    const sent: CleanerText[] = [];
+    const job = open(sent);
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await job.receive({ id: "yes", from: MIKE, text: "YES" });
+    clock.at = DUE;
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    const pin = job.outbox().find((item) => item.kind === "pin");
+    expect(sent.find((text) => text.kind === "pin")?.channel).toBe("group");
+    await job.reportPin(pin?.id ?? "", "delivered");
+    expect(job.hostNotes().filter((note) => note.includes("got the door code privately"))).toEqual([]);
+  });
+
+  it("still writes the note for a code sent one-to-one", async () => {
+    const sent: CleanerText[] = [];
+    const job = openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: LANE, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: MIKE, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      cleanerConsent: "in",
+      sink: { send: async (text) => void sent.push(text) },
+      now: () => new Date(clock.at),
+      groupChat: { hostName: "Saad", cleanerName: "Mike", extra: [{ phone: "+15555550122", name: "Ana" }], doorCodeTo: "cleaner" },
+    });
+    clock.at = "2026-10-14T15:00:00.000Z";
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await job.receive({ id: "yes", from: MIKE, text: "YES" });
+    await job.receive({ id: "yes-ana", from: "+15555550122", text: "YES" });
+    clock.at = DUE;
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    const pin = job.outbox().find((item) => item.kind === "pin");
+    expect(sent.find((text) => text.kind === "pin")?.channel).toBeUndefined();
+    await job.reportPin(pin?.id ?? "", "delivered");
+    expect(job.hostNotes().some((note) => note.includes("got the door code privately"))).toBe(true);
+  });
+});
+
+describe("group-first: Grok's tools", () => {
+  const MCP = "/mcp/cleaner-core";
+  const HOOK_PATH = "/webhooks/twilio/cleaner-core/conversation";
+  const SMS_PATH = "/webhooks/twilio/cleaner-core";
+  const HOOK_URL = `${PUBLIC}${HOOK_PATH}`;
+  const QUESTION = "You added other people to the group. Should the door code go to the whole group, or only privately to the cleaner?";
+  const REFUSAL = "Messages go to the group. Send it with to: group.";
+  const ANA = "+15555550133";
+  const opened: WiredApp[] = [];
+  let seq = 0;
+
+  afterEach(async () => {
+    setCleanerGroupFetch(undefined);
+    while (opened.length > 0) await opened.pop()?.close();
+  });
+
+  async function start() {
+    const fake = fakeConversations();
+    setCleanerGroupFetch(fake.impl);
+    const wired = await startWiredApp({ groupChat: true, allowlist: `${HOST},${CLEANER},${ANA}` });
+    opened.push(wired);
+    return { fake, wired };
+  }
+  const call = (wired: WiredApp, name: string, args: Record<string, unknown> = {}) => wired.tool(MCP, CLEANER_TOKEN, name, args);
+  async function must(wired: WiredApp, name: string, args: Record<string, unknown> = {}) {
+    const reply = await call(wired, name, args);
+    expect(reply.isError, `${name}: ${reply.text}`).toBe(false);
+    return reply.structured ?? {};
+  }
+  const sms = (wired: WiredApp, from: string, body: string) =>
+    wired.postTwilio(SMS_PATH, { from, to: CLEANER_LINE, body, sid: `SMtools${++seq}`, token: CLEANER_AUTH });
+  async function hook(wired: WiredApp, fields: Record<string, string>) {
+    const headers = { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": twilioSignature(CLEANER_AUTH, HOOK_URL, fields) };
+    const res = await fetch(`http://127.0.0.1:${wired.port}${HOOK_PATH}`, { method: "POST", headers, body: new URLSearchParams(fields).toString() });
+    return res.status;
+  }
+  const inGroup = (sid: string, author: string, body: string) => ({
+    EventType: "onMessageAdded",
+    ConversationSid: sid,
+    MessageSid: `IMtools${(++seq).toString(16).padStart(26, "0")}`,
+    Index: String(seq),
+    Author: author,
+    Body: body,
+    Source: "SMS",
+  });
+  async function setup(wired: WiredApp, people: Record<string, unknown>) {
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", ...people });
+    await must(wired, "save_calendar_link", { url: CALENDAR_URL });
+    await must(wired, "save_door_code", { code: DOOR_CODE });
+    await must(wired, "set_up_texting");
+    await must(wired, "run_checks");
+    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+  }
+
+  it("asks the door-code question when contacts are in the group and no choice is saved", async () => {
+    const { wired } = await start();
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    const contacts = [{ name: "Ana", role: "co-host", phone: ANA }];
+    const refused = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, groupChat: "everyone", contacts });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe(QUESTION);
+    expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, contacts, doorCodeTo: "cleaner" })).isError).toBe(false);
+  });
+
+  it("counts the legacy observer as a contact for the question", async () => {
+    const { wired } = await start();
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    const refused = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, observer: ANA });
+    expect(refused.text).toBe(QUESTION);
+    expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, observer: ANA, doorCodeTo: "group" })).isError).toBe(false);
+  });
+
+  it("needs no choice for cleaner-and-host, or for no contacts", async () => {
+    const { wired } = await start();
+    await must(wired, "get_state", { said: "2" });
+    await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    const contacts = [{ name: "Ana", role: "co-host", phone: ANA }];
+    expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, groupChat: "cleaner-and-host", contacts })).isError).toBe(false);
+    expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
+  });
+
+  it("refuses a message to anyone but the group, and posts a group message only after the confirmation", async () => {
+    const { wired, fake } = await start();
+    await setup(wired, {});
+    await sms(wired, HOST, "YES");
+    await sms(wired, CLEANER, "YES");
+    const refused = await call(wired, "send_message", { to: "Mike", text: "Running late" });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe(REFUSAL);
+    expect((await call(wired, "send_message", { to: "cleaner", text: "Running late" })).text).toBe(REFUSAL);
+    const before = fake.posts.length;
+    const preview = await must(wired, "send_message", { to: "group", text: "Running late" });
+    expect(preview.confirmation).toBeTruthy();
+    expect(fake.posts).toHaveLength(before);
+    await must(wired, "send_message", { to: "group", text: "Running late", confirmation: (preview.confirmation as { code: string }).code });
+    expect(fake.posts.at(-1)?.body).toBe("Running late");
+  });
+
+  it("runs end to end: one group, the intro first, and the code once, in the group", async () => {
+    const { wired, fake } = await start();
+    await setup(wired, { hostName: "Dana" });
+    expect((await sms(wired, HOST, "YES")).status).toBe(200);
+    expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
+    expect(fake.created).toHaveLength(1);
+    const sid = fake.created[0] ?? "";
+    expect(fake.posts[0]?.body).toBe(groupIntroBody(["Dana", "Mike"], "Dana", ADDRESS));
+    expect(await hook(wired, inGroup(sid, CLEANER, "YES"))).toBe(200);
+    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    const withCode = fake.posts.filter((post) => post.body.includes(DOOR_CODE));
+    expect(withCode).toHaveLength(1);
+    expect([...(withCode[0]?.to ?? [])].sort()).toEqual([HOST, CLEANER].sort());
+    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+  });
+});

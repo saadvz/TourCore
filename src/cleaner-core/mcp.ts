@@ -34,7 +34,7 @@ const TOOLS = [
     name: "save_people",
     title: "Save the people",
     description:
-      "Saves the host and the cleaner. Each one is a phone number. An observer is optional. Optional: hostName (what the group calls the host; unset uses the business name), cleanerName, up to 4 contacts (name, role co-host, assistant, or observer, and phone), and groupChat: cleaner-only (one-to-one texts), cleaner-and-host, or everyone. Contacts never get the door code.",
+      "Saves the host and the cleaner. Each one is a phone number. An observer is optional. Optional: hostName (what the group calls the host; unset uses the business name), cleanerName, up to 4 contacts (name, role co-host, assistant, or observer, and phone), and groupChat: cleaner-only (one-to-one texts), cleaner-and-host, or everyone. When contacts are in the group, also doorCodeTo: group (the whole group gets the door code) or cleaner (only the cleaner, privately).",
     input: z.object({
       host: z.string(),
       hostName: z.string().optional(),
@@ -43,6 +43,7 @@ const TOOLS = [
       cleanerName: z.string().optional(),
       contacts: z.array(z.object({ name: z.string(), role: z.enum(["co-host", "assistant", "observer"]), phone: z.string() })).max(4).optional(),
       groupChat: z.enum(["cleaner-only", "cleaner-and-host", "everyone"]).optional(),
+      doorCodeTo: z.enum(["group", "cleaner"]).optional(),
     }),
   },
   {
@@ -164,7 +165,7 @@ const TOOLS = [
     name: "send_message",
     title: "Send a message",
     description:
-      "Sends the host's own message to the cleaner, the group, or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
+      "Sends the host's own message. With a group, messages go only to the group (to: group). Without one, to is the cleaner or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
     input: z.object({ to: z.string(), text: z.string(), confirmation: z.string().optional() }),
   },
   {

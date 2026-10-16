@@ -289,7 +289,7 @@ describe("group chat flag", () => {
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-    expect((await desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER })).ok).toBe(true);
+    expect((await desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: PIN }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
