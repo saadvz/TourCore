@@ -738,6 +738,7 @@ describe("group-first: Grok's tools", () => {
   const HOOK_PATH = "/webhooks/twilio/cleaner-core/conversation";
   const SMS_PATH = "/webhooks/twilio/cleaner-core";
   const HOOK_URL = `${PUBLIC}${HOOK_PATH}`;
+  const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
   const QUESTION = "You added other people to the group. Should the door code go to the whole group, or only privately to the cleaner?";
   const REFUSAL = "Messages go to the group. Send it with to: group.";
   const ANA = "+15555550133";
@@ -837,14 +838,15 @@ describe("group-first: Grok's tools", () => {
 
   it("runs end to end: one group, the intro first, and the code once, in the group", async () => {
     const { wired, fake } = await start();
-    await setup(wired, { hostName: "Dana" });
+    await setup(wired, {});
     expect((await sms(wired, HOST, "YES")).status).toBe(200);
     expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
     expect(fake.created).toHaveLength(1);
     const sid = fake.created[0] ?? "";
-    expect(fake.posts[0]?.body).toBe(groupIntroBody(["Dana", "Mike"], "Dana", ADDRESS));
+    expect(fake.posts[0]?.body).toBe(groupIntroBody([BUSINESS, "Mike"], BUSINESS, ADDRESS));
     expect(await hook(wired, inGroup(sid, CLEANER, "YES"))).toBe(200);
-    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    const left = await must(wired, "mark_guests_left", { said: "The guests have left" });
+    expect(left.next).toBe(PIN_SENT);
     const withCode = fake.posts.filter((post) => post.body.includes(DOOR_CODE));
     expect(withCode).toHaveLength(1);
     expect([...(withCode[0]?.to ?? [])].sort()).toEqual([HOST, CLEANER].sort());
