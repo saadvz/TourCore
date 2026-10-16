@@ -161,6 +161,57 @@ export function groupOptInBody(name: string, otherName: string, address: string)
   return `${name}, you're invited to the cleaning group for ${address} with ${otherName}. Reply YES to join that group, or STOP to opt out.`;
 }
 
+/** The group invite. The cleaner replies YES to join the group chat. */
+export function groupInviteBody(landlordName: string, address: string): string {
+  return `${landlordName} wants to set up a group chat with you for cleaner services at ${address}. Reply YES to join, or STOP to opt out.`;
+}
+
+/** Names joined as "A", "A and B", or "A, B and C". */
+export function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** The first message in the group chat. It names everyone in the group. */
+export function groupIntroBody(names: readonly string[], landlordName: string, address: string): string {
+  return `Hi ${nameList(names)}! This is the cleaning group for ${address}. I'm ${landlordName}'s cleaning assistant, and I'll post cleaning times and updates here. Reply STOP anytime to leave.`;
+}
+
+/** Lowercases a sentence's first letter, unless the word is "I" or an all-caps word. */
+function lowerFirst(sentence: string): string {
+  return /^(I\b|[A-Z]{2,})/.test(sentence) ? sentence : sentence.charAt(0).toLowerCase() + sentence.slice(1);
+}
+
+/** Where the last sentence of a text that ends with "?" begins. */
+function lastSentenceStart(text: string): number {
+  const before = text.slice(0, -1);
+  let start = 0;
+  for (const mark of [". ", "? ", "! "]) {
+    const index = before.lastIndexOf(mark);
+    if (index >= 0) start = Math.max(start, index + mark.length);
+  }
+  return start;
+}
+
+/**
+ * Puts the cleaner's name on the group's ask. A sentence-start "Reply " becomes "{name}, reply ".
+ * Otherwise a closing question gets "{name}, " in front of it. The host note stays at the end.
+ */
+export function namedAsk(name: string, body: string): string {
+  const note = hostNoteOf(body);
+  const own = body.slice(0, body.length - note.length);
+  const reply = /(^|[.?!] )Reply /.exec(own);
+  if (reply) {
+    const at = reply.index + (reply[1] ?? "").length;
+    return `${own.slice(0, at)}${name}, reply ${own.slice(at + "Reply ".length)}${note}`;
+  }
+  if (own.endsWith("?")) {
+    const start = lastSentenceStart(own);
+    return `${own.slice(0, start)}${name}, ${lowerFirst(own.slice(start))}${note}`;
+  }
+  return body;
+}
+
 export type CleanerStep =
   | "needs-yes"
   | "waiting-for-guests"
