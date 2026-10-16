@@ -47,7 +47,7 @@ const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn
 const PIN_SENT_GROUP = "I posted the door code in the cleaning group for the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 /** With no alert routine saved, the step after the checks asks Grok to create the routines first. */
-const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
+const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Only the host can see the Alerts routine's webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field in the routine panel, with one secure card for each, the address first. Keep it to three short steps: open the link, copy the value, paste it in the card. Then call save_alert_routine with no arguments to get a one-time upload link, and send both values to that link from your own computer. Never put them in chat.";
 const PRACTICE_HOLD = waitingForYesNote(PRACTICE);
 const PRACTICE_SETUP = [PRACTICE_HOLD];
 const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;

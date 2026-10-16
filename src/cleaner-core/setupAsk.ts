@@ -115,7 +115,12 @@ export function peopleAsk(business: string): SetupAsk {
       { field: "cleanerName", ask: "the cleaner's name", required: true },
       { field: "cleaner", ask: "the cleaner's phone number", required: true },
       { field: "host", ask: "the host's phone number", required: true },
-      { field: "hostName", ask: "what the group calls the host", required: false, default: business },
+      {
+        field: "hostName",
+        ask: "the host's own first name, for the group text",
+        required: true,
+        how: `The group intro greets the host by this name and calls you their cleaning assistant. Ask for a person's name, not the business name ("${business}").`,
+      },
       {
         field: "groupChat",
         ask: "who is in the cleaning texts",
