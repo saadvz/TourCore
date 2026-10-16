@@ -83,6 +83,8 @@ export interface WiredApp {
   setEnv: (values: NodeJS.ProcessEnv) => void;
   postStatus: (input: { sid: string; status: string; signed?: boolean }) => Promise<{ status: number; raw: string }>;
   logs: string[];
+  /** Writes to the server's secret store, like the alert upload does. */
+  saveSecret: (values: Parameters<Installation["secrets"]["set"]>[0]) => void;
 }
 
 export function redactCode(value: string, code = DOOR_CODE): string {
@@ -231,7 +233,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
       else env[name] = value;
     }
   };
-  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, setEnv, postStatus, logs };
+  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, setEnv, postStatus, logs, saveSecret: (values) => installation.secrets.set(values) };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

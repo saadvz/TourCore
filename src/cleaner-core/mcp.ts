@@ -174,6 +174,13 @@ const TOOLS = [
     description: "The host resumes a cleaning that was on hold. A text from the cleaner cannot do this.",
     input: z.object({}),
   },
+  {
+    name: "reset_property",
+    title: "Reset the property",
+    description:
+      "Resets Cleaner Core for this property, as if it was never set up: setup, jobs, messages, consent, the saved door code, the alert routine connection, and the group text on Twilio. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes. Twilio settings and Grok logins stay.",
+    input: z.object({ confirmation: z.string().optional() }),
+  },
 ] as const;
 
 function scratchCopy(name: (typeof SCRATCH_TOOLS)[number]["name"]) {
@@ -235,6 +242,7 @@ const Request = z.object({
 });
 
 export type SaveSecrets = (values: Partial<Record<SettingName, string>>) => void;
+export type DeleteSecrets = (names: SettingName[]) => void;
 
 export async function handleCleanerMcpMessage(
   desk: LiveDesk,
@@ -242,6 +250,7 @@ export async function handleCleanerMcpMessage(
   pinKey?: Buffer,
   scratchTools = false,
   saveSecrets?: SaveSecrets,
+  deleteSecrets?: DeleteSecrets,
 ): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
@@ -285,7 +294,7 @@ export async function handleCleanerMcpMessage(
     }
     let reply: ToolReply;
     try {
-      reply = await callTool(desk, tool.name, args.data, pinKey, saveSecrets);
+      reply = await callTool(desk, tool.name, args.data, pinKey, saveSecrets, deleteSecrets);
     } catch {
       reply = { ok: false, error: "That didn't work. Try again." };
     }
@@ -304,7 +313,7 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
   for (const [key, value] of Object.entries(args)) {
     if (name === "save_door_code" && key === "code") continue;
     // The approval code is Cleaner Core's own, and a wrong one is refused when it is redeemed.
-    if (name === "send_message" && key === "confirmation") continue;
+    if ((name === "send_message" || name === "reset_property") && key === "confirmation") continue;
     if (typeof value === "string" && desk.chatCarriesDoorCode(value)) return true;
   }
   // Calendar names, contact names, and checklist items are shown back, so a door code can't hide in one.
@@ -323,7 +332,7 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
   return false;
 }
 
-async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined, saveSecrets: SaveSecrets | undefined): Promise<ToolReply> {
+async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined, saveSecrets: SaveSecrets | undefined, deleteSecrets: DeleteSecrets | undefined): Promise<ToolReply> {
   switch (name) {
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
@@ -366,6 +375,9 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.sendMessage(args as { to?: string; text?: string; confirmation?: string }, pinKey);
     case "resume_job":
       return desk.resumeCleaning();
+    case "reset_property":
+      if (!deleteSecrets) return { ok: false, error: "I can't reset the property from here." };
+      return desk.resetProperty(args as { confirmation?: string }, deleteSecrets);
     case "reset_scratch":
       return desk.resetScratch();
     case "read_inbox":
