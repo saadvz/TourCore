@@ -1,12 +1,12 @@
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
-import { ALERT_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
+import { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type DeleteSecrets, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
-export { ALERT_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
+export { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
 
 /** The response was already written (an OAuth 401/403/503). The caller sends nothing more. */
 export const ANSWERED = { answered: true } as const;
@@ -88,6 +88,50 @@ export function alertUploadCode(pathname: string): string | undefined {
   return UPLOAD_CODE.test(code) ? code : undefined;
 }
 
+/** The one-time code in a calendar upload path, or undefined when the path isn't one. */
+export function calendarUploadCode(pathname: string): string | undefined {
+  if (!pathname.startsWith(CALENDAR_UPLOAD_PREFIX)) return undefined;
+  const code = pathname.slice(CALENDAR_UPLOAD_PREFIX.length);
+  return UPLOAD_CODE.test(code) ? code : undefined;
+}
+
+/** A JSON object body, or the refusal to send. */
+async function uploadBody(contentType: string, readBody: () => Promise<Buffer | undefined>): Promise<{ parsed: Record<string, unknown> } | { status: number; error: string }> {
+  if (!contentType.toLowerCase().startsWith("application/json")) return { status: 415, error: "Send JSON with Content-Type: application/json." };
+  const raw = await readBody();
+  if (!raw) return { status: 413, error: "That request is too large." };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.toString("utf8"));
+  } catch {
+    return { status: 415, error: "Send JSON with Content-Type: application/json." };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { status: 415, error: "Send JSON with Content-Type: application/json." };
+  return { parsed: parsed as Record<string, unknown> };
+}
+
+/**
+ * Grok's own computer posts a calendar link from its secure card here, to the link save_sources
+ * made. Public: the one-time code is the credential. The link is never repeated or logged.
+ */
+export async function handleCleanerCalendarUpload(input: {
+  code: string;
+  contentType: string;
+  /** Undefined when the body is over ALERT_UPLOAD_MAX_BYTES. */
+  readBody: () => Promise<Buffer | undefined>;
+  env: () => NodeJS.ProcessEnv;
+  root: string;
+  now: () => Date;
+}): Promise<{ status: number; body: string }> {
+  const reply = (status: number, body: Record<string, unknown>) => ({ status, body: JSON.stringify(body) });
+  if (!cleanerCoreEnabled(input.env())) return reply(404, { ok: false, error: "Not found." });
+  const read = await uploadBody(input.contentType, input.readBody);
+  if ("error" in read) return reply(read.status, { ok: false, error: read.error });
+  const desk = liveDeskFor(input.root, input.env, input.now);
+  const result = await desk.uploadCalendarLink(input.code, read.parsed);
+  return reply(result.status, result.body);
+}
+
 /**
  * Grok's own computer posts the alert routine's address and key here, to the link
  * `save_alert_routine` made. Public: the one-time code is the credential. Nothing posted, and not
@@ -105,17 +149,9 @@ export async function handleCleanerAlertUpload(input: {
 }): Promise<{ status: number; body: string }> {
   const reply = (status: number, body: Record<string, unknown>) => ({ status, body: JSON.stringify(body) });
   if (!cleanerCoreEnabled(input.env())) return reply(404, { ok: false, error: "Not found." });
-  if (!input.contentType.toLowerCase().startsWith("application/json")) return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
-  const raw = await input.readBody();
-  if (!raw) return reply(413, { ok: false, error: "That request is too large." });
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.toString("utf8"));
-  } catch {
-    return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return reply(415, { ok: false, error: "Send JSON with Content-Type: application/json." });
+  const read = await uploadBody(input.contentType, input.readBody);
+  if ("error" in read) return reply(read.status, { ok: false, error: read.error });
   const desk = liveDeskFor(input.root, input.env, input.now);
-  const result = await desk.uploadAlertRoutine(input.code, parsed as Record<string, unknown>, input.saveSecrets);
+  const result = await desk.uploadAlertRoutine(input.code, read.parsed, input.saveSecrets);
   return reply(result.status, result.body);
 }

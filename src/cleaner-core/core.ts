@@ -406,6 +406,11 @@ export interface CleanerCore {
   /** The cleaning in progress an MMS from `from` would add photos to. Undefined when there is none or the text was seen. */
   photoJobFor(input: { id: string; from: string }): string | undefined;
   confirmHostTimes(input: { checkout: string; checkIn: string }): Promise<CleanerText[]>;
+  /**
+   * Times every open turnover the host hasn't timed yet with the same checkout and check-in, in a
+   * group setup. Turnovers that already have a host time keep it. Offers still go one at a time.
+   */
+  confirmOpenTimes(input: { checkout: string; checkIn: string }): Promise<{ timed: number; sent: CleanerText[] }>;
   resumeJob(): Promise<CleanerText | null>;
   groupPinSettled(): boolean;
   jobOnHold(): boolean;
@@ -1223,6 +1228,23 @@ class Engine implements CleanerCore {
     const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
     this.save();
     return sent;
+  }
+
+  async confirmOpenTimes(input: { checkout: string; checkIn: string }): Promise<{ timed: number; sent: CleanerText[] }> {
+    if (!this.groupChat) return { timed: 0, sent: [] };
+    const checkout = clockMinutes(input.checkout);
+    const checkIn = clockMinutes(input.checkIn);
+    if (checkout === undefined || checkIn === undefined) return { timed: 0, sent: [] };
+    let timed = 0;
+    for (const job of this.ordered()) {
+      if (job.canceled || job.declined || job.done || job.started || this.latestFact(job.id, "checkout")) continue;
+      this.addFact(job.id, "checkout", checkout);
+      if (job.nextCheckInDate) this.addFact(job.id, "checkin", checkIn);
+      timed += 1;
+    }
+    const sent = timed === 0 || this.optedOut || this.problemHold ? [] : await this.drainOne();
+    this.save();
+    return { timed, sent };
   }
 
   holdNotice(): string | undefined {

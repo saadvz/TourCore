@@ -1,0 +1,291 @@
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import type { SetupAsk } from "../src/cleaner-core/setupAsk";
+import { fakeConversations } from "./fakeConversations";
+import { PUBLIC } from "./fakeSendblue";
+import {
+  ADDRESS,
+  BUSINESS,
+  CALENDAR_ICS,
+  CALENDAR_URL,
+  CLEANER,
+  CLEANER_LINE,
+  CLEANER_TOKEN,
+  DOOR_CODE,
+  FROZEN,
+  HOST,
+  TEST_PIN_KEY,
+  fakeSms,
+  startWiredApp,
+  type WiredApp,
+} from "./wiringProof";
+
+const PATH = "/mcp/cleaner-core";
+const ZONE = "America/New_York";
+const PIN_KEY = Buffer.from(TEST_PIN_KEY, "base64");
+const CALENDAR_PREFIX = `${PUBLIC}/cleaner-core/calendar-link/`;
+const GUESTY_LINK = "https://app.guesty.com/api/public/icalendar-dashboard-api/export/made-up-test-calendar";
+
+const open: WiredApp[] = [];
+const roots: string[] = [];
+
+afterEach(async () => {
+  setCleanerTwilioClient(undefined);
+  setCleanerGroupFetch(undefined);
+  setCleanerCalendarFetch(undefined);
+  resetLiveDesks();
+  while (open.length > 0) await open.pop()?.close();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+async function app(): Promise<WiredApp> {
+  const started = await startWiredApp();
+  open.push(started);
+  return started;
+}
+
+function call(wired: WiredApp, name: string, args: Record<string, unknown> = {}) {
+  return wired.tool(PATH, CLEANER_TOKEN, name, args);
+}
+
+function ok(reply: ToolReply): Record<string, unknown> {
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.result;
+}
+
+function askOf(result: Record<string, unknown> | undefined): SetupAsk {
+  return result?.ask as SetupAsk;
+}
+
+function fields(ask: SetupAsk): string[] {
+  return ask.questions.map((question) => question.field);
+}
+
+const PROPERTY = { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00 AM", checkInTime: "4:00 PM" };
+
+describe("Cleaner Core setup asks: one question at a time", () => {
+  it("offers the two jobs as options before anything is chosen", async () => {
+    const wired = await app();
+    const ask = askOf((await call(wired, "get_state")).structured);
+    expect(ask.step).toBe("start");
+    expect(ask.questions[0]?.options).toEqual([
+      { value: "1", label: "Letting renters tour a unit on their own" },
+      { value: "2", label: "Scheduling cleaners between guest stays" },
+    ]);
+  });
+
+  it("returns each step's ask in order, with the step's tool, and no ask at the review", async () => {
+    const wired = await app();
+    const picked = (await call(wired, "get_state", { said: "2" })).structured;
+    expect(String(picked?.next)).toMatch(/^That's Cleaner Core\. It schedules cleaners between guest stays\. Ask the host the questions in ask/);
+    expect(askOf(picked).step).toBe("property");
+    expect(fields(askOf(picked))).toEqual(["address", "business", "timeZone", "checkoutTime", "checkInTime"]);
+
+    const steps: [string, Record<string, unknown>, string, string][] = [
+      ["save_property", PROPERTY, "sources", "save_sources"],
+      ["save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }, "people", "save_people"],
+      ["save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" }, "schedule", "save_schedule"],
+      ["save_schedule", {}, "door-code", "save_door_code"],
+    ];
+    for (const [tool, args, step, next] of steps) {
+      const saved = await call(wired, tool, args);
+      expect(saved.isError, saved.text).toBe(false);
+      expect(askOf(saved.structured).step).toBe(step);
+      expect(askOf(saved.structured).tool).toBe(next);
+      expect(saved.structured?.next).toBe(`Ask the host the questions in ask, one at a time, in your own short words. Show any options as a choice card. Skip a question the host already answered. Then call ${next}.`);
+    }
+    expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
+    expect(askOf((await call(wired, "get_state")).structured).step).toBe("preferences");
+    const review = (await call(wired, "save_preferences", {})).structured;
+    expect(review?.ask).toBeUndefined();
+    expect(review?.next).toBe("Summarize this setup for the host in your own words, then ask them to reply Activate.");
+  });
+
+  it("offers who is in the texts as options, with the group of the host and the cleaner first", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", PROPERTY);
+    const people = askOf((await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] })).structured);
+    const group = people.questions.find((question) => question.field === "groupChat");
+    expect(group?.default).toBe("cleaner-and-host");
+    expect(group?.options?.map((option) => option.value)).toEqual(["cleaner-and-host", "everyone", "cleaner-only"]);
+  });
+
+  it("keeps asking for the usual times until both are saved, then moves on", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    const noTimes = await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE });
+    expect(askOf(noTimes.structured).step).toBe("property");
+    expect(fields(askOf(noTimes.structured))).toEqual(["checkoutTime", "checkInTime"]);
+    const oneTime = await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00 AM" });
+    expect(fields(askOf(oneTime.structured))).toEqual(["checkInTime"]);
+    expect(askOf((await call(wired, "save_property", PROPERTY)).structured).step).toBe("sources");
+  });
+});
+
+/** Grok's cloud computer posts to the link. The test server answers on 127.0.0.1 at the link's path. */
+async function upload(wired: WiredApp, link: string, body: string, contentType = "application/json"): Promise<{ status: number; raw: string }> {
+  const res = await fetch(`http://127.0.0.1:${wired.port}${new URL(link).pathname}`, { method: "POST", headers: { "Content-Type": contentType }, body });
+  return { status: res.status, raw: await res.text() };
+}
+
+function filesIn(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? filesIn(path) : entry.isFile() ? [path] : [];
+  });
+}
+
+describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
+  it("refuses a masked link and points Grok to the upload link", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", PROPERTY);
+    for (const url of ["[REDACTED]", "https://app.guesty.com/••••••"]) {
+      const masked = await call(wired, "save_sources", { calendars: [{ name: "Guesty Lite", url }] });
+      expect(masked.isError).toBe(true);
+      expect(masked.text).toContain("That link came through masked");
+      expect(masked.text).toContain("uploadLink");
+    }
+    const legacy = await call(wired, "save_calendar_link", { url: "[REDACTED]" });
+    expect(legacy.isError).toBe(true);
+    expect(legacy.text).toContain("That link came through masked");
+  });
+
+  it("saves a link posted to a one-time upload link, once, and never repeats or stores the code", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", PROPERTY);
+    const issued = await call(wired, "save_sources", { uploadLink: { name: "Guesty Lite" } });
+    expect(issued.isError, issued.text).toBe(false);
+    const link = String(issued.structured?.uploadUrl);
+    expect(link.startsWith(CALENDAR_PREFIX), link).toBe(true);
+    const code = link.slice(CALENDAR_PREFIX.length);
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(issued.structured?.expiresInMinutes).toBe(10);
+    // Nothing is saved until the link arrives, so setup still asks where bookings come from.
+    expect(askOf((await call(wired, "get_state")).structured).step).toBe("sources");
+
+    expect((await upload(wired, link, JSON.stringify({ url: "[REDACTED]" }))).status).toBe(400);
+    expect((await upload(wired, link, JSON.stringify({ url: "http://app.guesty.com/plain" }))).status).toBe(400);
+    expect((await upload(wired, link, "url=x", "text/plain")).status).toBe(415);
+    const saved = await upload(wired, link, JSON.stringify({ url: GUESTY_LINK }));
+    expect(saved.status).toBe(200);
+    expect(JSON.parse(saved.raw)).toEqual({ ok: true, message: "Saved the calendar link." });
+    expect((await upload(wired, link, JSON.stringify({ url: GUESTY_LINK }))).status).toBe(404);
+
+    const state = (await call(wired, "get_state")).structured;
+    expect(state?.done).toContain("Calendar link saved.");
+    expect(askOf(state).step).toBe("people");
+    const replies = JSON.stringify(state) + issued.raw + saved.raw;
+    expect(replies.includes(GUESTY_LINK)).toBe(false);
+    expect(wired.logs.join("\n").includes(GUESTY_LINK)).toBe(false);
+    expect(wired.logs.join("\n").includes(code)).toBe(false);
+    for (const path of filesIn(wired.root)) expect(readFileSync(path, "utf8").includes(code), path).toBe(false);
+  });
+
+  it("replaces only the calendar with the same name and keeps the others", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", PROPERTY);
+    await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }, { name: "Guesty Lite", url: "https://app.guesty.com/old" }] });
+    const issued = await call(wired, "save_sources", { uploadLink: { name: "guesty lite" } });
+    const saved = await upload(wired, String(issued.structured?.uploadUrl), JSON.stringify({ url: GUESTY_LINK }));
+    expect(saved.status).toBe(200);
+    expect((await call(wired, "get_state")).structured?.done).toContain("2 calendar links saved.");
+  });
+
+  it("refuses an expired upload link", async () => {
+    let at = new Date(FROZEN);
+    const started = await startWiredApp({ now: () => at });
+    open.push(started);
+    await call(started, "get_state", { said: "2" });
+    await call(started, "save_property", PROPERTY);
+    const issued = await call(started, "save_sources", { uploadLink: {} });
+    at = new Date(at.getTime() + 11 * 60_000);
+    expect((await upload(started, String(issued.structured?.uploadUrl), JSON.stringify({ url: GUESTY_LINK }))).status).toBe(404);
+  });
+});
+
+/** A group setup with the two test stays, activated, with the alert routine saved. */
+async function activatedGroup() {
+  const root = mkdtempSync(join(tmpdir(), "cleaner-setup-ask-"));
+  roots.push(root);
+  const sms = fakeSms();
+  const groups = fakeConversations();
+  setCleanerTwilioClient(sms);
+  setCleanerGroupFetch(groups.impl);
+  setCleanerCalendarFetch(async (url) => ({ status: 200, url, async text() { return CALENDAR_ICS; } }));
+  const env: NodeJS.ProcessEnv = {
+    CLEANER_CORE_ENABLED: "1",
+    CLEANER_CORE_LIVE_SMS: "1",
+    CLEANER_CORE_GROUP_CHAT: "1",
+    CLEANER_CORE_SMS_ALLOWLIST: [HOST, CLEANER].join(","),
+    CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+    CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+    CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    CLEANER_CORE_ROUTINE_URL: "https://routine.example/hook",
+    PUBLIC_BASE_URL: "https://cleaner.example",
+  };
+  const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+  ok(await desk.getState("2"));
+  ok(await desk.saveProperty(PROPERTY));
+  ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
+  ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host" }));
+  ok(await desk.saveSchedule({}));
+  ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+  ok(await desk.savePreferences({}));
+  ok(await desk.activate());
+  return { desk, sms, groups };
+}
+
+describe("Cleaner Core times: the usual times for every turnover", () => {
+  it("offers the usual times for all untimed turnovers, then times them in one call", async () => {
+    const { desk, sms } = await activatedGroup();
+    const state = ok(await desk.getState());
+    const ask = askOf(state);
+    expect(ask.step).toBe("times");
+    expect(ask.tool).toBe("confirm_times");
+    expect(ask.questions[0]?.options?.[0]).toEqual({ value: "all", label: "Use 10:00 AM checkout and 4:00 PM check-in for all 2" });
+
+    const all = ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    expect(all.next).toBe("Times saved for 2 turnovers. The cleaner gets one cleaning offer at a time, starting with the first.");
+    const turns = all.turns as { checkoutTime?: string; nextCheckInDate: string | null; nextCheckInTime?: string }[];
+    expect(turns).toHaveLength(2);
+    for (const turn of turns) {
+      expect(turn.checkoutTime).toBeTruthy();
+      if (turn.nextCheckInDate) expect(turn.nextCheckInTime).toBeTruthy();
+    }
+    // The cleaner gets the group invite only, one text, before any offer.
+    expect(sms.sent.filter((item) => item.to === CLEANER)).toHaveLength(1);
+    expect(askOf(ok(await desk.getState()))).toBeUndefined();
+    expect((await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true })).ok).toBe(false);
+  });
+
+  it("still sends the cleaner one offer at a time after timing them all", async () => {
+    const { desk, groups } = await activatedGroup();
+    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    const offers = () => groups.posts.filter((post) => post.body.startsWith("Turnover at"));
+    expect(offers()).toHaveLength(1);
+    await desk.inbound({ id: "take-1", from: CLEANER, text: "YES", channel: "group" });
+    expect(offers()).toHaveLength(1);
+    // The next offer goes on the next check, after the first one was taken.
+    await desk.checkNow({});
+    expect(offers()).toHaveLength(2);
+    expect(offers()[0]?.body).not.toBe(offers()[1]?.body);
+  });
+
+  it("keeps a time the host already set and times only the rest", async () => {
+    const { desk } = await activatedGroup();
+    ok(await desk.confirmTimes({ checkout: "9:00 AM", checkIn: "3:00 PM" }));
+    const all = ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    expect(all.next).toBe("Times saved for 1 turnover. The cleaner gets one cleaning offer at a time, starting with the first.");
+    const turns = all.turns as { checkoutTime?: string }[];
+    expect(turns.map((turn) => turn.checkoutTime?.replace(/[  ]/g, " "))).toEqual(["9:00 AM", "10:00 AM"]);
+  });
+});

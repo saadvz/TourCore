@@ -774,14 +774,18 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     }
   });
 
-  it("asks where bookings come from at the calendar step", async () => {
+  it("asks where bookings come from at the calendar step, with Guesty Lite, Google Calendar, and other links as options", async () => {
     const wired = await app();
     await call(wired, "get_state", { said: "2" });
-    await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE });
+    await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
     const people = await call(wired, "save_people", { host: HOST, cleaner: CLEANER });
-    const copy = "Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like \"Harbor bookings\", works best. I'll read only that calendar, not your main one unless the bookings are there.";
-    expect(people.structured?.next).toBe(copy);
-    expect((await call(wired, "get_state")).structured?.next).toBe(copy);
+    const ask = people.structured?.ask as { step: string; tool: string; questions: { field: string; options?: { value: string }[]; example?: string }[] };
+    expect(ask.step).toBe("sources");
+    expect(ask.tool).toBe("save_sources");
+    expect(ask.questions[0]?.options?.map((option) => option.value)).toEqual(["guesty", "google", "other"]);
+    expect(ask.questions.find((question) => question.field === "google")?.example).toBe("Harbor bookings");
+    expect(people.structured?.next).toBe("Ask the host the questions in ask, one at a time, in your own short words. Show any options as a choice card. Skip a question the host already answered. Then call save_sources.");
+    expect((await call(wired, "get_state")).structured?.ask).toEqual(ask);
   });
 
   it("get_state asks for the routines after the checks, until one is saved", async () => {
