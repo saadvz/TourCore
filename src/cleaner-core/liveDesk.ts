@@ -110,6 +110,7 @@ const TOO_MANY = "That's a lot of messages this hour. Try again later.";
 const RESET_ACTION = "cleaner-reset-property";
 const RESET_TARGET = "property";
 const RESET_GROUP_KEPT = "I couldn't remove the group text on Twilio, so nothing was reset. Try again in a few minutes.";
+const RESET_NOT_DONE = "I couldn't reset Cleaner Core just now, so nothing else was changed. Try again in a few minutes.";
 const ROUTINE_SECRETS = ["CLEANER_CORE_ROUTINE_URL", "CLEANER_CORE_ROUTINE_KEY"] as const;
 const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
 /** Messages kept for Grok, newest last. */
@@ -1585,7 +1586,7 @@ export class LiveDesk {
    * Wipes this property's Cleaner Core state, as if it was never set up, after the host confirms.
    * Without a confirmation it changes nothing and returns the exact words with an approval code.
    * With the code it removes the group on Twilio first; if Twilio won't, nothing else is touched.
-   * Then the desk's file and job folder go, and the two alert routine secrets through `deleteSecrets`.
+   * Then the two alert routine secrets go through `deleteSecrets` (a failure stops here), then the desk's file, job folder and alert queue.
    * It never texts anyone.
    */
   resetProperty(input: { confirmation?: string }, deleteSecrets: (names: (typeof ROUTINE_SECRETS)[number][]) => void): Promise<ToolReply> {
@@ -1608,8 +1609,16 @@ export class LiveDesk {
     }
     // Twilio first. A group that can't be removed stops everything, so the next try starts from the same state.
     if (group && !(await deleteLiveGroup(this.env(), group))) return this.fail(RESET_GROUP_KEPT);
+    // Secrets before files: if the store can't delete them, nothing else is touched.
+    try {
+      deleteSecrets([...ROUTINE_SECRETS]);
+    } catch {
+      return this.fail(RESET_NOT_DONE);
+    }
     rmSync(this.path, { force: true });
     rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
+    // The queued wake-ups belong to the old setup, so they can't deliver to a routine connected later.
+    rmSync(join(this.root, "cleaner-alerts"), { recursive: true, force: true });
     this.file = {};
     this.pin = undefined;
     this.uploadKey = undefined;
@@ -1617,7 +1626,6 @@ export class LiveDesk {
     this.stale = false;
     this.held = false;
     this.approvals.clear();
-    deleteSecrets([...ROUTINE_SECRETS]);
     return this.reply({ next: `Cleaner Core is reset for ${address}. Start setup again whenever you're ready.` });
   }
 

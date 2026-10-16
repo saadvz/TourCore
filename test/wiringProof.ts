@@ -84,6 +84,8 @@ export interface WiredApp {
   postStatus: (input: { sid: string; status: string; signed?: boolean }) => Promise<{ status: number; raw: string }>;
   logs: string[];
   /** Writes to the server's secret store, like the alert upload does. */
+  /** The server's secret store, for a test that makes it fail. */
+  secretStore: Installation["secrets"];
   saveSecret: (values: Parameters<Installation["secrets"]["set"]>[0]) => void;
 }
 
@@ -233,7 +235,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
       else env[name] = value;
     }
   };
-  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, setEnv, postStatus, logs, saveSecret: (values) => installation.secrets.set(values) };
+  return { port, root, env: () => installation.env(), tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, setEnv, postStatus, logs, secretStore: installation.secrets, saveSecret: (values) => installation.secrets.set(values) };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

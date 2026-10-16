@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { fakeConversations, type FakeConversations } from "./fakeConversations";
@@ -73,12 +73,19 @@ function saveRoutine(wired: WiredApp) {
 }
 
 const livePath = (wired: WiredApp) => join(wired.root, "cleaner-live.json");
+const alertsPath = (wired: WiredApp) => join(wired.root, "cleaner-alerts");
+/** A queued wake-up from the old setup. */
+function seedAlerts(wired: WiredApp) {
+  mkdirSync(alertsPath(wired), { recursive: true });
+  writeFileSync(join(alertsPath(wired), "queued.json"), "{}\n");
+}
 const jobPath = (wired: WiredApp) => join(wired.root, "cleaner-job");
 
 describe("reset_property", () => {
   it("previews without changing anything, and sends nothing", async () => {
     const { fake, wired } = await setup();
     saveRoutine(wired);
+    seedAlerts(wired);
     const before = readFileSync(livePath(wired));
     const calls = fake.calls();
     const posts = fake.posts.length;
@@ -93,6 +100,7 @@ describe("reset_property", () => {
     expect(wired.cleanerSent).toHaveLength(smsSent);
     expect(secretsOf(wired).key).toBe(ROUTINE_KEY);
     expect(fake.removed).toEqual([]);
+    expect(existsSync(alertsPath(wired))).toBe(true);
   });
 
   it("says this property when nothing is saved yet", async () => {
@@ -105,6 +113,7 @@ describe("reset_property", () => {
   it("refuses a wrong code and a reused code, and changes nothing", async () => {
     const { fake, wired } = await setup();
     saveRoutine(wired);
+    seedAlerts(wired);
     const before = readFileSync(livePath(wired));
     const preview = await must(wired, "reset_property");
     const code = preview.confirmation as { code?: string } | string;
@@ -115,6 +124,7 @@ describe("reset_property", () => {
     expect(readFileSync(livePath(wired)).equals(before)).toBe(true);
     expect(fake.removed).toEqual([]);
     expect(secretsOf(wired).key).toBe(ROUTINE_KEY);
+    expect(existsSync(alertsPath(wired))).toBe(true);
     // The wrong code used nothing up: the real one still works once, and only once.
     expect((await call(wired, "reset_property", { confirmation: text })).isError).toBe(false);
     const reused = await call(wired, "reset_property", { confirmation: text });
@@ -136,6 +146,7 @@ describe("reset_property", () => {
   it("wipes the property, the group, and the routine secrets, and sends nothing", async () => {
     const { fake, wired } = await setup();
     saveRoutine(wired);
+    seedAlerts(wired);
     const sid = fake.posts[0]?.conversationSid ?? "";
     expect(sid).not.toBe("");
     const smsSent = wired.cleanerSent.length;
@@ -149,6 +160,7 @@ describe("reset_property", () => {
     expect(fake.removed).toContain(sid);
     expect(existsSync(livePath(wired))).toBe(false);
     expect(existsSync(jobPath(wired))).toBe(false);
+    expect(existsSync(alertsPath(wired))).toBe(false);
     const secrets = secretsOf(wired);
     expect(secrets.url).toBeUndefined();
     expect(secrets.key).toBeUndefined();
@@ -177,6 +189,7 @@ describe("reset_property", () => {
   it("changes nothing when Twilio refuses to remove the group", async () => {
     const { fake, wired } = await setup({ failDeletes: true, block: true });
     saveRoutine(wired);
+    seedAlerts(wired);
     const before = readFileSync(livePath(wired));
     const preview = await must(wired, "reset_property");
     const conf = preview.confirmation as { code?: string } | string;
@@ -187,6 +200,27 @@ describe("reset_property", () => {
     expect(readFileSync(livePath(wired)).equals(before)).toBe(true);
     expect(existsSync(jobPath(wired))).toBe(true);
     expect(secretsOf(wired).url).toBe(ROUTINE_URL);
+    expect(secretsOf(wired).key).toBe(ROUTINE_KEY);
+    expect(existsSync(alertsPath(wired))).toBe(true);
+  });
+
+  it("touches no file when the secrets can't be deleted", async () => {
+    const { wired } = await setup();
+    saveRoutine(wired);
+    seedAlerts(wired);
+    const before = readFileSync(livePath(wired));
+    const preview = await must(wired, "reset_property");
+    const conf = preview.confirmation as { code?: string } | string;
+    const spy = vi.spyOn(wired.secretStore, "delete").mockImplementation(() => {
+      throw new Error("disk full");
+    });
+    const refused = await call(wired, "reset_property", { confirmation: typeof conf === "string" ? conf : (conf.code ?? "") });
+    spy.mockRestore();
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe("I couldn't reset Cleaner Core just now, so nothing else was changed. Try again in a few minutes.");
+    expect(readFileSync(livePath(wired)).equals(before)).toBe(true);
+    expect(existsSync(jobPath(wired))).toBe(true);
+    expect(existsSync(alertsPath(wired))).toBe(true);
     expect(secretsOf(wired).key).toBe(ROUTINE_KEY);
   });
 
