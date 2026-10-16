@@ -42,7 +42,7 @@ If `activate` says the numbers aren't approved for texts, tell the host the Clea
 `get_state` asks for two routines. Create both yourself.
 
 - Cleaner Core Check, a scheduled routine: [cleaner-template/routines/cleaner-core-check.md](cleaner-template/routines/cleaner-core-check.md).
-- Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md).
+- Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md). Only the host can see its webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field, with one secure card for each, the address first.
 
 Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm.
 Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time.
