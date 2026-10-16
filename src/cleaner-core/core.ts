@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -2299,7 +2299,9 @@ class Engine implements CleanerCore {
     const audience = this.groupAudience();
     const name = this.seatName(draft.to);
     // The landlord's approved words are posted exactly as approved.
-    const body = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name && draft.kind !== "host-message" ? namedAsk(name, draft.body) : draft.body;
+    const own = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name && draft.kind !== "host-message" ? namedAsk(name, draft.body) : draft.body;
+    // Only the intro says how to leave the group. Later texts drop the STOP ask, and STOP still works.
+    const body = draft.kind === "host-message" ? own : withoutStopAsk(own);
     if (this.groupDuplicate(draft, id, body)) return null;
     // A group text with the code in split digits is held, not sent, and not sent one-to-one either.
     if (this.pin && draft.kind !== "pin" && joinSplitDigits(body).includes(this.pin)) {

@@ -76,12 +76,23 @@ export function offerForOthers(body: string): string {
 
 /**
  * The offer as it goes into the group: the YES ask names the cleaner, since the host reads it too.
- * The host's note, when there is one, stays after it.
+ * The group's intro already says how to leave, so the offer drops the STOP ask. The host's note,
+ * when there is one, stays after it.
  */
 export function groupOfferBody(cleanerName: string, body: string): string {
   const note = hostNoteOf(body);
   const own = body.slice(0, body.length - note.length);
-  return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${cleanerName}, reply YES to schedule it, or STOP to opt out.${note}` : body;
+  return own.endsWith(OFFER_ASK) ? `${own.slice(0, -OFFER_ASK.length)}${cleanerName}, reply YES to schedule it.${note}` : body;
+}
+
+/**
+ * A group text without Cleaner Core's STOP ask. Only the first text in the group (the intro) says how to
+ * leave, so later texts don't end on STOP. STOP still works. The host's note is left as it is.
+ */
+export function withoutStopAsk(body: string): string {
+  const note = hostNoteOf(body);
+  const own = body.slice(0, body.length - note.length);
+  return `${own.replace(/, or STOP to opt out\./g, ".").replace(/ ?Reply STOP to opt out\./g, "").trim()}${note}`;
 }
 
 /** The checklist, after the private code. Each item loses a trailing period or semicolon. */
@@ -231,7 +242,7 @@ export function cleanerNextStep(step: CleanerStep): string {
     case "needs-yes":
       return "Reply YES to schedule the cleaning, or STOP to opt out.";
     case "waiting-for-guests":
-      return "I'll text you the door code after the guests leave. Reply DONE after that.";
+      return "I'll text you the door code after the guests leave.";
     case "waiting-for-code":
       return "I haven't sent the door code yet. Reply DONE after I do.";
     case "in-progress":
