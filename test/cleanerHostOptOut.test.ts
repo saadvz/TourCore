@@ -49,6 +49,7 @@ const HOST_KIND_RULE = {
   next: "blocked",
   "host-message": "blocked",
   checklist: "blocked",
+  intro: "blocked",
 } as const satisfies Record<TextKind, "safety" | "blocked">;
 
 function hostRule(kind: TextKind): "safety" | "blocked" {
@@ -79,6 +80,7 @@ function hostRule(kind: TextKind): "safety" | "blocked" {
     case "next":
     case "host-message":
     case "checklist":
+    case "intro":
       return "blocked";
     default: {
       const uncovered: never = kind;

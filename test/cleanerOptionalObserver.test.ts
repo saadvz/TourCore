@@ -78,7 +78,7 @@ function open(phones: string[]) {
 async function setup(desk: ReturnType<typeof open>["desk"], observer?: string) {
   expect((await desk.getState("2")).ok).toBe(true);
   expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-  const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer });
+  const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer, doorCodeTo: "cleaner" });
   expect(saved.ok).toBe(true);
   expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
   expect((await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY)).ok).toBe(true);
@@ -191,15 +191,16 @@ describe("optional observer", () => {
     expect(posts.filter((post) => post.body === TIME).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
     expect(posts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.some((item) => item.to === OLD || item.to === "")).toBe(false);
-    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
-    expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
+    // The group holds only the host and the cleaner, so the code goes into it and nowhere else.
+    expect(codeRecipients(sms.sent)).toEqual([]);
+    expect(posts.filter((post) => bodyHasCode(post.body)).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
   });
 
   it("keeps a three-number setup on group copies only, and never sends the code to the observer", async () => {
     const { desk, sms, posts } = open([HOST, CLEANER, OLD]);
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-    const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD });
+    const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD, doorCodeTo: "cleaner" });
     expect(people.ok).toBe(true);
     const state = await desk.getState();
     expect(state.ok).toBe(true);

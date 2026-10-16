@@ -103,6 +103,8 @@ const SEND_ACTION = "cleaner-message";
 const MESSAGE_NEEDED = `Write the message in 1 to ${MAX_HOST_MESSAGE} characters.`;
 const RECIPIENT_NEEDED = "Say who to text: the cleaner, the group, or a saved contact's name.";
 const NO_GROUP = "There's no group chat for this property.";
+const GROUP_ONLY = "Messages go to the group. Send it with to: group.";
+const DOOR_CODE_QUESTION = "You added other people to the group. Should the door code go to the whole group, or only privately to the cleaner?";
 const TOO_MANY = "That's a lot of messages this hour. Try again later.";
 const APPROVAL_STALE = "That approval has expired or doesn't match. Ask the host again.";
 /** Messages kept for Grok, newest last. */
@@ -221,6 +223,8 @@ interface PeopleInput {
   cleanerName?: string;
   contacts?: { name?: string; role?: string; phone?: string }[];
   groupChat?: string;
+  /** Who gets the door code once others are in the group. */
+  doorCodeTo?: string;
 }
 
 interface ScheduleInput {
@@ -269,6 +273,8 @@ interface LiveFile {
   contacts?: Contact[];
   /** Unset keeps every saved contact in the group, as before the choice existed. */
   groupChat?: GroupChoice;
+  /** The landlord's door-code choice when contacts share the group. */
+  doorCodeTo?: "group" | "cleaner";
   /** Where the lock is. Never digits that could be a code. */
   lockLocation?: string;
   /** Set once the host saved a messaging schedule, or kept the defaults. */
@@ -826,6 +832,8 @@ export class LiveDesk {
     if (groupChat && !(GROUP_CHOICES as readonly string[]).includes(groupChat)) {
       return this.fail("Choose who gets the texts: cleaner-only, cleaner-and-host, or everyone.");
     }
+    const doorCodeTo = input.doorCodeTo?.trim() ?? "";
+    if (doorCodeTo && doorCodeTo !== "group" && doorCodeTo !== "cleaner") return this.fail(DOOR_CODE_QUESTION);
     const contacts: Contact[] = [];
     const used = new Set([host, cleaner, ...(observer ? [observer] : [])]);
     for (const contact of input.contacts ?? []) {
@@ -842,6 +850,9 @@ export class LiveDesk {
     }
     if (contacts.length + (observer ? 1 : 0) > MAX_CONTACTS) return this.fail(`I can keep up to ${MAX_CONTACTS} extra contacts.`);
     if (this.carriesCode(cleanerName) || this.carriesCode(hostName)) return this.fail(DOOR_CODE_IN_CHAT);
+    // The legacy observer reads as one contact. Only "everyone" or an unset choice puts contacts in the group.
+    const othersInGroup = contacts.length + (observer ? 1 : 0) > 0 && (groupChat === "" || groupChat === "everyone") && groupChatEnabled(this.env());
+    if (othersInGroup && !doorCodeTo) return this.fail(DOOR_CODE_QUESTION);
     this.file.host = host;
     this.file.cleaner = cleaner;
     if (observer) this.file.observer = observer;
@@ -850,6 +861,7 @@ export class LiveDesk {
     this.keep("hostName", hostName || undefined);
     this.keep("contacts", contacts.length > 0 ? contacts : undefined);
     this.keep("groupChat", (groupChat || undefined) as GroupChoice | undefined);
+    this.keep("doorCodeTo", othersInGroup && doorCodeTo ? (doorCodeTo as "group" | "cleaner") : undefined);
     this.persist();
     this.stale = true;
     return this.reply({ next: this.setupNext() });
@@ -1535,6 +1547,7 @@ export class LiveDesk {
    */
   private recipientOf(to: string): { key: string; send: string; name: string } | { error: string } {
     const wanted = to.toLowerCase();
+    if (this.groupOn() && wanted !== "group") return { error: GROUP_ONLY };
     const cleanerName = this.file.cleanerName;
     if (wanted === "cleaner" || (cleanerName && wanted === cleanerName.toLowerCase())) {
       if (!this.file.cleaner) return { error: "I can't text the cleaner right now." };
@@ -2148,6 +2161,7 @@ export class LiveDesk {
               hostName: file.hostName ?? file.business,
               cleanerName: file.cleanerName ?? "Maria",
               ...(extra.length > 0 ? { extra } : {}),
+              ...(file.doorCodeTo ? { doorCodeTo: file.doorCodeTo } : {}),
             },
           }
         : {}),
@@ -2229,7 +2243,7 @@ export class LiveDesk {
       const saved = shown ? undefined : this.file.deliveries?.find((row) => row.id === item.id)?.status;
       const stored = item.status === "uncertain" ? "waiting" : item.status;
       const status = shown ?? saved ?? stored;
-      const role = whoTheyAre(item.to, people);
+      const role = item.group ? "the group" : whoTheyAre(item.to, people);
       return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status), status, body: item.body };
     });
     const localRows = (this.file.localSends ?? []).map((item) => {

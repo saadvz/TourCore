@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
+import { groupInviteBody } from "../src/cleaner-core/cleanerTexts";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -17,6 +18,7 @@ if (!lane) throw new Error("Scratch Lane is missing");
 const PIN = lane.pin;
 const NOW = "2026-10-14T15:00:00.000Z";
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
+const GROUP_PIN_TEXT = `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: ${PIN}. Maria, reply DONE when the cleaning is finished.`;
 const PIN_TEXT = `Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: ${PIN}. This code is only for you. Reply DONE when the cleaning is finished.`;
 const DONE_ACK = "Thanks, cleaning marked done.";
 const HOST_DONE = "The cleaner marked the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 done.";
@@ -28,8 +30,8 @@ const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
 const INJURY_HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
-const GROUP_INVITE = "Maria, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Scratch. Reply YES to join that group, or STOP to opt out.";
-const OBSERVER_INVITE = "Observer, you're invited to the cleaning group for 12 Scratch Lane, Teaneck, NJ 07666 with Scratch and Maria. Reply YES to join that group, or STOP to opt out.";
+const GROUP_INVITE = groupInviteBody("Scratch", "12 Scratch Lane, Teaneck, NJ 07666");
+const OBSERVER_INVITE = GROUP_INVITE;
 const SOLO_INVITE = "Hi, this is Scratch at 12 Scratch Lane, Teaneck, NJ 07666. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.";
 
 function sink() {
@@ -238,20 +240,26 @@ describe("DONE after the door code", () => {
   });
 });
 
-describe("door code stays out of the group", () => {
-  it("finishes from a group DONE and keeps the code in one private text", async () => {
+describe("door code in the group", () => {
+  it("finishes from a group DONE and posts the code once, in the group of the landlord and the cleaner", async () => {
     const { box, job } = await ready(true);
     await job.receive({ id: "left", from: OWNER, text: "guests have left" });
     const groups = box.sent.filter((text) => text.channel === "group");
-    expect(groups.some((text) => text.body.includes(PIN) || text.body.includes("Door code"))).toBe(false);
-    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(groups.filter((text) => text.body.includes(PIN) || text.body.includes("Door code")).map((text) => text.kind)).toEqual(["pin"]);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: GROUP_PIN_TEXT, kind: "pin", channel: "group", audience: [OWNER, CLEANER] }]);
+    expect(box.sent.filter((text) => text.body.includes(PIN) && !text.channel)).toEqual([]);
     const done = await job.receive({ id: "done-group", from: CLEANER, text: "DONE", channel: "group" });
-    expect(done.sent).toEqual([{ to: CLEANER, body: DONE_ACK, kind: "done" }]);
+    // Both done lines go into the group now, one post each, and nothing one-to-one.
+    const groupDone = (sent: CleanerText[]) => sent.filter((text) => text.kind === "done");
+    expect(done.sent).toEqual([{ to: CLEANER, body: DONE_ACK, kind: "done", channel: "group", audience: [OWNER, CLEANER] }]);
     expect(job.jobs()[0]?.status).toBe("done");
-    expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+    expect(groupDone(box.sent).map(({ to, body, channel, audience }) => ({ to, body, channel, audience }))).toEqual([
+      { to: CLEANER, body: DONE_ACK, channel: "group", audience: [OWNER, CLEANER] },
+      { to: CLEANER, body: HOST_DONE, channel: "group", audience: [OWNER, CLEANER] },
+    ]);
     await job.receive({ id: "done-group-2", from: CLEANER, text: "DONE", channel: "group" });
-    expect(hostReady(box.sent)).toHaveLength(1);
-    expect(box.sent.filter((text) => text.channel === "group").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
+    expect(box.sent.filter((text) => text.body === HOST_DONE)).toHaveLength(1);
+    expect(box.sent.filter((text) => text.channel === "group" && text.kind !== "pin").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
   });
 });
 
@@ -281,7 +289,7 @@ describe("group chat flag", () => {
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     expect((await desk.getState("2")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
-    expect((await desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER })).ok).toBe(true);
+    expect((await desk.savePeople({ host: OWNER, cleaner: CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: PIN }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOfferBody, groupOptInBody } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, groupOfferBody } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { CLEANER_GROUP_IDENTITY, sendLiveGroup, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -246,21 +246,20 @@ describe("group texting: the offer goes to the cleaner once", () => {
     expect(sent.filter((text) => text.kind === "offer")).toEqual([{ to: MIKE, body: OFFER, kind: "offer" }]);
     expect(job.hostNotes()).toContain("I couldn't send the cleaning offer to the group.");
     // The group just failed, so no host copy tries it again.
-    expect(tried.filter((text) => text.channel === "group")).toHaveLength(1);
+    expect(tried.filter((text) => text.channel === "group" && text.kind === "offer")).toHaveLength(1);
     await job.receive({ id: "mike-yes-direct", from: MIKE, text: "YES" });
     expect(job.jobs()[0]?.status).toBe("confirmed");
   });
 
-  it("never puts the door code in the group", async () => {
+  it("posts the door code into the group of the landlord and Mike, once, with no one-to-one copy", async () => {
     const sent: CleanerText[] = [];
     const job = await offered(async (text) => {
       sent.push(text);
     });
     await job.receive({ id: "mike-group-yes", from: MIKE, text: "YES", channel: "group" });
     const left = await job.receive({ id: "left", from: OWNER, text: "guests have left" });
-    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([expect.objectContaining({ to: MIKE, kind: "pin" })]);
-    expect(left.sent.find((text) => text.kind === "pin")?.channel).toBeUndefined();
-    expect(sent.filter((text) => text.channel === "group" && text.body.includes(PIN))).toEqual([]);
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([expect.objectContaining({ to: MIKE, kind: "pin", channel: "group", audience: [OWNER, MIKE] })]);
+    expect(sent.filter((text) => text.body.includes(PIN) && (text.channel !== "group" || text.kind !== "pin"))).toEqual([]);
   });
 });
 
@@ -346,7 +345,7 @@ async function messages(wired: WiredApp): Promise<Kept[]> {
 describe("group texting: the conversation webhook", () => {
   it("takes Mike's YES in the group, confirms the job, and shows it to Grok as a group message", async () => {
     const { wired, conversationSid, fake } = await groupReady();
-    expect(fake.posts).toEqual([
+    expect(fake.posts.filter((post) => post.body.startsWith("Turnover at"))).toEqual([
       { conversationSid, to: [HOST, CLEANER].sort(), body: `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Mike, reply YES to schedule it, or STOP to opt out.` },
     ]);
     expect(wired.cleanerSent.filter((item) => item.body.startsWith("Turnover at"))).toEqual([]);
@@ -397,12 +396,12 @@ describe("group texting: the conversation webhook", () => {
     expect((await messages(wired)).filter((item) => item.text === "Running a little behind")).toHaveLength(1);
   });
 
-  it("sends the door code only privately after a YES in the group", async () => {
+  it("posts the door code in the group of Dana and Mike after a YES in the group, and never one-to-one", async () => {
     const { wired, conversationSid, fake } = await groupReady();
     await hook(wired, groupText(conversationSid, CLEANER, "YES"));
     await must(wired, "mark_guests_left", { said: "The guests have left" });
-    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.to)).toEqual([CLEANER]);
-    expect(fake.posts.some((post) => post.body.includes(DOOR_CODE))).toBe(false);
+    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+    expect(fake.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => [...post.to].sort())).toEqual([[HOST, CLEANER].sort()]);
   });
 
   it("keeps a group photo from Mike during the cleaning, read through the Conversations media service", async () => {
@@ -592,7 +591,7 @@ describe("group texting: the host's name", () => {
     await must(wired, "run_checks");
     await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
     const invite = wired.cleanerSent.find((item) => item.to === CLEANER)?.body;
-    expect(invite).toBe(groupOptInBody("Mike", "Dana", ADDRESS));
+    expect(invite).toBe(groupInviteBody("Dana", ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
     expect(fake.posts.some((post) => post.body.includes("Cory"))).toBe(false);
   });
@@ -608,7 +607,7 @@ describe("group texting: the host's name", () => {
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
     await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(wired.cleanerSent.find((item) => item.to === CLEANER)?.body).toBe(groupOptInBody("Mike", BUSINESS, ADDRESS));
+    expect(wired.cleanerSent.find((item) => item.to === CLEANER)?.body).toBe(groupInviteBody(BUSINESS, ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
   });
 });

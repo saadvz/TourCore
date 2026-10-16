@@ -151,6 +151,7 @@ describe("Cleaner Core full setup: the diagram order", () => {
       cleanerName: "Ana",
       contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }],
       groupChat: "everyone",
+      doorCodeTo: "cleaner",
     });
     expect(people.isError).toBe(false);
     expect(people.structured?.next).toBe(SCHEDULE_NEXT);
@@ -428,9 +429,10 @@ describe("Cleaner Core full setup: who gets the texts", () => {
         { name: "Lee", role: "assistant", phone: SECOND },
       ],
       groupChat: "everyone",
+      doorCodeTo: "cleaner",
     });
-    expect(sms.sent.find((item) => item.to === OBSERVER)?.body).toContain("Sam, you're invited to the cleaning group");
-    expect(sms.sent.find((item) => item.to === CLEANER)?.body).toContain("Ana, you're invited to the cleaning group");
+    expect(sms.sent.find((item) => item.to === OBSERVER)?.body).toContain("wants to set up a group chat with you for cleaner services at");
+    expect(sms.sent.find((item) => item.to === CLEANER)?.body).toContain("wants to set up a group chat with you for cleaner services at");
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
@@ -457,7 +459,9 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     expect(groups.posts.find((post) => post.body === TIME)?.to).toEqual([HOST, CLEANER].sort());
     expect(sms.sent.some((item) => item.to === OBSERVER)).toBe(false);
     ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
-    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+    // The group holds only the host and the cleaner, so the code goes into it. The contact is never in it.
+    expect(codeRecipients(sms.sent)).toEqual([]);
+    expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
   });
 });
 
@@ -851,15 +855,18 @@ describe("Cleaner Core schedule: the new-booking alert", () => {
 describe("Cleaner Core schedule: the checkout-time nudge", () => {
   for (const groupChat of ["0", "1"] as const) {
     it(`asks the host once after the confirmed checkout time, and the code still waits for "guests have left" (group ${groupChat})`, async () => {
-      const { desk, sms, time } = await withSchedule({}, groupChat);
+      const { desk, sms, groups, time } = await withSchedule({}, groupChat);
       await optIn(desk, groupChat);
       await desk.inbound({ id: "yes-offer", from: CLEANER, text: "YES" });
       expect((await alertsAt(desk, time, "2026-10-18T14:59:00.000Z")).includes(NUDGE)).toBe(false);
       expect((await alertsAt(desk, time, "2026-10-18T15:00:00.000Z")).filter((alert) => alert === NUDGE)).toHaveLength(1);
       expect((await alertsAt(desk, time, "2026-10-18T15:30:00.000Z")).includes(NUDGE)).toBe(false);
       expect(codeRecipients(sms.sent)).toEqual([]);
+      expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE))).toEqual([]);
       ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
-      expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+      // With the group on and only the host and the cleaner in it, the code goes into the group.
+      expect(codeRecipients(sms.sent)).toEqual(groupChat === "1" ? [] : [CLEANER]);
+      expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => post.to)).toEqual(groupChat === "1" ? [[HOST, CLEANER].sort()] : []);
       expect((await alertsAt(desk, time, "2026-10-18T16:00:00.000Z")).includes(NUDGE)).toBe(false);
     });
   }
@@ -924,6 +931,7 @@ async function confirmedCleaner(extraEnv: NodeJS.ProcessEnv = {}) {
   return opened;
 }
 
+const GROUP_ONLY = "Messages go to the group. Send it with to: group.";
 const ARRIVAL_TEXT = "Yes I'll be there around 11:30";
 
 describe("Cleaner Core messages: Grok reads every message", () => {
@@ -1021,7 +1029,7 @@ describe("Cleaner Core messages: Grok reads every message", () => {
 
   it("records group messages from the cleaner and a saved contact", async () => {
     const { desk } = openDesk([HOST, CLEANER, OBSERVER], "1");
-    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone", doorCodeTo: "cleaner" });
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
@@ -1126,7 +1134,7 @@ function hostOutbox(desk: LiveDesk) {
 /** Group chat everyone with the host, the cleaner, and Sam in the group. */
 async function groupEveryone() {
   const opened = openDesk([HOST, CLEANER, OBSERVER], "1");
-  await setUp(opened.desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+  await setUp(opened.desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone", doorCodeTo: "cleaner" });
   await opened.desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
   await opened.desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
   await opened.desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
@@ -1165,12 +1173,12 @@ describe("Cleaner Core send_message: the host approves first", () => {
     const { desk, sms, groups } = await groupEveryone();
     const sentBefore = sms.sent.length;
     const postsBefore = groups.posts.length;
-    const changedText = await preview(desk, "cleaner", LATE);
-    expect(await desk.sendMessage({ to: "cleaner", text: `${LATE} Thanks!`, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
-    const changedTo = await preview(desk, "cleaner", LATE);
-    expect(await desk.sendMessage({ to: "Sam", text: LATE, confirmation: changedTo.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    const changedText = await preview(desk, "group", LATE);
+    expect(await desk.sendMessage({ to: "group", text: `${LATE} Thanks!`, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    // With the group on, a changed recipient is refused as not the group, and the code stays good for the group.
+    expect(await desk.sendMessage({ to: "Sam", text: LATE, confirmation: changedText.code })).toEqual({ ok: false, error: GROUP_ONLY });
     // A refused code is used up, so the original text can't go with it either.
-    expect(await desk.sendMessage({ to: "cleaner", text: LATE, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
+    expect(await desk.sendMessage({ to: "group", text: LATE, confirmation: changedText.code })).toEqual({ ok: false, error: APPROVAL_STALE });
     expect(sms.sent).toHaveLength(sentBefore);
     expect(groups.posts).toHaveLength(postsBefore);
     expect(hostOutbox(desk)).toEqual([]);
@@ -1257,7 +1265,7 @@ describe("Cleaner Core send_message: the host approves first", () => {
 
   it("voids a group approval when someone joins or leaves the group before the yes", async () => {
     const { desk, groups } = openDesk([HOST, CLEANER, OBSERVER], "1");
-    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone" });
+    await setUp(desk, { contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone", doorCodeTo: "cleaner" });
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     const beforeJoin = await preview(desk, "group", LATE);
@@ -1360,12 +1368,12 @@ describe("Cleaner Core send_message: the host approves first", () => {
     expect(group.question).toBe(`Send to the group: "${LATE}"?`);
     expect(ok(await desk.sendMessage({ to: "group", text: LATE, confirmation: group.code }))).toEqual({ next: "Sent to the group." });
     expect(groups.posts.filter((post) => post.body === LATE)).toEqual([{ to: [HOST, CLEANER, OBSERVER].sort(), body: LATE }]);
+    // With the group on, a message for a saved contact is refused. Nothing goes to Sam one-to-one.
     const note = "Sam, the spare towels are in the hall closet.";
-    const contact = await preview(desk, "sam", note);
-    expect(contact.question).toBe(`Send to Sam: "${note}"?`);
-    expect(ok(await desk.sendMessage({ to: "Sam", text: note, confirmation: contact.code }))).toEqual({ next: "Sent to Sam." });
-    expect(sms.sent.filter((item) => item.body === note)).toEqual([expect.objectContaining({ to: OBSERVER })]);
-    expect(hostOutbox(desk).map((item) => item.kind)).toEqual(["host-message", "host-message"]);
+    expect(await desk.sendMessage({ to: "sam", text: note })).toEqual({ ok: false, error: GROUP_ONLY });
+    expect(sms.sent.filter((item) => item.body === note)).toEqual([]);
+    expect(groups.posts.filter((post) => post.body === note)).toEqual([]);
+    expect(hostOutbox(desk).map((item) => item.kind)).toEqual(["host-message"]);
   });
 
   it("sends only to Scratch numbers on the allowlist, and refuses a contact who isn't on it", async () => {
@@ -1380,11 +1388,10 @@ describe("Cleaner Core send_message: the host approves first", () => {
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-lee", from: OFF_LIST, text: "YES" });
-    expect(await desk.sendMessage({ to: "Lee", text: LATE })).toEqual({ ok: false, error: "I can't text Lee right now." });
-    for (const to of ["cleaner", "group"]) {
-      const approval = await preview(desk, to, LATE);
-      ok(await desk.sendMessage({ to, text: LATE, confirmation: approval.code }));
-    }
+    expect(await desk.sendMessage({ to: "Lee", text: LATE })).toEqual({ ok: false, error: GROUP_ONLY });
+    expect(await desk.sendMessage({ to: "cleaner", text: LATE })).toEqual({ ok: false, error: GROUP_ONLY });
+    const approval = await preview(desk, "group", LATE);
+    ok(await desk.sendMessage({ to: "group", text: LATE, confirmation: approval.code }));
     const recipients = [...sms.sent.map((item) => item.to), ...groups.posts.flatMap((post) => post.to)];
     expect(recipients.length).toBeGreaterThan(0);
     expect(recipients.every((phone) => isScratchTestNumber(phone))).toBe(true);
@@ -1396,7 +1403,7 @@ describe("Cleaner Core send_message: the host approves first", () => {
     const { desk, sms } = await confirmedCleaner();
     const tools = ((await mcp(desk, "tools/list")).tools as { name: string; description: string }[]) ?? [];
     expect(tools.find((tool) => tool.name === "send_message")?.description).toBe(
-      "Sends the host's own message to the cleaner, the group, or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
+      "Sends the host's own message. With a group, messages go only to the group (to: group). Without one, to is the cleaner or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
     );
     const text = String((await mcp(desk, "initialize")).instructions);
     expect(text).toContain(
@@ -1835,9 +1842,10 @@ describe("Cleaner Core full diagram", () => {
     };
     const toCleaner = () => sms.sent.filter((item) => item.to === cleaner).map((item) => plain(item.body));
     const offersSent = () => [...toCleaner(), ...groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body))].filter((body) => body.startsWith("Turnover at"));
-    const remindersSent = () => toCleaner().filter((body) => body.startsWith("Reminder:"));
+    const inGroup = () => groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body));
+    const remindersSent = () => [...toCleaner(), ...inGroup()].filter((body) => body.startsWith("Reminder:"));
 
-    /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text. */
+    /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text or the group of the host and the cleaner. */
     const safe = async (step: string) => {
       await drainCleanerAlerts(hosted.root, () => hosted.inst.env(), clock);
       for (const item of sms.sent) {
@@ -1847,7 +1855,8 @@ describe("Cleaner Core full diagram", () => {
       }
       for (const post of groups.posts) {
         for (const to of post.to) expect(scratch.has(to), `${step}: group post to ${to}`).toBe(true);
-        expect(PLAIN_CODE.test(post.body), `${step}: group post`).toBe(false);
+        // The code may be in the group only while it holds just the host and the cleaner.
+        if (PLAIN_CODE.test(post.body)) expect([...post.to].sort(), `${step}: group post`).toEqual([host, cleaner].sort());
       }
       for (const post of routine) {
         expect(post.url, step).toBe(REHEARSAL_ROUTINE);
@@ -1907,7 +1916,7 @@ describe("Cleaner Core full diagram", () => {
     const booked = await checkAt("2026-10-14T14:05:00.000Z");
     expect(booked.alerts).toContain("New booking at Scratch Lane: check-in Wednesday, Oct 14, checkout Saturday, Oct 17. Use the usual 11:00 AM checkout and 4:00 PM check-in?");
     await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(toCleaner().filter((body) => body.includes("you're invited to the cleaning group"))).toHaveLength(1);
+    expect(toCleaner().filter((body) => body.includes("wants to set up a group chat with you for cleaner services at"))).toHaveLength(1);
     await safe("4 booking and times");
 
     // 5 and 6. The cleaner's first YES takes the invite. The offer waits for check-in + 1 day at 9:00 AM, then the second YES takes it.
@@ -1927,7 +1936,7 @@ describe("Cleaner Core full diagram", () => {
     await checkAt("2026-10-16T21:59:00.000Z");
     expect(remindersSent()).toEqual([]);
     await checkAt("2026-10-16T22:00:00.000Z");
-    expect(remindersSent()).toEqual([`Reminder: cleaning at ${address} on Saturday, Oct 17. Checkout is 11:00 AM. What time do you plan to arrive?`]);
+    expect(remindersSent()).toEqual([`Reminder: cleaning at ${address} on Saturday, Oct 17. Checkout is 11:00 AM. Ana, what time do you plan to arrive?`]);
     at = new Date("2026-10-16T22:10:00.000Z");
     const quietBefore = sms.sent.length;
     await fromCleaner("I'll be there around 11:30");
@@ -1937,20 +1946,23 @@ describe("Cleaner Core full diagram", () => {
       expect.objectContaining({ from: "cleaner", text: "I'll be there around 11:30", handled: "none" }),
     );
     await say("save_arrival", { time: "11:30 AM" });
-    const asked = await say("send_message", { to: "cleaner", text: PARKING });
-    expect(asked.preview).toEqual({ to: "Ana", text: PARKING });
+    // With the group on, a message to Ana alone is refused. It goes to the group.
+    expect((await tool("send_message", { to: "cleaner", text: PARKING })).text).toBe("Messages go to the group. Send it with to: group.");
+    const asked = await say("send_message", { to: "group", text: PARKING });
+    expect(asked.preview).toEqual({ to: "the group", text: PARKING });
     const code = (asked.confirmation as { code: string }).code;
     expect(sms.sent.filter((item) => item.body === PARKING)).toEqual([]);
-    expect(await say("send_message", { to: "cleaner", text: PARKING, confirmation: code })).toEqual({ next: "Sent to Ana." });
-    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toEqual([expect.objectContaining({ to: cleaner, body: PARKING })]);
-    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toEqual([]);
-    const again = await tool("send_message", { to: "cleaner", text: PARKING, confirmation: code });
+    expect(await say("send_message", { to: "group", text: PARKING, confirmation: code })).toEqual({ next: "Sent to the group." });
+    // The message goes into the group once. Nothing goes to Ana one-to-one.
+    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toEqual([]);
+    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toEqual([expect.objectContaining({ body: PARKING, to: expect.arrayContaining([cleaner]) })]);
+    const again = await tool("send_message", { to: "group", text: PARKING, confirmation: code });
     expect(again.isError).toBe(true);
     expect(again.text).toBe("That approval has expired or doesn't match. Ask the host again.");
-    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toHaveLength(1);
+    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toHaveLength(1);
     await safe("7 reminder, arrival, and message");
 
-    // 8. The checkout nudge, then "guests have left", and the private code with the lock to the cleaner only.
+    // 8. The checkout nudge, then "guests have left", and the code with the lock in the group of the host and the cleaner.
     const nudge = "Checkout time at Scratch Lane. Have the guests left?";
     expect((await checkAt("2026-10-17T14:59:00.000Z")).alerts).not.toContain(nudge);
     expect((await checkAt("2026-10-17T15:00:00.000Z")).alerts.filter((alert) => alert === nudge)).toHaveLength(1);
@@ -1958,12 +1970,15 @@ describe("Cleaner Core full diagram", () => {
     expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
     at = new Date("2026-10-17T15:10:00.000Z");
     await say("mark_guests_left", { said: "guests have left" });
-    const privateCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.`;
-    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([expect.objectContaining({ to: cleaner, body: privateCode })]);
+    // The group holds only the host and the cleaner, so the code with the lock goes into it. Nothing goes one-to-one.
+    const groupCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. Ana, reply DONE when the cleaning is finished.`;
+    expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
+    expect(groups.posts.filter((post) => PLAIN_CODE.test(post.body))).toEqual([expect.objectContaining({ body: groupCode, to: [host, cleaner].sort() })]);
     await safe("8 nudge and guests left");
 
     // 9. The checklist, one photo, a note, and DONE.
-    expect(toCleaner().at(-1)).toBe("Checklist for Scratch Lane: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.");
+    // The checklist is a group post now. Its "then reply DONE" is mid-sentence, so namedAsk leaves it as it is.
+    expect(inGroup().at(-1)).toBe("Checklist for Scratch Lane: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.");
     at = new Date("2026-10-17T15:30:00.000Z");
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${REHEARSAL_TWILIO_SID}/Messages/MMrehearsal/Media/MErehearsal`;
     await fromCleaner("", { NumMedia: "1", MediaUrl0: mediaUrl, MediaContentType0: "image/jpeg" });
@@ -1971,7 +1986,7 @@ describe("Cleaner Core full diagram", () => {
     await fromCleaner("need paper towels");
     at = new Date("2026-10-17T17:00:00.000Z");
     await fromCleaner("DONE");
-    expect(toCleaner().at(-1)).toBe("Thanks, cleaning marked done.");
+    expect(inGroup().filter((body) => body === "Thanks, cleaning marked done.")).toHaveLength(1);
     await safe("9 checklist, photo, note, DONE");
 
     // 10. check_now returns the finished cleaning, and get_job_photos returns a link that works.

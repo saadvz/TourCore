@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupOptInBody, hostDoneLine, hostStopReply } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, hostDoneLine, hostStopReply } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -27,9 +27,8 @@ const NOTHING = "Test turnover saved. Nothing was sent.";
 const WENT = "The test text went through.";
 const PROPERTY_REFUSAL = "That only works on the Scratch test property.";
 const NUMBER_REFUSAL = "That only works with 555 test numbers.";
-// No host name is saved, so the group calls the host by the business name.
-const HOST_OPT = groupOptInBody("Scratch", "Maria", LANE.property.address);
-const CLEANER_OPT = groupOptInBody("Maria", "Scratch", LANE.property.address);
+// No host name is saved, so the invite names the business. The host gets no invite in group mode.
+const CLEANER_OPT = groupInviteBody("Scratch", LANE.property.address);
 const READY = hostDoneLine(LANE.property.address);
 const HOST_STOP = hostStopReply(LANE.property.address, true);
 const HOST_STOP_OPEN = hostStopReply(LANE.property.address, false);
@@ -231,7 +230,6 @@ describe("Scratch test turnover", () => {
       }),
     ]);
     expect(shown(waiting.cleanerSent)).toEqual([
-      { to: SAVED_HOST, body: HOST_OPT },
       { to: SAVED_CLEANER, body: CLEANER_OPT },
     ]);
     expect(waiting.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
@@ -240,7 +238,6 @@ describe("Scratch test turnover", () => {
     expect(turnsOf(again)).toHaveLength(1);
     expect(turnsOf(again)[0]).toMatchObject({ checkoutTime: "9:00 AM", nextCheckInTime: "4:00 PM" });
     expect(shown(waiting.cleanerSent)).toEqual([
-      { to: SAVED_HOST, body: HOST_OPT },
       { to: SAVED_CLEANER, body: CLEANER_OPT },
     ]);
     const injected = await call(waiting, "send_test_text", { from: SAVED_CLEANER, text: "YES" });
@@ -281,10 +278,9 @@ describe("Scratch test turnover", () => {
     const cleanerNever = await scratchApp({ groupChat: true, allowlist: `${SAVED_HOST},${SAVED_CLEANER}` });
     await saveLane(cleanerNever, { host: SAVED_HOST, cleaner: SAVED_CLEANER });
     await textIn(cleanerNever, SAVED_CLEANER, "STOP");
-    expect(nextOf(await call(cleanerNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    expect(nextOf(await call(cleanerNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(NOTHING);
     expect(shown(cleanerNever.cleanerSent)).toEqual([
       { to: SAVED_CLEANER, body: CLEANER_STOP },
-      { to: SAVED_HOST, body: HOST_OPT },
     ]);
     expect(cleanerNever.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
 
@@ -360,18 +356,16 @@ describe("Scratch test turnover", () => {
     expect(turnsOf(again)).toHaveLength(1);
     expect(turnsOf(again)[0]).toMatchObject({ checkoutTime: "9:00 AM", nextCheckInTime: "4:00 PM" });
     expect(shown(wired.cleanerSent)).toEqual([
-      { to: HOST, body: HOST_OPT },
       { to: CLEANER, body: CLEANER_OPT },
     ]);
     expect(linesOf(await call(wired, "read_outbox"))).toEqual([
-      "Opt-in text to the host: sent.",
       "Opt-in text to the cleaner: sent.",
     ]);
     expect(wired.cleanerSent.every((item) => isScratchTestNumber(item.to))).toBe(true);
 
     expect(nextOf(await remember(call(wired, "send_test_text", { from: CLEANER, text: "YES" })))).toBe(WENT);
     expect(wired.cleanerSent.filter((item) => item.body.startsWith("Turnover at")).map((item) => item.to)).toEqual([CLEANER]);
-    expect(wired.cleanerSent.filter((item) => item.to === HOST).map((item) => item.body)).toEqual([HOST_OPT]);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST).map((item) => item.body)).toEqual([]);
     expect(nextOf(await remember(call(wired, "send_test_text", { from: CLEANER, text: "YES" })))).toBe(WENT);
     const waiting = await remember(call(wired, "get_turns"));
     expect(turnsOf(waiting)).toEqual([expect.objectContaining({ status: "awaiting_departure" })]);
@@ -408,7 +402,8 @@ describe("Scratch test turnover", () => {
     expect(treeContainsCode(wired.root)).toBe(false);
     expect(linesOf(await call(wired, "read_outbox")).some(containsCode)).toBe(false);
     expect(calendarReads).toBe(0);
-    expect(groupCalls).toBe(0);
+    // The host is seated by the test turn, so the engine tries the group (the intro, then the offer) and falls back to a one-to-one text.
+    expect(groupCalls).toBeGreaterThanOrEqual(1);
     expect(twilioCalls).toBe(0);
   }, 40_000);
 
@@ -417,7 +412,6 @@ describe("Scratch test turnover", () => {
     await saveLane(waiting);
     expect(nextOf(await call(waiting, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
     expect(shown(waiting.cleanerSent)).toEqual([
-      { to: HOST, body: HOST_OPT },
       { to: CLEANER, body: CLEANER_OPT },
     ]);
     expect(waiting.cleanerSent.some((item) => item.body.startsWith("Turnover at"))).toBe(false);
@@ -453,9 +447,9 @@ describe("Scratch test turnover", () => {
     const cleanerNever = await scratchApp({ groupChat: true, allowlist: `${HOST},${CLEANER}` });
     await saveLane(cleanerNever);
     expect(nextOf(await call(cleanerNever, "send_test_text", { from: CLEANER, text: "STOP" }))).toBe(WENT);
-    expect(nextOf(await call(cleanerNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(SAVED);
+    expect(nextOf(await call(cleanerNever, "add_test_turn", { checkout: CHECKOUT, checkIn: CHECK_IN }))).toBe(NOTHING);
     expect(cleanerNever.cleanerSent.filter((item) => item.to === CLEANER)).toEqual([]);
-    expect(shown(cleanerNever.cleanerSent)).toEqual([{ to: HOST, body: HOST_OPT }]);
+    expect(shown(cleanerNever.cleanerSent)).toEqual([]);
     expect(linesOf(await call(cleanerNever, "read_outbox"))).toContain("Opt-out text to the cleaner: sent.");
     expect(linesOf(await call(cleanerNever, "read_outbox")).some((line) => line.startsWith("Opt-in text to the cleaner") || line.startsWith("Cleaning offer"))).toBe(false);
 
@@ -508,7 +502,6 @@ describe("Scratch test turnover", () => {
     expect(await job.addTestTurn({ checkout: CHECKOUT, checkIn: CHECK_IN })).toEqual({ created: true });
     expect(await job.addTestTurn({ checkout: "10:00 AM", checkIn: "5:00 PM" })).toEqual({ created: false, reason: "exists" });
     expect(sent.map((item) => ({ to: item.to, kind: item.kind }))).toEqual([
-      { to: HOST, kind: "opt-in" },
       { to: CLEANER, kind: "opt-in" },
     ]);
     await job.receive({ id: "yes-opt", from: CLEANER, text: "YES" });
@@ -519,7 +512,8 @@ describe("Scratch test turnover", () => {
     expect(sent.some((item) => item.kind === "pin")).toBe(false);
     await job.receive({ id: "left", from: HOST, text: "guests have left" });
     expect(sent.filter((item) => item.kind === "pin").map((item) => item.to)).toEqual([CLEANER]);
-    expect(sent.filter((item) => item.kind === "pin").every((item) => item.channel !== "group")).toBe(true);
+    // The group holds only the host and the cleaner, so the code goes into it.
+    expect(sent.filter((item) => item.kind === "pin").every((item) => item.channel === "group" && item.audience?.length === 2)).toBe(true);
     expect(sent.filter((item) => item.kind !== "pin").every((item) => !containsCode(item.body))).toBe(true);
     expect(treeContainsCode(root)).toBe(false);
     expect(job.jobs()).toHaveLength(1);

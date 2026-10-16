@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -35,6 +35,8 @@ export type TextKind =
   | "host-checkout"
   | "host-checkin"
   | "offer"
+  /** The first text in the group, once two people have joined. */
+  | "intro"
   | "corrected"
   | "cancel-update"
   | "reminder"
@@ -124,6 +126,8 @@ export interface OutboxView {
   kind: TextKind;
   status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
+  /** Posted to the group, not texted one-to-one. */
+  group?: true;
 }
 
 export interface Counters {
@@ -370,6 +374,8 @@ export interface CleanerCoreOptions {
     hostName: string;
     cleanerName: string;
     extra?: { phone: string; name: string }[];
+    /** Where the door code goes when the group holds anyone besides the landlord and the cleaner. */
+    doorCodeTo?: "group" | "cleaner";
   };
 }
 
@@ -503,6 +509,23 @@ const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder"
 /** Job notes kept during a cleaning, newest last, and the length of each. */
 const MAX_NOTES = 5;
 const MAX_NOTE = 200;
+/** Job texts that go into the group while it has two or more people in it. */
+export const GROUP_ROUTED: ReadonlySet<TextKind> = new Set<TextKind>([
+  "offer",
+  "corrected",
+  "cancel-update",
+  "reminder",
+  "confirm",
+  "declined",
+  "started",
+  "done",
+  "next",
+  "checklist",
+  "held",
+  "emergency",
+  "host-message",
+]);
+
 const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
@@ -606,6 +629,8 @@ interface OutboxItem {
   kind: TextKind;
   status: "sent" | "failed" | "canceled" | "uncertain" | "unsent";
   jobId?: string;
+  /** Posted to the group, not texted one-to-one. */
+  group?: true;
   lease?: ActionLease;
 }
 
@@ -644,6 +669,7 @@ interface Stored {
   pinFailurePending?: boolean;
   pinPhase?: { id: string; phase: "accepted" | "delivered" | "failed" | "undelivered" }[];
   groupPinTerminal?: boolean;
+  lastIntro?: string;
   hostNotes?: { id: string; body: string }[];
 }
 
@@ -736,6 +762,8 @@ class Engine implements CleanerCore {
   private pinFailurePending = false;
   private pinPhase = new Map<string, "accepted" | "delivered" | "failed" | "undelivered">();
   private groupPinTerminal = false;
+  /** The members (sorted, comma-joined) of the last group that was introduced. A different membership gets a fresh intro. */
+  private lastIntro: string | undefined;
   private hostNoteState: { id: string; body: string }[] = [];
   private session: OnboardingSession | undefined;
   private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
@@ -749,6 +777,7 @@ class Engine implements CleanerCore {
   private hadStoredConsent = false;
   private storeLoaded = false;
   private readonly inflight = new Set<string>();
+  private pendingIntros: CleanerText[] = [];
   /** Inbound ids being handled that carried media. They never get the generic guide reply. */
   private readonly withMedia = new Set<string>();
   private sourceRecords: SourceRecord[] = [];
@@ -854,8 +883,11 @@ class Engine implements CleanerCore {
     if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.inflight.add(input.id);
     if ((input.media ?? 0) > 0) this.withMedia.add(input.id);
+    this.pendingIntros = [];
     try {
-      const { label, ...result } = await this.receiveClaimed(input, from);
+      const { label, ...claimed } = await this.receiveClaimed(input, from);
+      const intros = this.takeIntros().filter((intro) => !claimed.sent.includes(intro));
+      const result = intros.length > 0 ? { ...claimed, sent: [...intros, ...claimed.sent] } : claimed;
       return this.options.grokReadsMessages ? { ...result, outcome: label ?? outcomeOf(result) } : result;
     } finally {
       this.inflight.delete(input.id);
@@ -936,6 +968,7 @@ class Engine implements CleanerCore {
 
   async runReminders(): Promise<ReminderResult> {
     if (!this.enabled || this.optedOut || this.problemHold || !this.scratchReady()) return { sent: [], failed: [] };
+    this.pendingIntros = [];
     const sent: CleanerText[] = await this.settleUncertain();
     const failed: string[] = [];
     // An offer held by the offer trigger or quiet hours goes out on the first check after it is due.
@@ -948,8 +981,8 @@ class Engine implements CleanerCore {
         if (!this.triggerDue(trigger, job.checkoutDate)) continue;
         const id = `reminder:${job.id}:${trigger.id}:${job.checkoutDate}:${fact.version}:${fact.minutes}`;
         this.cancelOtherReminders(job.id, trigger.id, id);
-        const existing = this.outboxState.find((item) => item.id === id);
-        if (existing?.status === "sent" || existing?.status === "canceled") continue;
+        const existing = this.delivery(id);
+        if (existing === "sent" || existing === "canceled") continue;
         const replaced = (trigger.replaces ?? []).some((other) => this.delivery(`reminder:${job.id}:${other}:${job.checkoutDate}:${fact.version}:${fact.minutes}`) === "sent");
         if (replaced) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
@@ -968,7 +1001,7 @@ class Engine implements CleanerCore {
           body: addressed.body,
         });
         if (text) sent.push(text);
-        else if (this.outboxState.find((item) => item.id === id)?.status === "failed") failed.push(id);
+        else if (this.delivery(id) === "failed") failed.push(id);
       }
     }
     if (this.pin) {
@@ -979,7 +1012,7 @@ class Engine implements CleanerCore {
       }
     }
     this.save();
-    return { sent, failed };
+    return { sent: [...this.takeIntros(), ...sent], failed };
   }
 
   jobs(): JobView[] {
@@ -994,6 +1027,7 @@ class Engine implements CleanerCore {
       kind: item.kind,
       status: item.status,
       ...(item.jobId ? { jobId: item.jobId } : {}),
+      ...(item.group ? { group: true as const } : {}),
     }));
   }
 
@@ -1163,7 +1197,7 @@ class Engine implements CleanerCore {
     this.addFact(TEST_TURN_ID, "checkin", checkIn);
     this.deferCleaner = false;
     if (this.groupChat && !this.ownerOptedOut && this.hostGroup !== "out") {
-      this.hostGroup = "pending";
+      this.hostGroup = "in";
       this.hostGroupSaved = true;
     }
     await this.sendHostOptIn();
@@ -1316,7 +1350,7 @@ class Engine implements CleanerCore {
         id: `opt-in:${phone}`,
         to: phone,
         kind: "opt-in",
-        body: groupOptInBody(extra.name, `${this.groupChat.hostName} and ${this.groupChat.cleanerName}`, this.options.property.address),
+        body: groupInviteBody(this.groupChat.hostName, this.options.property.address),
       });
       if (text) sent.push(text);
     }
@@ -1575,18 +1609,17 @@ class Engine implements CleanerCore {
   }
 
   private async sendHostOptIn(): Promise<CleanerText | null> {
-    if (!this.owner || this.ownerOptedOut || (this.groupChat && this.hostGroup === "out")) return null;
+    if (this.groupChat) return null;
+    if (!this.owner || this.ownerOptedOut) return null;
     const id = `opt-in:${this.owner}`;
     if (this.delivery(id) === "sent") return null;
-    const body = this.groupChat
-      ? groupOptInBody(this.groupChat.hostName, this.groupChat.cleanerName, this.options.property.address)
-      : `Hi, this is ${this.hostName} at ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
+    const body = `Hi, this is ${this.hostName} at ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
     return this.emit({ id, to: this.owner, kind: "opt-in", body });
   }
 
   private cleanerOptInBody(): string {
     if (this.groupChat && this.cleanerPhone) {
-      return groupOptInBody(this.groupChat.cleanerName, this.groupChat.hostName, this.options.property.address);
+      return groupInviteBody(this.groupChat.hostName, this.options.property.address);
     }
     return this.options.optInBody ?? `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
   }
@@ -1713,13 +1746,16 @@ class Engine implements CleanerCore {
 
   private async tellHostDone(job: Job): Promise<void> {
     if (!this.owner) return;
-    await this.emitOne({
+    const draft: Draft = {
       id: `done-host:${job.id}`,
       jobId: job.id,
       to: this.owner,
       kind: "done",
       body: hostDoneLine(this.options.property.address),
-    });
+    };
+    // The landlord's done line goes into the group too. It stays one-to-one when the group can't be made.
+    if (this.routesToGroup(draft) && (await this.emitRouted(draft)) !== undefined) return;
+    await this.emitOne(draft);
   }
 
   private async clearDeparture(id: string): Promise<ReceiveResult> {
@@ -1784,13 +1820,32 @@ class Engine implements CleanerCore {
       const body = doorCodeBody(this.options.property.address, pin, this.options.lockLocation?.trim() || undefined);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
-      const text = await this.emit({
-        id: key,
-        jobId: job.id,
-        to: addressed.to,
-        kind: "pin",
-        body: addressed.body,
-      });
+      let text: CleanerText | null = null;
+      let grouped = false;
+      if (this.pinChannel() === "group") {
+        await this.ensureIntro();
+        const audience = this.groupAudience();
+        text = await this.emitOne({
+          id: key,
+          jobId: job.id,
+          to: addressed.to,
+          kind: "pin",
+          body: groupDoorCodeBody(this.options.property.address, pin, this.groupChat!.cleanerName, this.options.lockLocation?.trim() || undefined),
+          channel: "group",
+          audience,
+        });
+        // Only a group that was never confirmed falls back, to the cleaner alone. A failed or uncertain post goes to review.
+        grouped = text !== null || this.delivery(key) !== undefined || Boolean(this.options.holdSends?.());
+      }
+      if (!grouped) {
+        text = await this.emit({
+          id: key,
+          jobId: job.id,
+          to: addressed.to,
+          kind: "pin",
+          body: addressed.body,
+        });
+      }
       if (text) sent.push(text);
       if (this.delivery(key) === "sent") sent.push(...(await this.sendChecklist(job)));
     }
@@ -1967,6 +2022,13 @@ class Engine implements CleanerCore {
 
   private async drainOne(): Promise<CleanerText[]> {
     if (this.optedOut || this.problemHold) return [];
+    const intro = await this.ensureIntro();
+    if (intro) this.pendingIntros = this.pendingIntros.filter((item) => item !== intro);
+    const rest = await this.drainJobs();
+    return intro ? [intro, ...rest] : rest;
+  }
+
+  private async drainJobs(): Promise<CleanerText[]> {
     for (const job of this.ordered()) {
       if (job.declined) continue;
       if (job.canceled) {
@@ -2091,16 +2153,24 @@ class Engine implements CleanerCore {
 
   /** Offer, reminder, and door-code texts are re-addressed here. No cleaner record means they are not sent. */
   private async emit(draft: Draft): Promise<CleanerText | null> {
+    // A group that couldn't be confirmed sends one-to-one instead, with no host copy and no second group try.
+    let fellBack = false;
+    if (!draft.channel && this.routesToGroup(draft)) {
+      let routed = draft;
+      if (draft.kind === "offer" || draft.kind === "reminder") {
+        const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
+        if (!addressed) return null;
+        routed = { ...draft, to: addressed.to, body: addressed.body };
+      } else if (draft.kind === "cancel-update" && this.cleanerPhone) {
+        routed = { ...draft, to: this.cleanerPhone };
+      }
+      const grouped = await this.emitRouted(routed);
+      if (grouped !== undefined) return grouped;
+      fellBack = true;
+    }
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed) return null;
-      // A group offer that fell back sends no host copy, so a group that just failed isn't tried again.
-      let fellBack = false;
-      if (draft.kind === "offer" && this.groupOfferOpen()) {
-        const grouped = await this.emitGroupOffer({ ...draft, body: addressed.body });
-        if (grouped !== undefined) return grouped;
-        fellBack = true;
-      }
       const text = await this.emitOne({
         id: draft.id,
         ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -2148,34 +2218,85 @@ class Engine implements CleanerCore {
     if (this.everConsented) this.hostGroup = "in";
   }
 
-  /** The offer goes to the group when the host and the cleaner are both in it. */
-  private groupOfferOpen(): boolean {
-    if (!this.groupChat || !this.owner || !this.cleanerPhone) return false;
+  /** The group exists for job texts once the cleaner and one more person are in it. */
+  private groupRouted(): boolean {
+    if (!this.groupChat || !this.cleanerPhone) return false;
     const audience = this.groupAudience();
-    return audience.includes(this.owner) && audience.includes(this.cleanerPhone);
+    return audience.length >= 2 && audience.includes(this.cleanerPhone);
   }
 
   /**
-   * Posts the offer once into the group, asking the cleaner by name, with no one-to-one offer and no
-   * host copy. Undefined when the group couldn't be confirmed, so the one-to-one offer goes instead.
+   * Where the door code goes now. The group when it holds only the landlord and the approved cleaner,
+   * or when it holds anyone else and the landlord chose the group. Otherwise the cleaner alone.
    */
-  private async emitGroupOffer(draft: Draft): Promise<CleanerText | null | undefined> {
+  private pinChannel(): "group" | "private" {
+    if (!this.groupChat || !this.groupRouted() || !this.cleanerPhone || !this.options.cleaner.approved || this.cleanerConsent !== "in") return "private";
+    const audience = this.groupAudience();
+    const onlyLandlordAndCleaner = Boolean(this.owner) && audience.length === 2 && audience.includes(this.owner!) && audience.includes(this.cleanerPhone);
+    if (onlyLandlordAndCleaner) return "group";
+    return this.groupChat.doorCodeTo === "group" ? "group" : "private";
+  }
+
+  private routesToGroup(draft: Draft): boolean {
+    if (!GROUP_ROUTED.has(draft.kind) || !this.groupRouted()) return false;
+    if (this.owner && draft.to === this.owner) {
+      // The cancellation is for the cleaner, so it goes to the group whoever it is addressed to.
+      if (draft.kind === "cancel-update") return true;
+      // The landlord's own line only goes there when the landlord is in the group.
+      return (draft.kind === "done" || draft.kind === "emergency") && this.groupAudience().includes(this.owner);
+    }
+    return true;
+  }
+
+  private seatName(phone: string): string | undefined {
+    return this.groupSeats().find((seat) => seat.phone === phone)?.name;
+  }
+
+  /** The same line already posted to the group for this job, under another id. */
+  private groupDuplicate(draft: Draft, id: string, body: string): boolean {
+    if (draft.kind !== "done" || !draft.jobId) return false;
+    const seen = this.redact(body);
+    return this.outboxState.some(
+      (item) => item.id !== id && item.id.endsWith(":group") && item.status === "sent" && item.kind === draft.kind && item.jobId === draft.jobId && item.body === seen,
+    );
+  }
+
+  /**
+   * Posts a job text once into the group, asking the cleaner by name, with no one-to-one copy.
+   * Undefined when the group couldn't be confirmed, so the one-to-one text goes instead.
+   * A failed or uncertain post goes to review and is never sent one-to-one as well.
+   */
+  private async emitRouted(draft: Draft): Promise<CleanerText | null | undefined> {
     if (!this.groupChat) return undefined;
     const id = `${draft.id}:group`;
-    if (this.delivery(id) === "sent") return null;
+    // A text already sent one-to-one (an older store, an earlier fallback) is never posted again.
+    if (this.delivery(draft.id) === "sent" || this.delivery(id) === "sent") return null;
+    await this.ensureIntro();
+    const audience = this.groupAudience();
+    const name = this.seatName(draft.to);
+    // The landlord's approved words are posted exactly as approved.
+    const body = draft.kind === "offer" ? groupOfferBody(this.groupChat.cleanerName, draft.body) : name && draft.kind !== "host-message" ? namedAsk(name, draft.body) : draft.body;
+    if (this.groupDuplicate(draft, id, body)) return null;
+    // A group text with the code in split digits is held, not sent, and not sent one-to-one either.
+    if (this.pin && draft.kind !== "pin" && joinSplitDigits(body).includes(this.pin)) {
+      await this.openReview("possible-code-exposure", id, true);
+      return null;
+    }
     const text = await this.emitOne({
       id,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
-      to: this.cleanerPhone ?? draft.to,
-      body: groupOfferBody(this.groupChat.cleanerName, draft.body),
-      kind: "offer",
+      to: this.cleanerPhone ?? audience[0] ?? draft.to,
+      body,
+      kind: draft.kind,
       channel: "group",
-      audience: this.groupAudience(),
+      audience,
       ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
     });
     const status = this.delivery(id);
     if (status === "sent") {
-      if (this.messagingMode() !== "cleaner-only") await this.copyOffer(draft, draft.to);
+      if (draft.kind === "offer" && this.messagingMode() !== "cleaner-only") await this.copyOffer(draft, draft.to);
+      // The landlord's own line still reaches Grok through get_state, beside the group post.
+      if (this.owner && draft.to === this.owner) this.keepHostNote(`host:${draft.kind}:${draft.body}`, draft.body);
       return text;
     }
     // A failed or uncertain post goes to review. Only a group that was never confirmed falls back.
@@ -2257,6 +2378,8 @@ class Engine implements CleanerCore {
     const job = this.codeJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key || this.delivery(key) !== "sent") return;
+    // A code posted to the group was not delivered privately.
+    if (this.outboxState.find((item) => item.id === key)?.group) return;
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
@@ -2294,7 +2417,15 @@ class Engine implements CleanerCore {
     if (this.ownerDeclined(draft)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
-      if (draft.channel === "group" || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
+      if (draft.channel === "group") {
+        // The group is checked on every send, against who is in it right now.
+        const now = this.groupAudience();
+        const audience = draft.audience ?? [];
+        const same = audience.length === now.length && audience.every((phone) => now.includes(phone));
+        if (this.pinChannel() !== "group" || !same || !this.cleanerPhone || !audience.includes(this.cleanerPhone) || draft.to !== this.cleanerPhone) {
+          throw new Error("The door code only goes to the approved cleaner.");
+        }
+      } else if (this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
         throw new Error("The door code only goes to the approved cleaner.");
       }
       if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone) {
@@ -2302,6 +2433,9 @@ class Engine implements CleanerCore {
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
+    } else if (this.pin && draft.channel === "group" && joinSplitDigits(draft.body).includes(this.pin)) {
+      // A group text that holds the code in split digits is held back, not sent, and goes to review.
+      return this.openReview("possible-code-exposure", draft.id, true);
     } else if (draft.kind === "host-message" && this.pin && joinSplitDigits(draft.body).includes(this.pin)) {
       throw new Error("The door code leaked into a host message.");
     } else if (!this.pin && /\bdoor code\b/i.test(ownWords) && draft.kind !== "opt-in" && draft.kind !== "review") {
@@ -2331,7 +2465,7 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
-        if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
+        if (draft.kind !== "pin" && draft.kind !== "intro" && !isPrivateCodeLine(draft.body)) {
           this.keepHostNote(`group-unconfirmed:${this.options.property.id}:${draft.kind}`, groupUnconfirmedLine(draft.kind));
         }
         return null;
@@ -2376,6 +2510,7 @@ class Engine implements CleanerCore {
       kind: draft.kind,
       status,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      ...(draft.channel === "group" ? { group: true as const } : {}),
       lease: {
         version: 1,
         actor: "engine",
@@ -2422,7 +2557,7 @@ class Engine implements CleanerCore {
     const reporterIsHost = Boolean(this.owner && from === this.owner);
     const hostId = `emergency-host:${key}`;
     const host = !reporterIsHost && this.owner
-      ? await this.emitOne({
+      ? await this.emit({
           id: hostId,
           ...(jobId ? { jobId } : {}),
           to: this.owner,
@@ -2430,6 +2565,7 @@ class Engine implements CleanerCore {
           body: this.injuryAlert(from),
         })
       : null;
+    // The hold line tells the landlord to restart the job through Grok, so it stays one-to-one.
     const hold = !reporterIsHost && this.owner
       ? await this.emitOne({
           id: `injury-hold:${key}`,
@@ -2440,7 +2576,7 @@ class Engine implements CleanerCore {
         })
       : null;
     const hostReached = !reporterIsHost && this.delivery(hostId) === "sent";
-    const ack = await this.emitOne({
+    const ack = await this.emit({
       id: `emergency:${inboundId}`,
       ...(jobId ? { jobId } : {}),
       to: from,
@@ -2553,7 +2689,55 @@ class Engine implements CleanerCore {
     return this.groupSeats().filter((seat) => seat.consent === "in").map((seat) => seat.phone);
   }
 
+  /** The intro for the people in the group now. None until the cleaner and one more person are in. */
+  private introId(): { id: string; members: string; seats: GroupSeat[] } | undefined {
+    if (!this.groupChat) return undefined;
+    const seats = this.groupSeats().filter((seat) => seat.consent === "in");
+    // The group starts once the cleaner has joined the host or a contact. Contacts alone don't start it.
+    if (seats.length < 2 || !seats.some((seat) => seat.phone === this.cleanerPhone)) return undefined;
+    const members = seats.map((seat) => seat.phone).sort().join(",");
+    // A membership introduced before (a member left, then came back) gets a new id, so its intro is posted again.
+    const base = `intro:${members}`;
+    let id = base;
+    for (let n = 2; this.delivery(id) !== undefined; n += 1) id = `${base}:${n}`;
+    return { id, members, seats };
+  }
+
+  /**
+   * Posts an intro whenever the people in the group differ from the last group that got one, as soon as
+   * two people in the group have said yes. Only engine steps call it. Opening the engine never does.
+   * A failed or uncertain intro goes to review and is not posted again for that membership, and it never
+   * holds back the group's other texts.
+   */
+  private async ensureIntro(): Promise<CleanerText | null> {
+    const intro = this.introId();
+    if (!intro || !this.groupChat || this.lastIntro === intro.members) return null;
+    const audience = intro.seats.map((seat) => seat.phone);
+    const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
+    if (!to) return null;
+    const text = await this.emit({
+      id: intro.id,
+      to,
+      body: groupIntroBody(intro.seats.map((seat) => seat.name), this.groupChat.hostName, this.options.property.address),
+      kind: "intro",
+      channel: "group",
+      audience,
+    });
+    // Once an attempt is on record (sent, failed or waiting), this membership is introduced.
+    if (this.delivery(intro.id) !== undefined) this.lastIntro = intro.members;
+    if (text) this.pendingIntros.push(text);
+    return text;
+  }
+
+  /** An intro posted during a step is listed first among that step's texts. */
+  private takeIntros(): CleanerText[] {
+    const taken = this.pendingIntros;
+    this.pendingIntros = [];
+    return taken;
+  }
+
   private async emitGroup(id: string, body: string, kind: TextKind, jobId?: string): Promise<CleanerText | null> {
+    if (kind !== "intro") await this.ensureIntro();
     const audience = this.groupAudience();
     const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
     if (!to) return null;
@@ -2833,8 +3017,10 @@ class Engine implements CleanerCore {
     return this.outboxState.some((item) => item.jobId === jobId && item.status === "sent" && item.kind !== "cancel-update");
   }
 
+  /** A text posted into the group is kept under `{id}:group`, and counts as the delivery of `id`. */
   private delivery(id: string): OutboxItem["status"] | undefined {
-    return this.outboxState.find((item) => item.id === id)?.status;
+    const status = (key: string) => this.outboxState.find((item) => item.id === key)?.status;
+    return status(id) ?? status(`${id}:group`);
   }
 
   private dropUncertain(id: string): void {
@@ -2852,7 +3038,7 @@ class Engine implements CleanerCore {
 
   private cancelOtherReminders(jobId: string, triggerId: string, keepId: string): void {
     for (const item of this.outboxState) {
-      if (item.kind !== "reminder" || item.jobId !== jobId || item.status === "sent" || item.id === keepId) continue;
+      if (item.kind !== "reminder" || item.jobId !== jobId || item.status === "sent" || item.id === keepId || item.id === `${keepId}:group`) continue;
       if (item.id.startsWith(`reminder:${jobId}:${triggerId}:`)) item.status = "canceled";
     }
   }
@@ -3007,6 +3193,8 @@ class Engine implements CleanerCore {
     if (!body || !this.canSendHostMessage(input.to)) return null;
     const id = `host-message:${randomUUID()}`;
     if (input.to === "group") {
+      // The intro goes first, so it never trails a host message.
+      await this.ensureIntro();
       const audience = this.groupAudience();
       const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
       if (!to) return null;
@@ -3119,6 +3307,12 @@ class Engine implements CleanerCore {
       }
     }
     if (record.groupPinTerminal === true) this.groupPinTerminal = true;
+    if (typeof record.lastIntro === "string") this.lastIntro = record.lastIntro;
+    else {
+      // A store from before this field: the last intro row names the last introduced membership.
+      const last = [...(record.outbox ?? [])].reverse().find((item) => item.kind === "intro" && item.id.startsWith("intro:"));
+      if (last) this.lastIntro = last.id.slice("intro:".length).split(":")[0];
+    }
     this.hostNoteState = (record.hostNotes ?? []).filter((note) => typeof note?.id === "string" && typeof note?.body === "string");
     if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
@@ -3159,7 +3353,7 @@ class Engine implements CleanerCore {
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
-      ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal, ...(this.lastIntro ? { lastIntro: this.lastIntro } : {}) } : {}),
       ...(this.problemHold ? { problemHold: true } : {}),
       ...(this.ownerOptedOut ? { ownerOptedOut: true } : {}),
       ...(this.holdCause ? { holdCause: this.holdCause } : {}),
