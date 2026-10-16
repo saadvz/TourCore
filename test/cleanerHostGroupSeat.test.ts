@@ -85,7 +85,7 @@ describe("host group seat", () => {
       { to: CLEANER, body: GROUP_OFFER, kind: "offer", channel: "group", audience: [OWNER, CLEANER] },
     ]);
     expect(sent.sent.filter((text) => text.body === READY)).toEqual([
-      { to: OWNER, body: READY, kind: "done" },
+      { to: CLEANER, body: READY, kind: "done", channel: "group", audience: [OWNER, CLEANER] },
     ]);
     expect(sent.sent.filter((text) => text.kind === "pin")).toEqual([
       { to: CLEANER, body: PRIVATE_PIN, kind: "pin" },

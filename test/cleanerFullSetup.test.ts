@@ -1364,7 +1364,9 @@ describe("Cleaner Core send_message: the host approves first", () => {
     const contact = await preview(desk, "sam", note);
     expect(contact.question).toBe(`Send to Sam: "${note}"?`);
     expect(ok(await desk.sendMessage({ to: "Sam", text: note, confirmation: contact.code }))).toEqual({ next: "Sent to Sam." });
-    expect(sms.sent.filter((item) => item.body === note)).toEqual([expect.objectContaining({ to: OBSERVER })]);
+    // With the group on, a message for Sam goes into the group too. Nothing goes to Sam one-to-one.
+    expect(sms.sent.filter((item) => item.body === note)).toEqual([]);
+    expect(groups.posts.filter((post) => post.body === note)).toEqual([{ to: [HOST, CLEANER, OBSERVER].sort(), body: note }]);
     expect(hostOutbox(desk).map((item) => item.kind)).toEqual(["host-message", "host-message"]);
   });
 
@@ -1835,7 +1837,8 @@ describe("Cleaner Core full diagram", () => {
     };
     const toCleaner = () => sms.sent.filter((item) => item.to === cleaner).map((item) => plain(item.body));
     const offersSent = () => [...toCleaner(), ...groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body))].filter((body) => body.startsWith("Turnover at"));
-    const remindersSent = () => toCleaner().filter((body) => body.startsWith("Reminder:"));
+    const inGroup = () => groups.posts.filter((post) => post.to.includes(cleaner)).map((post) => plain(post.body));
+    const remindersSent = () => [...toCleaner(), ...inGroup()].filter((body) => body.startsWith("Reminder:"));
 
     /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text. */
     const safe = async (step: string) => {
@@ -1927,7 +1930,7 @@ describe("Cleaner Core full diagram", () => {
     await checkAt("2026-10-16T21:59:00.000Z");
     expect(remindersSent()).toEqual([]);
     await checkAt("2026-10-16T22:00:00.000Z");
-    expect(remindersSent()).toEqual([`Reminder: cleaning at ${address} on Saturday, Oct 17. Checkout is 11:00 AM. What time do you plan to arrive?`]);
+    expect(remindersSent()).toEqual([`Reminder: cleaning at ${address} on Saturday, Oct 17. Checkout is 11:00 AM. Ana, what time do you plan to arrive?`]);
     at = new Date("2026-10-16T22:10:00.000Z");
     const quietBefore = sms.sent.length;
     await fromCleaner("I'll be there around 11:30");
@@ -1942,12 +1945,13 @@ describe("Cleaner Core full diagram", () => {
     const code = (asked.confirmation as { code: string }).code;
     expect(sms.sent.filter((item) => item.body === PARKING)).toEqual([]);
     expect(await say("send_message", { to: "cleaner", text: PARKING, confirmation: code })).toEqual({ next: "Sent to Ana." });
-    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toEqual([expect.objectContaining({ to: cleaner, body: PARKING })]);
-    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toEqual([]);
+    // With the group on, the message to Ana goes into the group once. Nothing goes to Ana one-to-one.
+    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toEqual([]);
+    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toEqual([expect.objectContaining({ body: PARKING, to: expect.arrayContaining([cleaner]) })]);
     const again = await tool("send_message", { to: "cleaner", text: PARKING, confirmation: code });
     expect(again.isError).toBe(true);
     expect(again.text).toBe("That approval has expired or doesn't match. Ask the host again.");
-    expect(sms.sent.filter((item) => item.body.includes(PARKING))).toHaveLength(1);
+    expect(groups.posts.filter((post) => post.body.includes(PARKING))).toHaveLength(1);
     await safe("7 reminder, arrival, and message");
 
     // 8. The checkout nudge, then "guests have left", and the private code with the lock to the cleaner only.
@@ -1963,7 +1967,8 @@ describe("Cleaner Core full diagram", () => {
     await safe("8 nudge and guests left");
 
     // 9. The checklist, one photo, a note, and DONE.
-    expect(toCleaner().at(-1)).toBe("Checklist for Scratch Lane: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.");
+    // The checklist is a group post now. Its "then reply DONE" is mid-sentence, so namedAsk leaves it as it is.
+    expect(inGroup().at(-1)).toBe("Checklist for Scratch Lane: Strip the beds; Restock coffee. Send photos, then reply DONE when finished.");
     at = new Date("2026-10-17T15:30:00.000Z");
     const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${REHEARSAL_TWILIO_SID}/Messages/MMrehearsal/Media/MErehearsal`;
     await fromCleaner("", { NumMedia: "1", MediaUrl0: mediaUrl, MediaContentType0: "image/jpeg" });
@@ -1971,7 +1976,7 @@ describe("Cleaner Core full diagram", () => {
     await fromCleaner("need paper towels");
     at = new Date("2026-10-17T17:00:00.000Z");
     await fromCleaner("DONE");
-    expect(toCleaner().at(-1)).toBe("Thanks, cleaning marked done.");
+    expect(inGroup().filter((body) => body === "Thanks, cleaning marked done.")).toHaveLength(1);
     await safe("9 checklist, photo, note, DONE");
 
     // 10. check_now returns the finished cleaning, and get_job_photos returns a link that works.

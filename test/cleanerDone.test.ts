@@ -247,11 +247,16 @@ describe("door code stays out of the group", () => {
     expect(groups.some((text) => text.body.includes(PIN) || text.body.includes("Door code"))).toBe(false);
     expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
     const done = await job.receive({ id: "done-group", from: CLEANER, text: "DONE", channel: "group" });
-    expect(done.sent).toEqual([{ to: CLEANER, body: DONE_ACK, kind: "done" }]);
+    // Both done lines go into the group now, one post each, and nothing one-to-one.
+    const groupDone = (sent: CleanerText[]) => sent.filter((text) => text.kind === "done");
+    expect(done.sent).toEqual([{ to: CLEANER, body: DONE_ACK, kind: "done", channel: "group", audience: [OWNER, CLEANER] }]);
     expect(job.jobs()[0]?.status).toBe("done");
-    expect(hostReady(box.sent)).toEqual([{ to: OWNER, body: HOST_DONE, kind: "done" }]);
+    expect(groupDone(box.sent).map(({ to, body, channel, audience }) => ({ to, body, channel, audience }))).toEqual([
+      { to: CLEANER, body: DONE_ACK, channel: "group", audience: [OWNER, CLEANER] },
+      { to: CLEANER, body: HOST_DONE, channel: "group", audience: [OWNER, CLEANER] },
+    ]);
     await job.receive({ id: "done-group-2", from: CLEANER, text: "DONE", channel: "group" });
-    expect(hostReady(box.sent)).toHaveLength(1);
+    expect(box.sent.filter((text) => text.body === HOST_DONE)).toHaveLength(1);
     expect(box.sent.filter((text) => text.channel === "group").some((text) => text.body.includes("Door code") || text.body.includes(PIN))).toBe(false);
   });
 });

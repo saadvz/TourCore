@@ -192,7 +192,7 @@ async function confirmedJob(wired: WiredApp, stay: { id: string; start: string; 
   await yes(wired, "SM-demo-yes-2");
 }
 
-function textKind(item: SentSms): string {
+function textKind(item: { body: string }): string {
   if (/^Update: checkout at .* moved to /.test(item.body)) return "corrected";
   if (/^Update: the cleaning at .* is canceled/.test(item.body)) return "cancel-update";
   if (/^Reminder:/.test(item.body)) return "reminder";
@@ -517,11 +517,13 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     expect(wired.cleanerSent).toHaveLength(sms);
     expect(stub.posts).toHaveLength(posts);
     expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
-    const got = wired.cleanerSent.slice(sms);
+    // The corrected text goes once into the group, naming the cleaner, and nothing goes one-to-one.
+    expect(wired.cleanerSent).toHaveLength(sms);
+    const got = stub.posts.slice(posts);
     expect(got.map(textKind)).toEqual(["corrected"]);
     expect(got[0]?.body).toContain("Friday, Oct 16 at 10:30 AM");
+    expect(got[0]?.body).toMatch(/, reply YES to keep the cleaning/);
     expect(got[0]?.body).not.toContain("3:00 PM");
-    expect(stub.posts).toHaveLength(posts);
   });
 
   it("with group chat on, a removed stay sends the cleaner one cancellation", async () => {
@@ -1009,12 +1011,14 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
       expect(turnOn(turns, "2026-10-14")?.status).toBe("done");
       expect(turnOn(turns, "2026-10-24")).toMatchObject({ checkoutTime: "11:00 AM", nextCheckInTime: "4:00 PM", status: "offered" });
       await cleanerSays(wired, "YES", "SM-second-yes");
-      const confirmed = toTheCleaner(wired, before).filter((item) => item.body.startsWith("Cleaning is scheduled for"));
+      // With group chat on, the confirmation is a group post instead of a one-to-one text.
+      const confirmed = [...toTheCleaner(wired, before), ...(group?.posts.slice(postsBefore) ?? [])].filter((item) => item.body.startsWith("Cleaning is scheduled for"));
       expect(confirmed.map((item) => item.body)).toEqual([`Cleaning is scheduled for Saturday, Oct 24 at 11:00 AM at ${ADDRESS}.`]);
     });
 
     it(`confirm_times works for a stay with no next stay (group chat ${groupChat ? "on" : "off"})`, async () => {
-      if (groupChat) setCleanerGroupFetch(groupStub().impl);
+      const group = groupChat ? groupStub() : undefined;
+      if (group) setCleanerGroupFetch(group.impl);
       const wired = await app({ groupChat });
       await setUpGoogle(wired);
       expect((await call(wired, "run_checks", { googleEvents: googleList([TODAY_STAY]) })).isError).toBe(false);
@@ -1025,7 +1029,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
       expect((await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY]) })).structured?.needsTimes).toBeUndefined();
       await yes(wired, "SM-single-yes-1");
       await yes(wired, "SM-single-yes-2");
-      const confirmed = toTheCleaner(wired).filter((item) => item.body.startsWith("Cleaning is scheduled for"));
+      const confirmed = [...toTheCleaner(wired), ...(group?.posts ?? [])].filter((item) => item.body.startsWith("Cleaning is scheduled for"));
       expect(confirmed.map((item) => item.body)).toEqual([`Cleaning is scheduled for Wednesday, Oct 14 at 10:30 AM at ${ADDRESS}.`]);
     });
   }
@@ -1630,7 +1634,9 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await fromCleaner("DONE");
     const ready = alertsOf(await say("check_now", { googleEvents: googleList([today]) }));
     expect([...ready, ...(await notesNow())]).toContain(readyNote);
-    expect(await labelled("Done note to the host")).toHaveLength(1);
+    // Both done lines are group posts now, so the outbox shows both under the cleaner who sent the group post.
+    expect(await labelled("Done note to the host")).toEqual([]);
+    expect(await labelled("Done note to the cleaner")).toHaveLength(2);
     await safe("7 done");
 
     // Booking changes run on the same property, with no reset, as on the real phones.

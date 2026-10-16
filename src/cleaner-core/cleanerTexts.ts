@@ -252,6 +252,12 @@ const GROUP_SEND_TOPICS = new Map<string, string>([
   ["offer", "cleaning offer"],
   ["reminder", "reminder"],
   ["opt-in", "invitation"],
+  ["corrected", "time change"],
+  ["cancel-update", "cancellation"],
+  ["started", "start note"],
+  ["done", "done note"],
+  ["emergency", "injury alert"],
+  ["intro", "intro"],
 ]);
 
 export function groupUnconfirmedLine(kind: string): string {
