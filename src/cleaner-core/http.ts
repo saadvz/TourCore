@@ -1,12 +1,12 @@
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
-import { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
+import { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, DOOR_CODE_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type DeleteSecrets, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
-export { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
+export { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, DOOR_CODE_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
 
 /** The response was already written (an OAuth 401/403/503). The caller sends nothing more. */
 export const ANSWERED = { answered: true } as const;
@@ -93,6 +93,35 @@ export function calendarUploadCode(pathname: string): string | undefined {
   if (!pathname.startsWith(CALENDAR_UPLOAD_PREFIX)) return undefined;
   const code = pathname.slice(CALENDAR_UPLOAD_PREFIX.length);
   return UPLOAD_CODE.test(code) ? code : undefined;
+}
+
+/** The one-time code in a door code upload path, or undefined when the path isn't one. */
+export function doorCodeUploadCode(pathname: string): string | undefined {
+  if (!pathname.startsWith(DOOR_CODE_UPLOAD_PREFIX)) return undefined;
+  const code = pathname.slice(DOOR_CODE_UPLOAD_PREFIX.length);
+  return UPLOAD_CODE.test(code) ? code : undefined;
+}
+
+/**
+ * Grok's own computer posts the door code from its secure card here, to the link save_door_code
+ * made. Public: the one-time code is the credential. The door code is never repeated or logged.
+ */
+export async function handleCleanerDoorCodeUpload(input: {
+  code: string;
+  contentType: string;
+  /** Undefined when the body is over ALERT_UPLOAD_MAX_BYTES. */
+  readBody: () => Promise<Buffer | undefined>;
+  env: () => NodeJS.ProcessEnv;
+  root: string;
+  now: () => Date;
+}): Promise<{ status: number; body: string }> {
+  const reply = (status: number, body: Record<string, unknown>) => ({ status, body: JSON.stringify(body) });
+  if (!cleanerCoreEnabled(input.env())) return reply(404, { ok: false, error: "Not found." });
+  const read = await uploadBody(input.contentType, input.readBody);
+  if ("error" in read) return reply(read.status, { ok: false, error: read.error });
+  const desk = liveDeskFor(input.root, input.env, input.now);
+  const result = await desk.uploadDoorCode(input.code, read.parsed);
+  return reply(result.status, result.body);
 }
 
 /** A JSON object body, or the refusal to send. */

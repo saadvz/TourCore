@@ -212,7 +212,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 });
 
 /** A group setup with the two test stays, activated, with the alert routine saved. */
-async function activatedGroup() {
+async function activatedGroup(options: { uploadCode?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-setup-ask-"));
   roots.push(root);
   const sms = fakeSms();
@@ -237,7 +237,11 @@ async function activatedGroup() {
   ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host" }));
   ok(await desk.saveSchedule({}));
-  ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
+  if (options.uploadCode) {
+    const link = String(ok(await desk.saveDoorCode({}, PIN_KEY)).uploadUrl);
+    const posted = await desk.uploadDoorCode(link.slice(link.lastIndexOf("/") + 1), { code: DOOR_CODE });
+    expect(posted.status).toBe(200);
+  } else ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
   ok(await desk.savePreferences({}));
   ok(await desk.activate());
   return { desk, sms, groups };
@@ -287,5 +291,80 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     expect(all.next).toBe("Times saved for 1 turnover. The cleaner gets one cleaning offer at a time, starting with the first.");
     const turns = all.turns as { checkoutTime?: string }[];
     expect(turns.map((turn) => turn.checkoutTime?.replace(/[  ]/g, " "))).toEqual(["9:00 AM", "10:00 AM"]);
+  });
+});
+
+const DOOR_PREFIX = `${PUBLIC}/cleaner-core/door-code/`;
+
+describe("Cleaner Core setup: the door code from Grok's secure card", () => {
+  async function atDoor(wired: WiredApp) {
+    await call(wired, "get_state", { said: "2" });
+    await call(wired, "save_property", PROPERTY);
+    await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
+    await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" });
+    await call(wired, "save_schedule", {});
+  }
+
+  it("refuses a masked code and points Grok to the upload link", async () => {
+    const wired = await app();
+    await atDoor(wired);
+    for (const code of ["[REDACTED]", "••••"]) {
+      const masked = await call(wired, "save_door_code", { code });
+      expect(masked.isError).toBe(true);
+      expect(masked.text).toContain("That door code came through masked");
+    }
+    expect((await call(wired, "save_door_code", { code: "12ab" })).text).toContain("Send the door code as 4 to 8 digits.");
+  });
+
+  it("seals a code posted to a one-time upload link, once, with the lock location, and never repeats or stores it", async () => {
+    const wired = await app();
+    await atDoor(wired);
+    const issued = await call(wired, "save_door_code", { lockLocation: "front door keypad" });
+    expect(issued.isError, issued.text).toBe(false);
+    const link = String(issued.structured?.uploadUrl);
+    expect(link.startsWith(DOOR_PREFIX), link).toBe(true);
+    const code = link.slice(DOOR_PREFIX.length);
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(askOf((await call(wired, "get_state")).structured).step).toBe("door-code");
+
+    expect((await upload(wired, link, JSON.stringify({ code: "[REDACTED]" }))).status).toBe(400);
+    expect((await upload(wired, link, "code=1", "text/plain")).status).toBe(415);
+    // A refused code keeps the link.
+    const saved = await upload(wired, link, JSON.stringify({ code: DOOR_CODE }));
+    expect(saved.status).toBe(200);
+    expect(JSON.parse(saved.raw)).toEqual({ ok: true, message: expect.stringMatching(/^Saved the door code\. It goes only to the cleaner, in (the cleaning group|a private text), after you say the guests have left\.$/) });
+    expect((await upload(wired, link, JSON.stringify({ code: DOOR_CODE }))).status).toBe(404);
+
+    const state = (await call(wired, "get_state")).structured;
+    expect(state?.done).toContain("Door code saved.");
+    expect(askOf(state).step).toBe("preferences");
+    await call(wired, "save_preferences", {});
+    expect(JSON.stringify((await call(wired, "get_state")).structured?.setup)).toContain("front door keypad");
+    for (const text of [JSON.stringify(state), issued.raw, saved.raw, wired.logs.join("\n")]) expect(text.includes(DOOR_CODE)).toBe(false);
+    expect(wired.logs.join("\n").includes(code)).toBe(false);
+    for (const path of filesIn(wired.root)) {
+      const text = readFileSync(path, "utf8");
+      expect(text.includes(code), path).toBe(false);
+      expect(new RegExp(`(^|\\D)${DOOR_CODE}(\\D|$)`).test(text), path).toBe(false);
+    }
+  });
+
+  it("refuses an expired door code upload link", async () => {
+    let at = new Date(FROZEN);
+    const started = await startWiredApp({ now: () => at });
+    open.push(started);
+    await atDoor(started);
+    const issued = await call(started, "save_door_code", {});
+    at = new Date(at.getTime() + 11 * 60_000);
+    expect((await upload(started, String(issued.structured?.uploadUrl), JSON.stringify({ code: DOOR_CODE }))).status).toBe(404);
+  });
+
+  it("sends the uploaded code to the cleaner after the guests leave", async () => {
+    const { desk, groups } = await activatedGroup({ uploadCode: true });
+    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM" }));
+    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    await desk.inbound({ id: "take", from: CLEANER, text: "YES", channel: "group" });
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE))).toHaveLength(1);
   });
 });

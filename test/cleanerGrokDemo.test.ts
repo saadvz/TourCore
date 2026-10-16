@@ -766,7 +766,7 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     const text = String((await rpc("initialize")).instructions);
     expect(text.startsWith("Call get_state first and follow its next step.")).toBe(true);
     for (const line of [
-      "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
+      "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
       "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
       "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
     ]) {

@@ -18,7 +18,7 @@ import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
+import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
 import { CLEANER_PHOTO_PREFIX, photoKey, servePhoto } from "../cleaner-core/photos";
 import { publicBaseUrl } from "../messaging/publicUrl";
@@ -170,6 +170,8 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (method === "POST" && alertUploadCode(path)) return true;
   // The one-time calendar link upload. The code in the path is the credential.
   if (method === "POST" && calendarUploadCode(path)) return true;
+  // The one-time door code upload. The code in the path is the credential.
+  if (method === "POST" && doorCodeUploadCode(path)) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -716,6 +718,19 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         // Grok's computer posts a calendar link from its secure card. Never logged or echoed.
         const result = await handleCleanerCalendarUpload({
           code: calendarCode,
+          contentType: String(req.headers["content-type"] ?? ""),
+          readBody: () => readCapped(req, ALERT_UPLOAD_MAX_BYTES),
+          env: () => installation.env(),
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+        });
+        return send(result.status, "application/json; charset=utf-8", result.body, result.status === 413 ? { Connection: "close" } : {});
+      }
+      const doorCode = method === "POST" ? doorCodeUploadCode(url.pathname) : undefined;
+      if (doorCode) {
+        // Grok's computer posts the door code from its secure card. Never logged or echoed.
+        const result = await handleCleanerDoorCodeUpload({
+          code: doorCode,
           contentType: String(req.headers["content-type"] ?? ""),
           readBody: () => readCapped(req, ALERT_UPLOAD_MAX_BYTES),
           env: () => installation.env(),
