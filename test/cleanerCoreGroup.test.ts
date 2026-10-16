@@ -577,7 +577,8 @@ describe("group thread on the desk", () => {
     // The group was made, but the offer's post failed. It may still have reached the group, so it
     // goes to review and is not sent again one-to-one, and the group is not tried again.
     const posts = calls.filter((url) => url.endsWith("/Messages"));
-    expect(posts).toHaveLength(1);
+    // One post for the intro and one for the offer. Neither is tried again.
+    expect(posts).toHaveLength(2);
     expect(sms.sent.filter((text) => text.body.startsWith("Turnover at"))).toEqual([]);
     const state = await desk.getState();
     expect(state.ok && (state.result.turns as { status: string }[])[0]?.status).toBe("host_confirmed");

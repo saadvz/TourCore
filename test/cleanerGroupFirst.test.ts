@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { groupIntroBody, groupInviteBody, namedAsk, nameList } from "../src/cleaner-core/cleanerTexts";
+import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { outboxLabel } from "../src/cleaner-core/scratchQa";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
@@ -239,5 +240,46 @@ describe("group-first: intro", () => {
 
   it("labels the intro in the outbox", () => {
     expect(outboxLabel("intro", "the cleaner")).toBe("Group intro to the cleaner");
+  });
+
+  it("still sends the offer and tells the host when the intro fails with a plain error", async () => {
+    const sent: CleanerText[] = [];
+    let failIntro = true;
+    const job = engine(sent, {
+      sink: {
+        send: async (text) => {
+          if (text.kind === "intro" && failIntro) throw new Error("boom");
+          sent.push(text);
+        },
+      },
+    });
+    await job.pollFeed(FEED);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await yes(job, MIKE);
+    expect(sent.some((text) => text.kind === "offer" && text.to === MIKE)).toBe(true);
+    // The failed intro is kept for review, and it is not posted again.
+    expect(job.reviews().filter((item) => item.kind === "failed-sms" && item.status === "open")).toHaveLength(1);
+    failIntro = false;
+    await job.pollFeed(FEED);
+    expect(intros(sent)).toEqual([]);
+  });
+
+  it("retries an intro the group couldn't confirm at the next step", async () => {
+    const sent: CleanerText[] = [];
+    let confirmed = false;
+    const job = engine(sent, {
+      sink: {
+        send: async (text) => {
+          if (text.channel === "group" && !confirmed) throw new GroupNotConfirmed();
+          sent.push(text);
+        },
+      },
+    });
+    await job.pollFeed(EMPTY);
+    await yes(job, MIKE);
+    expect(intros(sent)).toEqual([]);
+    confirmed = true;
+    await job.pollFeed(EMPTY);
+    expect(intros(sent)).toHaveLength(1);
   });
 });

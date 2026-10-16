@@ -2174,7 +2174,6 @@ class Engine implements CleanerCore {
     const id = `${draft.id}:group`;
     if (this.delivery(id) === "sent") return null;
     await this.ensureIntro();
-    if (this.introStuck()) return null;
     const text = await this.emitOne({
       id,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -2577,11 +2576,15 @@ class Engine implements CleanerCore {
   /**
    * Posts the intro once per set of members, as soon as two people in the group have said yes.
    * Only engine steps call it. Opening the engine never does. A failed or uncertain intro goes to
-   * review and is not posted again, and the group's other texts wait behind it.
+   * review and is not posted again, and it never holds back the group's other texts.
    */
+  private introDue(id: string): boolean {
+    return this.delivery(id) === undefined;
+  }
+
   private async ensureIntro(): Promise<CleanerText | null> {
     const intro = this.introId();
-    if (!intro || !this.groupChat || this.delivery(intro.id) !== undefined) return null;
+    if (!intro || !this.groupChat || !this.introDue(intro.id)) return null;
     const audience = intro.seats.map((seat) => seat.phone);
     const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
     if (!to) return null;
@@ -2595,19 +2598,8 @@ class Engine implements CleanerCore {
     });
   }
 
-  /** True when the intro for the current members was tried and didn't go out, so no group text follows it. */
-  private introStuck(): boolean {
-    const intro = this.introId();
-    if (!intro) return false;
-    const status = this.delivery(intro.id);
-    return status !== undefined && status !== "sent";
-  }
-
   private async emitGroup(id: string, body: string, kind: TextKind, jobId?: string): Promise<CleanerText | null> {
-    if (kind !== "intro") {
-      await this.ensureIntro();
-      if (this.introStuck()) return null;
-    }
+    if (kind !== "intro") await this.ensureIntro();
     const audience = this.groupAudience();
     const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
     if (!to) return null;
