@@ -53,6 +53,7 @@ const KIND_NAME: Record<TextKind, string> = {
   "host-checkout": "Checkout question",
   "host-checkin": "Check-in question",
   offer: "Cleaning offer",
+  intro: "Group intro",
   corrected: "Time correction",
   "cancel-update": "Cancellation",
   reminder: "Reminder",

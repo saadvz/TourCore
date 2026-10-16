@@ -197,7 +197,7 @@ describe("group thread", () => {
     expect(job.jobOnHold()).toBe(true);
     const left = await job.receive({ id: "left-out", from: OWNER, text: "guests have left" });
     expect(left.sent.filter((text) => text.kind === "pin" || text.body.includes(PIN) || text.channel === "group")).toEqual([]);
-    expect(sent.sent.filter((text) => text.to === CLEANER).every((text) => text.kind === "opt-in" || text.kind === "offer" || text.kind === "confirm" || text.kind === "stop" || text.body === OFFER || text.body === CONFIRM || text.body === STOP_ACK)).toBe(true);
+    expect(sent.sent.filter((text) => text.to === CLEANER).every((text) => text.kind === "opt-in" || text.kind === "intro" || text.kind === "offer" || text.kind === "confirm" || text.kind === "stop" || text.body === OFFER || text.body === CONFIRM || text.body === STOP_ACK)).toBe(true);
     expect(sent.sent.filter((text) => text.body.includes(PIN))).toEqual([]);
   });
 
@@ -684,6 +684,11 @@ describe("live group send", () => {
 });
 
 /** The Conversations fake for group texting, with the posts each phone received. */
+/** The group posts without the intro, so a test can look at the offer and the texts after it. */
+function offerPosts<T extends { body: string }>(posts: T[]): T[] {
+  return posts.filter((post) => !(post.body.startsWith("Hi ") && post.body.includes("This is the cleaning group for")));
+}
+
 function groupFetch(options?: { failMessages?: boolean }) {
   const fake = fakeConversations(options);
   return { impl: fake.impl, posts: fake.posts, blockMembership: fake.blockMembership, people: fake.people };
@@ -767,7 +772,7 @@ describe("live group membership", () => {
   it("keeps Alex out of a saved conversation after STOP, including the next group text and the door code", async () => {
     const live = await ready(true);
     const sid = live.readSid();
-    expect(live.posts).toEqual([
+    expect(offerPosts(live.posts)).toEqual([
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
     ]);
@@ -778,7 +783,7 @@ describe("live group membership", () => {
     const next = live.readSid();
     expect(next).not.toBe(sid);
     expect(live.people(sid ?? "")).toEqual([]);
-    expect(live.posts).toEqual([
+    expect(offerPosts(live.posts)).toEqual([
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
       { conversationSid: next, to: [OWNER, CLEANER], body: TIME_LINE },
@@ -791,13 +796,13 @@ describe("live group membership", () => {
   it("sends nothing to the group when the saved conversation's members cannot be confirmed", async () => {
     const live = await ready(false);
     const sid = live.readSid();
-    expect(live.posts).toEqual([
+    expect(offerPosts(live.posts)).toEqual([
       { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
     live.blockMembership();
     const left = await live.job.receive({ id: "left-unsynced", from: OWNER, text: "guests have left" });
-    expect(live.posts).toEqual([
+    expect(offerPosts(live.posts)).toEqual([
       { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_OFFER },
       { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
     ]);
@@ -863,7 +868,7 @@ describe("live group membership", () => {
     if (read.ok) expect(read.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
     expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
     expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
+    expect(offerPosts(fetchBox.posts).map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
     const reread = await desk.getState();
     expect(reread.ok).toBe(true);
     if (reread.ok) expect(reread.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
@@ -878,7 +883,7 @@ describe("live group membership", () => {
     const still = await restarted.getState();
     expect(still.ok).toBe(true);
     if (still.ok) expect(still.result.notes).toEqual([...PRACTICE_CONFIRMED, line]);
-    expect(fetchBox.posts.map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
+    expect(offerPosts(fetchBox.posts).map((text) => text.body)).toEqual([PRACTICE_GROUP_OFFER]);
     expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
   });
 
@@ -1763,13 +1768,15 @@ describe("live group membership", () => {
     expect(sms.sent.filter((text) => text.body === invite)).toEqual([
       expect.objectContaining({ to: LIVE_CLEANER, body: invite }),
     ]);
-    expect(fetchBox.posts).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_GROUP_OFFER }]);
+    expect(offerPosts(fetchBox.posts)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_GROUP_OFFER }]);
+    // The intro starts the group, before the offer.
+    expect(fetchBox.posts[0]?.body).toContain("This is the cleaning group for");
 
     forgetHostSeat(root);
     resetLiveDesks();
     const stillSeated = liveDeskFor(root, () => env, () => new Date(FROZEN));
     await stillSeated.inbound({ id: "texting-seat-kept", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    expect(fetchBox.posts.slice(1)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_TIME_LINE }]);
+    expect(offerPosts(fetchBox.posts).slice(1)).toEqual([{ conversationSid: sid, to: [LIVE_HOST, LIVE_CLEANER], body: PRACTICE_TIME_LINE }]);
 
     forgetHostSeat(root);
     setSavedTexting(root, false);
@@ -1777,7 +1784,7 @@ describe("live group membership", () => {
     const unseated = liveDeskFor(root, () => env, () => new Date(FROZEN));
     await unseated.inbound({ id: "texting-seat-off", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
     // A group of one is a plain text, so no group captures the cleaner's own texts.
-    expect(fetchBox.posts.slice(2)).toEqual([]);
+    expect(offerPosts(fetchBox.posts).slice(2)).toEqual([]);
     expect(sms.sent.filter((text) => text.body === PRACTICE_TIME_LINE).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(sms.sent.filter((text) => text.to === LIVE_HOST)).toEqual([]);
   });

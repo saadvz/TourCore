@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -35,6 +35,8 @@ export type TextKind =
   | "host-checkout"
   | "host-checkin"
   | "offer"
+  /** The first text in the group, once two people have joined. */
+  | "intro"
   | "corrected"
   | "cancel-update"
   | "reminder"
@@ -1966,6 +1968,15 @@ class Engine implements CleanerCore {
 
   private async drainOne(): Promise<CleanerText[]> {
     if (this.optedOut || this.problemHold) return [];
+    const intro = await this.ensureIntro();
+    if (intro) {
+      const rest = await this.drainJobs();
+      return [intro, ...rest];
+    }
+    return this.drainJobs();
+  }
+
+  private async drainJobs(): Promise<CleanerText[]> {
     for (const job of this.ordered()) {
       if (job.declined) continue;
       if (job.canceled) {
@@ -2162,6 +2173,8 @@ class Engine implements CleanerCore {
     if (!this.groupChat) return undefined;
     const id = `${draft.id}:group`;
     if (this.delivery(id) === "sent") return null;
+    await this.ensureIntro();
+    if (this.introStuck()) return null;
     const text = await this.emitOne({
       id,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -2330,7 +2343,7 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
-        if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
+        if (draft.kind !== "pin" && draft.kind !== "intro" && !isPrivateCodeLine(draft.body)) {
           this.keepHostNote(`group-unconfirmed:${this.options.property.id}:${draft.kind}`, groupUnconfirmedLine(draft.kind));
         }
         return null;
@@ -2552,7 +2565,49 @@ class Engine implements CleanerCore {
     return this.groupSeats().filter((seat) => seat.consent === "in").map((seat) => seat.phone);
   }
 
+  /** The id of the intro for the people in the group now. None until the cleaner and one more person are in. */
+  private introId(): { id: string; seats: GroupSeat[] } | undefined {
+    if (!this.groupChat) return undefined;
+    const seats = this.groupSeats().filter((seat) => seat.consent === "in");
+    // The group starts once the cleaner has joined the host or a contact. Contacts alone don't start it.
+    if (seats.length < 2 || !seats.some((seat) => seat.phone === this.cleanerPhone)) return undefined;
+    return { id: `intro:${seats.map((seat) => seat.phone).sort().join(",")}`, seats };
+  }
+
+  /**
+   * Posts the intro once per set of members, as soon as two people in the group have said yes.
+   * Only engine steps call it. Opening the engine never does. A failed or uncertain intro goes to
+   * review and is not posted again, and the group's other texts wait behind it.
+   */
+  private async ensureIntro(): Promise<CleanerText | null> {
+    const intro = this.introId();
+    if (!intro || !this.groupChat || this.delivery(intro.id) !== undefined) return null;
+    const audience = intro.seats.map((seat) => seat.phone);
+    const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
+    if (!to) return null;
+    return this.emit({
+      id: intro.id,
+      to,
+      body: groupIntroBody(intro.seats.map((seat) => seat.name), this.groupChat.hostName, this.options.property.address),
+      kind: "intro",
+      channel: "group",
+      audience,
+    });
+  }
+
+  /** True when the intro for the current members was tried and didn't go out, so no group text follows it. */
+  private introStuck(): boolean {
+    const intro = this.introId();
+    if (!intro) return false;
+    const status = this.delivery(intro.id);
+    return status !== undefined && status !== "sent";
+  }
+
   private async emitGroup(id: string, body: string, kind: TextKind, jobId?: string): Promise<CleanerText | null> {
+    if (kind !== "intro") {
+      await this.ensureIntro();
+      if (this.introStuck()) return null;
+    }
     const audience = this.groupAudience();
     const to = audience.find((phone) => phone === this.cleanerPhone) ?? audience[0];
     if (!to) return null;
