@@ -2235,7 +2235,7 @@ export class LiveDesk {
       },
       sources: { calendars: calendarsOf(file).map((calendar) => calendar.name), google: file.google === true },
       people: {
-        host: last4(file.host),
+        host: { ...(file.hostName ? { name: file.hostName } : {}), ...last4(file.host) },
         cleaner: { ...(file.cleanerName ? { name: file.cleanerName } : {}), ...last4(file.cleaner) },
         contacts: contactsOf(file).map((contact) => ({ name: contact.name, role: contact.role, ...last4(contact.phone) })),
         groupChat: file.groupChat ?? "everyone",
