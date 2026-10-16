@@ -15,6 +15,7 @@ import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
+import { allTimesAsk, askNext, DOOR_CODE_STEP, peopleAsk, PREFERENCES_STEP, propertyAsk, SCHEDULE_STEP, sourcesAsk, START_ASK, type SetupAsk } from "./setupAsk";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
@@ -47,21 +48,9 @@ export const FIRST_QUESTION =
   "What do you want help with? 1) Letting renters tour a unit on their own, or 2) Scheduling cleaners between guest stays.";
 
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
-const CLEANER_PICK =
-  "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
-/** The sources step. Grok asks which Google calendar holds the bookings, so it never reads the host's whole primary calendar. */
-function calendarAsk(property: string): string {
-  return `Where do bookings come from? Send the Guesty Lite link, and tell me if you also use Google Calendar. If you do, which Google calendar holds the bookings? A separate one, like "${property} bookings", works best. I'll read only that calendar, not your main one unless the bookings are there.`;
-}
+const CLEANER_PICK = "That's Cleaner Core. It schedules cleaners between guest stays.";
 const ROUTINE_ASK =
   "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
-const PROPERTY_ASK = "What's the property address, what should I call the business, and what are the usual checkout and check-in times?";
-const PEOPLE_ASK =
-  "Who is the cleaner? Send their name and phone number, and the host's phone number. Extra contacts, like a co-host, an assistant, or an observer, are optional. Should texts go to the cleaner alone, to a group with the cleaner and you, or to a group with everyone?";
-const SCHEDULE_ASK =
-  "When should the cleaner get texts? The first cleaning text goes when you confirm the times, or a set number of days after check-in. The reminder goes the morning of checkout, or a set number of days before at a set time. Any quiet hours, and who should hear about problems? If the defaults are fine, save an empty schedule.";
-const PREFERENCES_ASK =
-  "Any cleaning preferences? A checklist, whether photos are required, whether the cleaner may send supply notes, and other instructions. If there are none, save empty preferences.";
 const REVIEW_ASK = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
@@ -79,6 +68,15 @@ const ROUTINE_NEEDED =
   "Send the routine's https address and its key. If your secure card can't pass them to a tool, call save_alert_routine with no arguments to get a one-time upload link.";
 /** Where Grok's own computer posts the routine's address and key. The rest of the path is the one-time code. */
 export const ALERT_UPLOAD_PREFIX = "/cleaner-core/alert-routine/";
+/** Where Grok's own computer posts a calendar link from its secure card. The rest of the path is the one-time code. */
+export const CALENDAR_UPLOAD_PREFIX = "/cleaner-core/calendar-link/";
+const CALENDAR_UPLOAD_NEXT =
+  'From your own cloud computer, POST JSON {"url": "<calendar link>"} to uploadUrl with Content-Type: application/json, using the link from your secure card. Never put it in chat or in a tool argument. Then call get_state to confirm.';
+const CALENDAR_UPLOAD_SAVED = "Saved the calendar link.";
+const CALENDAR_UPLOAD_REFUSED = "Send the calendar's public https link as url.";
+/** A tool got a secure card's placeholder instead of the link. */
+const MASKED_LINK =
+  'That link came through masked, so I didn\'t save it. A secure card can\'t pass a value to a tool. Call save_sources with uploadLink: { name: "Guesty Lite" } (or the calendar\'s name) and post the link to the upload link from your own computer.';
 const UPLOAD_MINUTES = 10;
 const UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
@@ -87,7 +85,6 @@ const UPLOAD_CONNECTED = "Alerts are connected.";
 const UPLOAD_REFUSED = "Send the routine's https webhook address as url and its key as token.";
 const UPLOAD_GONE = "This upload link isn't valid anymore. Call save_alert_routine with no arguments for a new one.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
-const DOOR_CODE_ASK = "What's the door code, and where is the lock? I'll save the code and I won't repeat it.";
 const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
 const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
 const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
@@ -235,6 +232,14 @@ interface PeopleInput {
   doorCodeTo?: string;
 }
 
+interface SourcesInput {
+  calendars?: { name?: string; url?: string }[];
+  google?: boolean;
+  dropJobs?: boolean;
+  /** Makes a one-time upload link for a calendar link that is on Grok's secure card. */
+  uploadLink?: { name?: string };
+}
+
 interface ScheduleInput {
   firstText?: "when-confirmed" | "days-after-check-in";
   firstTextDays?: number;
@@ -296,6 +301,8 @@ interface LiveFile {
   google?: boolean;
   /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
   alertUpload?: { hash: string; expiresAt: string };
+  /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
+  calendarUpload?: { hash: string; expiresAt: string; name: string };
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
@@ -416,6 +423,11 @@ function calendarSlug(name: string, used: Set<string>): string {
 /** Characters a secure card shows in place of a value it hides. */
 const MASK_MARK = /[*\u2022\u25cf\u00b7]/;
 
+/** True when a calendar link is a secure card's placeholder, like [REDACTED] or dots. */
+function maskedLink(url: string): boolean {
+  return /redacted|\[hidden\]/i.test(url) || MASK_MARK.test(url);
+}
+
 /** True when a key is a masked placeholder: mask characters, or one character repeated. */
 function maskedValue(token: string): boolean {
   return MASK_MARK.test(token) || /^(.)\1*$/su.test(token) || /^[xX]+$/.test(token);
@@ -511,6 +523,8 @@ function timesTarget(engine: CleanerCore): JobView | undefined {
 
 export class LiveDesk {
   private file: LiveFile = {};
+  /** The door-code key from the call that made the calendar upload link, so the upload can check the link. */
+  private calendarUploadKey: Buffer | undefined;
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
   /** A setup save changed what the engine reads when it opens. The next serial step reopens it. */
@@ -761,11 +775,12 @@ export class LiveDesk {
     const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
     if (!this.file.choice) {
       const pick = said ? choiceOf(said) : undefined;
-      if (!pick) return this.reply({ done: [], next: FIRST_QUESTION });
+      if (!pick) return this.reply({ done: [], next: FIRST_QUESTION, ask: START_ASK });
       this.file.choice = pick;
       this.persist();
       if (pick === "tours") return this.reply({ done: [], next: TOUR_PICK });
-      return this.reply({ done: ["You chose cleaning."], next: CLEANER_PICK });
+      const first = this.cleaningState();
+      return this.reply({ ...first, done: ["You chose cleaning."], next: `${CLEANER_PICK} ${String(first.next)}` });
     }
     if (this.file.choice === "tours") return this.withFailure(this.reply({ done: ["You chose touring."], next: "What's the property you want renters to tour?" }), failure);
     return this.withFailure(this.reply(this.cleaningState()), failure);
@@ -807,7 +822,7 @@ export class LiveDesk {
     this.persist();
     // The engine reads the usual times when it opens.
     this.stale = true;
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
   }
 
   /**
@@ -872,7 +887,7 @@ export class LiveDesk {
     this.keep("doorCodeTo", othersInGroup && doorCodeTo ? (doorCodeTo as "group" | "cleaner") : undefined);
     this.persist();
     this.stale = true;
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
   }
 
   /**
@@ -928,7 +943,7 @@ export class LiveDesk {
     this.persist();
     // The engine reads the schedule when it opens.
     this.stale = true;
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
   }
 
   saveCalendarLink(input: { url?: string; google?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
@@ -939,6 +954,7 @@ export class LiveDesk {
     if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
+    if (url && maskedLink(url)) return this.fail(MASKED_LINK);
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
     this.openSeal(pinKey);
     if (url && this.carriesCode(url)) return this.fail(DOOR_CODE_IN_CHAT);
@@ -946,7 +962,7 @@ export class LiveDesk {
     if (url) this.file.calendarLink = url;
     if (input.google) this.file.google = true;
     this.persist();
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
   }
 
   /**
@@ -956,13 +972,14 @@ export class LiveDesk {
    * a link. When the change would call off an upcoming cleaning that only a dropped source lists, it
    * is refused with `wouldCancel` until Grok asks the host and passes dropJobs.
    */
-  saveSources(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey?: Buffer): Promise<ToolReply> {
+  saveSources(input: SourcesInput, pinKey?: Buffer): Promise<ToolReply> {
     return this.serial(async () => this.saveSourcesNow(input, pinKey));
   }
 
-  private saveSourcesNow(input: { calendars?: { name?: string; url?: string }[]; google?: boolean; dropJobs?: boolean }, pinKey: Buffer | undefined): ToolReply {
+  private saveSourcesNow(input: SourcesInput, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.address) return this.fail("Save the property first.");
     this.openSeal(pinKey);
+    if (input.uploadLink) return this.issueCalendarUpload(input.uploadLink.name?.trim() || LEGACY_CALENDAR, input.google, pinKey);
     const next: LiveFile = { ...this.file };
     if (input.calendars !== undefined) {
       const calendars = input.calendars.map((calendar) => ({ name: calendar.name?.trim() ?? "", url: calendar.url?.trim() ?? "" }));
@@ -970,6 +987,7 @@ export class LiveDesk {
       for (const calendar of calendars) {
         if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
         if (this.carriesCode(calendar.name) || this.carriesCode(calendar.url)) return this.fail(DOOR_CODE_IN_CHAT);
+        if (maskedLink(calendar.url)) return this.fail(MASKED_LINK);
         if (!calendarUrlAllowed(calendar.url)) {
           return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
         }
@@ -991,7 +1009,59 @@ export class LiveDesk {
     }
     this.file = next;
     this.persist();
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
+  }
+
+  /**
+   * Makes a one-time upload link for one calendar link, saved under `name`. Only the code's sha256,
+   * its expiry, and the name are kept. A new link replaces the last one. google: true is saved now.
+   */
+  private issueCalendarUpload(name: string, google: boolean | undefined, pinKey: Buffer | undefined): ToolReply {
+    if (name.length > MAX_NAME) return this.fail(`Keep the calendar's name under ${MAX_NAME} characters.`);
+    if (this.carriesCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
+    const base = publicBaseUrl(this.env());
+    if (!base) return this.fail(UPLOAD_LINK_OFF);
+    const origin = new URL(base).origin;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = randomBytes(32).toString("base64url");
+      const uploadUrl = `${origin}${CALENDAR_UPLOAD_PREFIX}${code}`;
+      if (this.leaks(uploadUrl)) continue;
+      this.file.calendarUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(), name };
+      if (google === true) this.file.google = true;
+      this.calendarUploadKey = pinKey;
+      this.persist();
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: CALENDAR_UPLOAD_NEXT });
+    }
+    return this.fail("That didn't work. Try again.");
+  }
+
+  /**
+   * Saves a calendar link posted to its upload link, with the same checks as save_sources. A link
+   * with the same name is replaced, and every other saved calendar stays. Only a save uses the link
+   * up. The link is never repeated or logged.
+   */
+  uploadCalendarLink(code: string, body: Record<string, unknown>): Promise<{ status: 200 | 400 | 404 | 409; body: { ok: boolean; message?: string; error?: string } }> {
+    return this.serial(async () => {
+      const pending = this.file.calendarUpload;
+      if (!pending || !sameHash(uploadHash(code), pending.hash)) return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      if (this.now().getTime() >= Date.parse(pending.expiresAt)) {
+        delete this.file.calendarUpload;
+        this.calendarUploadKey = undefined;
+        this.persist();
+        return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      }
+      const url = typeof body.url === "string" ? body.url.trim() : "";
+      if (!url || maskedLink(url) || !calendarUrlAllowed(url)) return { status: 400, body: { ok: false, error: CALENDAR_UPLOAD_REFUSED } };
+      const kept = calendarsOf(this.file)
+        .filter((calendar) => calendar.name.toLowerCase() !== pending.name.toLowerCase())
+        .map((calendar) => ({ name: calendar.name, url: calendar.url }));
+      const saved = this.saveSourcesNow({ calendars: [...kept, { name: pending.name, url }] }, this.calendarUploadKey ?? serverPinKey(this.env()));
+      if (!saved.ok) return { status: saved.result?.wouldCancel ? 409 : 400, body: { ok: false, error: saved.error } };
+      delete this.file.calendarUpload;
+      this.calendarUploadKey = undefined;
+      this.persist();
+      return { status: 200, body: { ok: true, message: CALENDAR_UPLOAD_SAVED } };
+    });
   }
 
   /**
@@ -1066,7 +1136,7 @@ export class LiveDesk {
     this.persist();
     // The engine reads the checklist, the photo rule, supply notes, and the offer note when it opens.
     this.stale = true;
-    return this.reply({ next: this.setupNext() });
+    return this.setupReply();
   }
 
   setUpTexting(): Promise<ToolReply> {
@@ -1393,11 +1463,11 @@ export class LiveDesk {
     return this.reply({ next: ARRIVAL_SAVED, turns: this.turns() });
   }
 
-  confirmTimes(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+  confirmTimes(input: { checkout?: string; checkIn?: string; all?: boolean }): Promise<ToolReply> {
     return this.serial(() => this.confirmTimesNow(input));
   }
 
-  private async confirmTimesNow(input: { checkout?: string; checkIn?: string }): Promise<ToolReply> {
+  private async confirmTimesNow(input: { checkout?: string; checkIn?: string; all?: boolean }): Promise<ToolReply> {
     this.resume();
     if (!this.file.checked || !this.engine || !this.file.host) return this.fail("Run the checks first.");
     const checkout = input.checkout?.trim() ?? "";
@@ -1406,6 +1476,7 @@ export class LiveDesk {
       return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
     }
     const engine = this.engine;
+    if (input.all === true) return this.confirmAllTimes(engine, checkout, checkIn);
     const target = timesTarget(engine);
     const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
     if (this.groupOn()) {
@@ -1439,6 +1510,24 @@ export class LiveDesk {
           : sent("corrected")
             ? "Times saved. I sent the cleaner the new time."
             : "Times saved. Nothing was sent.",
+      turns: this.turns(),
+    });
+  }
+
+  /**
+   * Times every open turnover the host hasn't timed with the same checkout and check-in. Only a group
+   * setup does this. The cleaner still gets one offer at a time, and replies YES to each.
+   */
+  private async confirmAllTimes(engine: CleanerCore, checkout: string, checkIn: string): Promise<ToolReply> {
+    if (!this.groupOn()) return this.fail("I can only time one turnover at a time here. Tell me the first turnover's times.");
+    const { timed } = await engine.confirmOpenTimes({ checkout, checkIn });
+    if (timed === 0) return this.fail("Every upcoming turnover already has times.");
+    this.file.released = true;
+    this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
+    this.persist();
+    await engine.releaseCleanerTexts();
+    return this.reply({
+      next: `Times saved for ${timed} ${timed === 1 ? "turnover" : "turnovers"}. The cleaner gets one cleaning offer at a time, starting with the first.`,
       turns: this.turns(),
     });
   }
@@ -1985,32 +2074,54 @@ export class LiveDesk {
     if (this.file.texting && this.groupOn()) done.push(this.groupLine());
     if (this.file.checked) done.push("Checks finished.");
     let next: string;
-    if (!this.file.address) next = PROPERTY_ASK;
-    else if (!hasSources(this.file)) next = calendarAsk(this.file.nickname ?? this.file.business ?? "the property");
-    else if (!this.file.cleaner) next = PEOPLE_ASK;
+    let ask: SetupAsk | undefined;
+    // A setup that is still being built asks for the usual times. One that already texts isn't held back.
+    const timesMissing = !this.file.texting && (!this.file.checkoutTime || !this.file.checkInTime);
+    if (!this.file.address || timesMissing) {
+      ask = propertyAsk({ address: Boolean(this.file.address), checkoutTime: Boolean(this.file.checkoutTime), checkInTime: Boolean(this.file.checkInTime) });
+    } else if (!hasSources(this.file)) ask = sourcesAsk(this.file.nickname ?? this.file.business ?? "the property");
+    else if (!this.file.cleaner) ask = peopleAsk(this.file.business ?? "the host");
     // Setups that saved texting before the schedule step existed skip it.
-    else if (!this.file.schedule && !this.file.texting) next = SCHEDULE_ASK;
-    else if (!this.codeSaved()) next = DOOR_CODE_ASK;
-    else if (!this.file.texting) next = preferences ? REVIEW_ASK : PREFERENCES_ASK;
+    else if (!this.file.schedule && !this.file.texting) ask = SCHEDULE_STEP;
+    else if (!this.codeSaved()) ask = DOOR_CODE_STEP;
+    else if (!this.file.texting && !preferences) ask = PREFERENCES_STEP;
+    if (ask) next = askNext(ask.tool);
+    else if (!this.file.texting) next = REVIEW_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
-    else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+    else {
+      const untimed = this.untimedTurns();
+      if (untimed >= 2 && this.file.checkoutTime && this.file.checkInTime) {
+        ask = allTimesAsk(clockText(this.file.checkoutTime), clockText(this.file.checkInTime), untimed);
+        next = askNext(ask.tool);
+      } else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
+    }
     const review = next === REVIEW_ASK;
     if (this.held) next = this.holdLine();
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
+    const asking = ask && next === askNext(ask.tool);
     return {
       done,
       next,
+      ...(asking ? { ask } : {}),
       ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
       ...(this.file.checked ? { turns: this.turns() } : {}),
       ...(notes.length > 0 ? { notes } : {}),
     };
   }
 
-  /** The next setup step, for a save tool's reply. */
-  private setupNext(): string {
-    return String(this.cleaningState().next);
+  /** The next setup step with its ask, for a save tool's reply. */
+  private setupReply(extra: Record<string, unknown> = {}): ToolReply {
+    const state = this.cleaningState();
+    return this.reply({ ...extra, next: state.next, ...(state.ask ? { ask: state.ask } : {}) });
+  }
+
+  /** Open turnovers the host hasn't timed yet. */
+  private untimedTurns(): number {
+    if (!this.engine) return 0;
+    const closed = new Set(["canceled", "declined", "in_progress", "done"]);
+    return this.engine.jobs().filter((job) => !closed.has(job.status) && !job.checkoutTime).length;
   }
 
   private peopleLine(): string {

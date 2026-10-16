@@ -103,12 +103,12 @@ describe("optional observer", () => {
   it("saves with the observer left empty and does not ask for a third number", async () => {
     const { desk, root } = open([HOST, CLEANER]);
     expect((await desk.getState("2")).ok).toBe(true);
-    const asked = await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
+    const asked = await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York", checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
     expect(asked.ok).toBe(true);
     if (asked.ok) {
       // In the diagram order the booking sources come before the people.
-      expect(String(asked.result.next)).toMatch(/Guesty Lite link/i);
-      expect(asksForThird(String(asked.result.next))).toBe(false);
+      expect((asked.result.ask as { step: string }).step).toBe("sources");
+      expect(asksForThird(JSON.stringify(asked.result))).toBe(false);
     }
     const omitted = await desk.savePeople({ host: HOST, cleaner: CLEANER });
     const blank = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: "" });
@@ -116,8 +116,8 @@ describe("optional observer", () => {
     for (const saved of [omitted, blank, spaces]) {
       expect(saved.ok).toBe(true);
       if (!saved.ok) continue;
-      expect(asksForThird(String(saved.result.next))).toBe(false);
-      expect(String(saved.result.next)).toMatch(/Guesty Lite link/i);
+      expect(asksForThird(JSON.stringify(saved.result))).toBe(false);
+      expect((saved.result.ask as { step: string }).step).toBe("sources");
     }
     const state = await desk.getState();
     expect(state.ok).toBe(true);

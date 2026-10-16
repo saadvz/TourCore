@@ -22,12 +22,12 @@ The first Allow claims this Cleaner Core.
 
 ## Setup order
 
-Call `get_state` first and follow its `next` step. Ask one plain question, save the answer, then call `get_state` again.
-If it asks what you want help with, call it again with `said: "2"`, which picks scheduling cleaners.
+Call `get_state` first and follow its `next` step. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask one question at a time in one short sentence, never the whole step at once. Show `options` as a choice card, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
+If it asks what you want help with, show the two options, then call it again with `said: "2"`, which picks scheduling cleaners.
 
 1. Start: `get_state`.
-2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times.
-3. Sources: `save_sources`. Each booking calendar's name and public iCal link, and whether the host uses Google Calendar. If they do, ask which Google calendar holds the bookings, and suggest a separate one like "Lake House bookings". Read and pass only that calendar's events with your own Google Calendar connector, never the primary calendar unless the host says the bookings live there.
+2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times. Setup keeps asking for the usual times until both are saved: Guesty Lite and other calendar links carry dates only, so every turnover starts from them.
+3. Sources: `save_sources`. Where bookings come from: Guesty Lite, Google Calendar, or another calendar link. A calendar link goes on your secure card. Your secure card can't pass a value to a tool, so call `save_sources` with `uploadLink: { name: "Guesty Lite" }` (or the calendar's name), then POST JSON `{"url": "<calendar link>"}` from your own cloud computer to the `uploadUrl` it returns, with `Content-Type: application/json`. Then call `get_state` to confirm. If the host pastes a link in chat, you may save it with `calendars`. If they use Google Calendar, ask which Google calendar holds the bookings, and suggest a separate one like "Lake House bookings". Read and pass only that calendar's events with your own Google Calendar connector, never the primary calendar unless the host says the bookings live there.
 4. People: `save_people`. The host and the name the group calls them (`hostName`, or the business name when unset), the cleaner, up to 4 extra contacts, and the group chat choice. With contacts in the group, also `doorCodeTo`: `group` or `cleaner`. Ask the host which.
 5. Schedule: `save_schedule`. When the first cleaning text goes, the reminder, and quiet hours.
 6. Access: `save_door_code`, on your secure card, with the lock location.
@@ -45,7 +45,7 @@ If `activate` says the numbers aren't approved for texts, tell the host the Clea
 - Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md).
 
 Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm.
-Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer.
+Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time.
 
 ## Every booking
 
