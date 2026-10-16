@@ -71,6 +71,22 @@ export function setCleanerGroupFetch(impl: typeof fetch | undefined): void {
   groupFetch = impl;
 }
 
+/**
+ * How long the first text in a new group waits before the next one goes. Phones showed the second
+ * text (the offer) above the first (the intro) when they went back to back into a new group.
+ */
+const NEW_GROUP_PAUSE_MS = 6000;
+let groupPause: number | undefined;
+
+/** Tests set the pause. Unset pauses only against the real Conversations API. */
+export function setCleanerGroupPause(ms: number | undefined): void {
+  groupPause = ms;
+}
+
+function newGroupPauseMs(): number {
+  return groupPause ?? (groupFetch ? 0 : NEW_GROUP_PAUSE_MS);
+}
+
 const CONVERSATIONS_ROOT = "https://conversations.twilio.com/v1";
 /** The group's own voice. Group texts are posted as this chat participant, and its own echoes are ignored. */
 export const CLEANER_GROUP_IDENTITY = "cleaner-core";
@@ -133,14 +149,19 @@ export async function sendLiveGroup(
   const from = parsePhone(env.CLEANER_CORE_TWILIO_PHONE_NUMBER ?? "");
   if (!api || !from) throw new Error("not sent");
   let conversationSid = input.conversationSid;
+  let made = false;
   if (!conversationSid || !(await sameGroup(api, conversationSid, audience, from))) {
     if (conversationSid) await emptyConversation(api, conversationSid);
     conversationSid = await makeGroup(api, audience, from, hookUrl);
+    made = true;
   }
   // The group is confirmed now. A failed post may still have reached everyone, so it is a plain
   // failure for review, never a group that falls back to one-to-one texts.
   const message = await call(api, "POST", conversationPath(conversationSid, "Messages"), { Body: input.body, Author: CLEANER_GROUP_IDENTITY });
   if (!message.sid) throw new Error("not sent");
+  // The first text in a new group takes longer to reach phones, so the next one waits for it.
+  const pause = made ? newGroupPauseMs() : 0;
+  if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
   return { sid: message.sid, conversationSid };
 }
 

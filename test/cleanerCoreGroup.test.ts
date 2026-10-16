@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupInviteBody, groupOfferBody, groupTimeLine, groupUnconfirmedLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
+import { groupInviteBody, groupOfferBody, groupTimeLine, groupUnconfirmedLine, holdNote, waitingForYesNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
@@ -48,7 +48,7 @@ const PIN_SENT_GROUP = "I posted the door code in the cleaning group for the cle
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 /** With no alert routine saved, the step after the checks asks Grok to create the routines first. */
 const AFTER_CHECKS = "Create the Cleaner Core Check and Cleaner Core Alerts routines. Only the host can see the Alerts routine's webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field in the routine panel, with one secure card for each, the address first. Keep it to three short steps: open the link, copy the value, paste it in the card. Then call save_alert_routine with no arguments to get a one-time upload link, and send both values to that link from your own computer. Never put them in chat.";
-const PRACTICE_HOLD = holdNote(PRACTICE);
+const PRACTICE_HOLD = waitingForYesNote(PRACTICE);
 const PRACTICE_SETUP = [PRACTICE_HOLD];
 const PRACTICE_YES = `The cleaner said YES to the turnover at ${PRACTICE}.`;
 /** After the cleaner's YES, LiveDesk keeps one host note for the newly confirmed job. */
@@ -1326,7 +1326,7 @@ describe("live group membership", () => {
     const cleanerHurt = "If someone is hurt, call 911 now. I've let the host know.";
     const direct = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
     const resume = resumeNote(PRACTICE);
-    const hold = holdNote(PRACTICE);
+    const hold = waitingForYesNote(PRACTICE);
     const solo = await readyPractice(false);
     await solo.desk.inbound({ id: "solo-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await solo.desk.inbound({ id: "solo-yes-schedule", from: LIVE_CLEANER, text: "YES" });
@@ -1369,9 +1369,10 @@ describe("live group membership", () => {
     await grouped.desk.inbound({ id: "group-yes-schedule", from: LIVE_CLEANER, text: "YES" });
     expect(notesOf(await grouped.desk.getState())).toEqual([hold, PRACTICE_YES]);
     await grouped.desk.inbound({ id: "group-problem", from: LIVE_CLEANER, text: "The lock is broken", channel: "group" });
-    expect(notesOf(await grouped.desk.getState())).toContain(hold);
+    const problemHold = holdNote(PRACTICE);
+    expect(notesOf(await grouped.desk.getState())).toContain(problemHold);
     // The hold note to the cleaner is a group post now. The landlord's resume, opt-out and door-code notes never are.
-    expect(grouped.posts.filter((text) => text.body === hold)).toHaveLength(1);
+    expect(grouped.posts.filter((text) => text.body === problemHold)).toHaveLength(1);
     expect(grouped.posts.filter((text) => text.body === resume || text.body === stopHold || text.body === pinHeld)).toEqual([]);
     const resumed = await grouped.desk.resumeCleaning();
     expect(resumed).toEqual({ ok: true, result: { next: resume } });
@@ -1464,7 +1465,7 @@ describe("live group membership", () => {
     const pinHeld = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
     const dropped = "I couldn't send the checkout time to the group.";
     const resume = resumeNote(PRACTICE);
-    const hold = holdNote(PRACTICE);
+    const hold = waitingForYesNote(PRACTICE);
     const grouped = await readyPractice(true);
     await grouped.desk.inbound({ id: "safety-offer", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "safety-host", from: LIVE_HOST, text: "YES" });
@@ -1519,7 +1520,7 @@ describe("live group membership", () => {
     const cleanerHurt = "If someone is hurt, call 911 now. I've let the host know.";
     const direct = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
     const resume = resumeNote(PRACTICE);
-    const hold = holdNote(PRACTICE);
+    const hold = waitingForYesNote(PRACTICE);
     const review = `I saved a manual Airbnb booking exception for ${PRACTICE}. I did not change the cleaning until you confirm it.`;
     const hostStop = `You're opted out of cleaning texts for ${PRACTICE}, and the cleaning there is on hold. Reply START to get texts again.`;
     const checkin = `Is check-in at ${PRACTICE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;

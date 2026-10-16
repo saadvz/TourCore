@@ -6,7 +6,7 @@ The cleaning-service owner is asked, one time at a time, whether checkout and ch
 
 - `host-checkout-question` asks whether Sunday checkout is still 11:00 AM.
 - `host-checkin-question` asks whether Sunday check-in is still 4:00 PM, only after checkout is confirmed.
-- `turnover-hold` texts the owner once that the cleaning is on hold until the cleaner replies YES.
+- `turnover-hold` texts the owner once that the cleaning is waiting for the cleaner to reply YES.
 - `turnover-no-offer` does not text a turnover offer to the owner or anyone else, and no job status is `offered`.
 - `turnover-scratch` sends every text only to the Scratch owner number.
 
@@ -26,7 +26,7 @@ Preconditions:
 
 - **Check the flag.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor`. Exit code 0. Stdout `sends` is false and `enabled` is true. The note is `Cleaner Core is on. doctor does not send texts.`
 - **Ask, then hold.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`. Exit code 0. Stdout matches `scripts/expected/smoke-turnover.json`. `property` is `12 Scratch Lane, Teaneck, NJ 07666`. `checkout` is `2026-10-18T15:00:00.000Z`. `nextArrival` is `2026-10-18T20:00:00.000Z`. `pinRecipients` is `[]`.
-- **Owner texts.** `sent` is three items, all to `+15555550100`. The checkout question is `Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.` The check-in question is `Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.` The hold note is `The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.` No body starts with `Turnover at`.
+- **Owner texts.** `sent` is three items, all to `+15555550100`. The checkout question is `Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.` The check-in question is `Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.` The hold note is `The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is waiting for the cleaner to reply YES.` No body starts with `Turnover at`.
 - **Job.** The `stay-a` job `status` is `host_confirmed` and `live` is true. No job `status` is `offered` or `ready`.
 - **Proof.** Save the command, stdout, stderr, and exit code under `.cursor/skills/verify-cleanercore/evidence/<UTC timestamp>/` with feature id `same-day-turnover`. Re-read the saved stdout and require the three owner bodies above.
 

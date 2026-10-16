@@ -14,7 +14,7 @@ const CLEANER = "+15555550101";
 const CHECKOUT_Q = "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.";
 const CHECKIN_Q = "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.";
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
-const HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.";
+const HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is waiting for the cleaner to reply YES.";
 const OFFER_1PM = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.";
 const CONFIRM_1PM = "Cleaning is scheduled for Sunday, Oct 18 at 1:00 PM at 12 Scratch Lane, Teaneck, NJ 07666.";
@@ -711,7 +711,7 @@ describe("step D private door code", () => {
       reason: "ignored",
       sent: [],
     });
-    const onHold = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YES.`;
+    const onHold = `The cleaning at ${ADDRESS} is waiting for the cleaner to reply YES.`;
     expect(quiet.sent).toEqual([
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: CLEANER, body: OPT_IN, kind: "opt-in" },

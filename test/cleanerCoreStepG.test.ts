@@ -63,7 +63,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("step G safety gates", () => {
-  const HOLD = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YES.`;
+  const HOLD = `The cleaning at ${ADDRESS} is waiting for the cleaner to reply YES.`;
 
   it("holds the Guesty Lite feed, the smoke default, and a replay when no cleaner has opted in", async () => {
     const box = sink();
