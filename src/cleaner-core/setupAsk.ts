@@ -164,7 +164,12 @@ export const DOOR_CODE_STEP: SetupAsk = {
   step: "door-code",
   tool: "save_door_code",
   questions: [
-    { field: "code", ask: "the door code", required: true, how: "Only on your secure card. Never in chat." },
+    {
+      field: "code",
+      ask: "the door code",
+      required: true,
+      how: 'Only on your secure card. Never in chat. Call save_door_code with no code (lockLocation is fine) to get a one-time upload link, then post {"code": "<door code>"} to it from your own computer.',
+    },
     { field: "lockLocation", ask: "where the lock is", required: false, example: "front door keypad" },
   ],
 };

@@ -74,6 +74,14 @@ const CALENDAR_UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<calendar link>"} to uploadUrl with Content-Type: application/json, using the link from your secure card. Never put it in chat or in a tool argument. Then call get_state to confirm.';
 const CALENDAR_UPLOAD_SAVED = "Saved the calendar link.";
 const CALENDAR_UPLOAD_REFUSED = "Send the calendar's public https link as url.";
+/** Where Grok's own computer posts the door code from its secure card. The rest of the path is the one-time code. */
+export const DOOR_CODE_UPLOAD_PREFIX = "/cleaner-core/door-code/";
+const DOOR_CODE_UPLOAD_NEXT =
+  'From your own cloud computer, POST JSON {"code": "<door code>"} to uploadUrl with Content-Type: application/json, using the code from your secure card. Never put it in chat. Then call get_state to confirm.';
+const DOOR_CODE_UPLOAD_REFUSED = "Send the door code as 4 to 8 digits in code.";
+/** A tool got a secure card's placeholder instead of the door code. */
+const MASKED_CODE =
+  "That door code came through masked, so I didn't save it. Call save_door_code with no code to get a one-time upload link, and post the code to it from your own computer.";
 /** A tool got a secure card's placeholder instead of the link. */
 const MASKED_LINK =
   'That link came through masked, so I didn\'t save it. A secure card can\'t pass a value to a tool. Call save_sources with uploadLink: { name: "Guesty Lite" } (or the calendar\'s name) and post the link to the upload link from your own computer.';
@@ -303,6 +311,8 @@ interface LiveFile {
   alertUpload?: { hash: string; expiresAt: string };
   /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
   calendarUpload?: { hash: string; expiresAt: string; name: string };
+  /** The pending door code upload link, with the lock location to save with it. Never the link's code or the door code. */
+  doorCodeUpload?: { hash: string; expiresAt: string; lockLocation?: string };
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
@@ -525,6 +535,8 @@ export class LiveDesk {
   private file: LiveFile = {};
   /** The door-code key from the call that made the calendar upload link, so the upload can check the link. */
   private calendarUploadKey: Buffer | undefined;
+  /** The door-code key from the call that made the door code upload link, so the upload seals with it. */
+  private doorCodeUploadKey: Buffer | undefined;
   private pin: string | undefined;
   private engine: CleanerCore | undefined;
   /** A setup save changed what the engine reads when it opens. The next serial step reopens it. */
@@ -1076,7 +1088,9 @@ export class LiveDesk {
     if (!this.file.cleaner || !this.file.propertyId) return this.fail("Save the host and the cleaner first.");
     if (!hasSources(this.file) && !isScratchPropertyAddress(this.file.address)) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
-    if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
+    // A Grok Bot's secure card can't fill a tool argument, so no code means: make an upload link.
+    if (!code) return this.issueDoorCodeUpload(input.lockLocation?.trim(), pinKey);
+    if (!/^\d{4,8}$/.test(code)) return this.fail(/\d/.test(code) || code.length > 12 ? "Send the door code as 4 to 8 digits." : MASKED_CODE);
     const lockLocation = input.lockLocation?.trim();
     this.openSeal(pinKey);
     // No run of 4 or more digits, even split like "80 88", and never the saved code or the one being saved.
@@ -1106,6 +1120,67 @@ export class LiveDesk {
     this.file.pinSeal = previousSeal;
     this.keep("lockLocation", previousLock);
     return this.fail("Could not seal the door code.");
+  }
+
+  /**
+   * Makes a one-time upload link for the door code. Only the link code's sha256, its expiry, and the
+   * lock location are kept. A new link replaces the last one.
+   */
+  private issueDoorCodeUpload(lockLocation: string | undefined, pinKey: Buffer | undefined): ToolReply {
+    this.openSeal(pinKey);
+    if (lockLocation && (lockLocation.length > MAX_LOCK_LOCATION || /\d{4,}/.test(joinSplitDigits(lockLocation)) || this.carriesCode(lockLocation))) {
+      return this.fail(`Say where the lock is in under ${MAX_LOCK_LOCATION} characters, with no code or long number in it.`);
+    }
+    if (!this.keyFor(pinKey)) return this.fail(PIN_KEY_MISSING);
+    const base = publicBaseUrl(this.env());
+    if (!base) return this.fail(UPLOAD_LINK_OFF);
+    const origin = new URL(base).origin;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const code = randomBytes(32).toString("base64url");
+      const uploadUrl = `${origin}${DOOR_CODE_UPLOAD_PREFIX}${code}`;
+      if (this.leaks(uploadUrl)) continue;
+      this.file.doorCodeUpload = {
+        hash: uploadHash(code),
+        expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(),
+        ...(lockLocation ? { lockLocation } : {}),
+      };
+      this.doorCodeUploadKey = pinKey;
+      this.persist();
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: DOOR_CODE_UPLOAD_NEXT });
+    }
+    return this.fail("That didn't work. Try again.");
+  }
+
+  /**
+   * Seals a door code posted to its upload link, with the same checks as save_door_code. Only a save
+   * uses the link up. The code is never repeated or logged, and the reply never holds it.
+   */
+  uploadDoorCode(code: string, body: Record<string, unknown>): Promise<{ status: 200 | 400 | 404; body: { ok: boolean; message?: string; error?: string } }> {
+    return this.serial(async () => {
+      const pending = this.file.doorCodeUpload;
+      if (!pending || !sameHash(uploadHash(code), pending.hash)) return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      if (this.now().getTime() >= Date.parse(pending.expiresAt)) {
+        delete this.file.doorCodeUpload;
+        this.doorCodeUploadKey = undefined;
+        this.persist();
+        return { status: 404, body: { ok: false, error: UPLOAD_GONE } };
+      }
+      const doorCode = typeof body.code === "string" ? body.code.trim() : typeof body.code === "number" ? String(body.code) : "";
+      if (!/^\d{4,8}$/.test(doorCode)) return { status: 400, body: { ok: false, error: DOOR_CODE_UPLOAD_REFUSED } };
+      const lockLocation = typeof body.lockLocation === "string" ? body.lockLocation : pending.lockLocation;
+      const key = this.doorCodeUploadKey;
+      delete this.file.doorCodeUpload;
+      const saved = this.saveDoorCodeNow({ code: doorCode, ...(lockLocation !== undefined ? { lockLocation } : {}) }, key);
+      if (!saved.ok) {
+        // A refused code keeps the link, so Grok can post again.
+        this.file.doorCodeUpload = pending;
+        this.persist();
+        return { status: 400, body: { ok: false, error: saved.error } };
+      }
+      this.doorCodeUploadKey = undefined;
+      this.persist();
+      return { status: 200, body: { ok: true, message: String(saved.result.next) } };
+    });
   }
 
   /**

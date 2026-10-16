@@ -72,8 +72,9 @@ Safety rules:
   them to change it.
 - Use your secure card for the door code. Send the alert routine's webhook
   address and key only to the one-time upload link, from your own computer.
-- A calendar link from your secure card goes the same way: to the one-time
-  upload link `save_sources` gives you, from your own computer.
+- A calendar link or the door code from your secure card goes the same way:
+  to the one-time upload link that `save_sources` or `save_door_code` gives
+  you, from your own computer.
 - The door code goes only on your secure card. Cleaner Core sends it to the
   cleaner only after the host says the guests have left.
 - You never text anyone yourself. Show the host the exact words first. A live

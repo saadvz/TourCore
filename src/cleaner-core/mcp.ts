@@ -85,8 +85,8 @@ const TOOLS = [
     name: "save_door_code",
     title: "Save the door code",
     description:
-      "Stores the door code. The reply never includes the digits. The code is not returned later. lockLocation is optional: where the lock is, like back door lockbox, with no numbers. It is named in the cleaner's door code text.",
-    input: z.object({ code: z.string(), lockLocation: z.string().optional() }),
+      "Stores the door code. A code on your secure card can't be passed here: call it with no code (lockLocation is fine) to get a one-time uploadUrl, and post {\"code\": \"...\"} to it from your own computer. The reply never includes the digits. The code is not returned later. lockLocation is optional: where the lock is, like back door lockbox, with no numbers. It is named in the cleaner's door code text.",
+    input: z.object({ code: z.string().optional(), lockLocation: z.string().optional() }),
   },
   {
     name: "save_preferences",
@@ -267,7 +267,7 @@ export async function handleCleanerMcpMessage(
       serverInfo: SERVER_INFO,
       instructions: [
         "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a choice card. Offer the default when there is one. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
-        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
+        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
         "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
