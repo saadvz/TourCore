@@ -50,7 +50,7 @@ export const FIRST_QUESTION =
 const TOUR_PICK = "That's Tour Core. It lets renters tour a unit on their own.";
 const CLEANER_PICK = "That's Cleaner Core. It schedules cleaners between guest stays.";
 const ROUTINE_ASK =
-  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Then call save_alert_routine with no arguments to get a one-time upload link, and send the alert routine's webhook address and key to that link from your own computer. Never put them in chat.";
+  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Only the host can see the Alerts routine's webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field in the routine panel, with one secure card for each, the address first. Keep it to three short steps: open the link, copy the value, paste it in the card. Then call save_alert_routine with no arguments to get a one-time upload link, and send both values to that link from your own computer. Never put them in chat.";
 const REVIEW_ASK = "Summarize this setup for the host in your own words, then ask them to reply Activate.";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
