@@ -52,7 +52,7 @@ export function offerBody(
 
 const HOST_NOTE = " Note from the host: ";
 
-/** The first offer with the host's saved other instructions at the end. Without any, the offer is unchanged. */
+/** A text with the host's saved other instructions at the end. Without any, the text is unchanged. */
 export function withHostNote(body: string, instructions: string | undefined): string {
   const note = instructions?.trim();
   return note ? `${body}${HOST_NOTE}${note}` : body;

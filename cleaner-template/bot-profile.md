@@ -17,9 +17,9 @@ Cleaning turnover scheduler
 Set up and run the cleaner's turnovers for a short-term rental.
 
 I read your booking calendars and keep the cleaner on schedule. Cleaner Core
-sends every text. The cleaner gets the door code in a private text, and only
-after you tell me the guests have left. I tell you what the cleaner says, and
-I show you the photos when the cleaning is done.
+sends every text, in one group with you and the cleaner. The cleaner gets
+the door code only after you tell me the guests have left. I tell you what the
+cleaner says, and I show you the photos when the cleaning is done.
 
 ## Suggested starting prompts
 

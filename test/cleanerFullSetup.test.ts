@@ -449,6 +449,26 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     expect(notes.includes(DOOR_CODE)).toBe(false);
   });
 
+  it("says where the door code goes when it is saved: the group, or a private text when the host kept it private", async () => {
+    const grouped = openDesk([HOST, CLEANER], "1").desk;
+    ok(await grouped.getState("2"));
+    ok(await grouped.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30 AM", checkInTime: "3:00 PM" }));
+    ok(await grouped.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await grouped.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" }));
+    expect(ok(await grouped.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY)).next).toBe(
+      "Saved the door code. It goes only to the cleaner, in the cleaning group, after you say the guests have left.",
+    );
+    resetLiveDesks();
+    const kept = openDesk([HOST, CLEANER, OBSERVER], "1").desk;
+    ok(await kept.getState("2"));
+    ok(await kept.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30 AM", checkInTime: "3:00 PM" }));
+    ok(await kept.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await kept.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", contacts: [{ name: "Sam", role: "co-host", phone: OBSERVER }], groupChat: "everyone", doorCodeTo: "cleaner" }));
+    expect(ok(await kept.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY)).next).toBe(
+      "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
+    );
+  });
+
   it("cleaner-and-host leaves the contacts out of the group", async () => {
     const { desk, sms, groups } = openDesk([HOST, CLEANER, OBSERVER], "1");
     await setUp(desk, { contacts: [{ name: "Sam", role: "observer", phone: OBSERVER }], groupChat: "cleaner-and-host" });
@@ -1659,21 +1679,24 @@ describe("Cleaner Core cleaning: get_job_photos", () => {
   });
 });
 
-describe("Cleaner Core cleaning: the host's other instructions (Ruling 9)", () => {
-  it("puts the saved instructions at the end of the first offer", async () => {
-    const { sms } = await takenWith({ instructions: "Leave the porch light on." });
-    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([`${OFFER} Note from the host: Leave the porch light on.`]);
-  });
-
-  it("keeps the offer copy without saved instructions", async () => {
-    const { sms } = await takenWith({});
+describe("Cleaner Core cleaning: the host's other instructions", () => {
+  it("keeps the offer without the note and puts the saved instructions at the end of the door code text", async () => {
+    const { desk, sms } = await takenWith({ instructions: "Leave the porch light on." });
     expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([OFFER]);
+    expect(sms.sent.some((item) => item.body.includes("Note from the host"))).toBe(false);
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    expect(sms.sent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.body)).toEqual([`${PRIVATE_PIN} Note from the host: Leave the porch light on.`]);
   });
 
-  it("sends instructions that say ready, and copies for others drop only the YES ask", async () => {
-    const { sms } = await takenWith({ instructions: "Get the guest room ready." });
+  it("keeps the offer and the door code copy without saved instructions", async () => {
+    const { desk, sms } = await takenWith({});
+    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([OFFER]);
+    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    expect(sms.sent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => item.body)).toEqual([PRIVATE_PIN]);
+  });
+
+  it("copies for others still drop only the YES ask and keep a note", () => {
     const body = `${OFFER} Note from the host: Get the guest room ready.`;
-    expect(offers(sms.sent).map((item) => plain(item.body))).toEqual([body]);
     expect(offerForOthers(body)).toBe(
       `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm. Note from the host: Get the guest room ready.`,
     );
@@ -1971,7 +1994,7 @@ describe("Cleaner Core full diagram", () => {
     at = new Date("2026-10-17T15:10:00.000Z");
     await say("mark_guests_left", { said: "guests have left" });
     // The group holds only the host and the cleaner, so the code with the lock goes into it. Nothing goes one-to-one.
-    const groupCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. Ana, reply DONE when the cleaning is finished.`;
+    const groupCode = `Guests have left ${address}. Door code for the ${LOCK}: ${DOOR_CODE}. Ana, reply DONE when the cleaning is finished. Note from the host: ${PREFERENCES.instructions}`;
     expect(sms.sent.filter((item) => PLAIN_CODE.test(item.body))).toEqual([]);
     expect(groups.posts.filter((post) => PLAIN_CODE.test(post.body))).toEqual([expect.objectContaining({ body: groupCode, to: [host, cleaner].sort() })]);
     await safe("8 nudge and guests left");

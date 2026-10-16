@@ -365,10 +365,11 @@ export interface CleanerCoreOptions {
   /** The cleaner's other texts during the cleaning are kept as job notes. */
   supplyNotes?: boolean;
   /**
-   * The host's other instructions, added to the end of the first offer. LiveDesk sets it only when
-   * instructions are saved, so the Scratch CLI and smoke engines keep their offer copy.
+   * The host's other instructions, added to the end of the door code text, so the cleaner reads them
+   * as the cleaning starts. LiveDesk sets it only when instructions are saved, so the Scratch CLI and
+   * smoke engines keep their door code copy.
    */
-  offerNote?: string;
+  cleaningNote?: string;
   /** The host reads the thread with the cleaner, by the name the group calls them. Absent keeps one-to-one texts. */
   groupChat?: {
     hostName: string;
@@ -1817,7 +1818,8 @@ class Engine implements CleanerCore {
       const pin = this.pin;
       const route = this.groupChat ? codeRoute(this.groupSeats()) : "private";
       if (route === "held") return sent;
-      const body = doorCodeBody(this.options.property.address, pin, this.options.lockLocation?.trim() || undefined);
+      // The host's note rides on the door code, so the cleaner reads it as the cleaning starts.
+      const body = withHostNote(doorCodeBody(this.options.property.address, pin, this.options.lockLocation?.trim() || undefined), this.options.cleaningNote);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
       let text: CleanerText | null = null;
@@ -1830,7 +1832,7 @@ class Engine implements CleanerCore {
           jobId: job.id,
           to: addressed.to,
           kind: "pin",
-          body: groupDoorCodeBody(this.options.property.address, pin, this.groupChat!.cleanerName, this.options.lockLocation?.trim() || undefined),
+          body: withHostNote(groupDoorCodeBody(this.options.property.address, pin, this.groupChat!.cleanerName, this.options.lockLocation?.trim() || undefined), this.options.cleaningNote),
           channel: "group",
           audience,
         });
@@ -2103,7 +2105,7 @@ class Engine implements CleanerCore {
       const nextWhen = job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null;
       const addressed = addressCleaner(this.cleanerRecord(), {
         kind: "offer",
-        body: withHostNote(offerBody(this.options.property.address, checkoutWhen, nextWhen, job.sameDay), this.options.offerNote),
+        body: offerBody(this.options.property.address, checkoutWhen, nextWhen, job.sameDay),
       });
       if (!addressed) {
         if (!this.owner) return null;

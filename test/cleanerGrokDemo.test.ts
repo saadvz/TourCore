@@ -1491,6 +1491,7 @@ describe("Cleaner Core Grok demo: editing calendars never silently cancels a cle
 
 const LANE = SCRATCH_TENANTS[0];
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_SENT_GROUP = "I posted the door code in the cleaning group for the cleaner. I'll tell you if it doesn't go through.";
 
 interface OutText {
   label: string;
@@ -1622,7 +1623,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await safe("5 reminder");
 
     // 6. The guests leave. The code goes into the group of the host and the cleaner, shown redacted.
-    expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT);
+    expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT_GROUP);
     const door = await labelled("Door code text to the group");
     expect(door).toHaveLength(1);
     expect(door[0]?.body).toContain("Door code: [redacted].");
