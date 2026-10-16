@@ -52,14 +52,21 @@ function partsFormatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+const validZones = new Map<string, boolean>();
+
 export function isValidTimeZone(timeZone: string): boolean {
   if (!timeZone || (timeZone !== "UTC" && !timeZone.includes("/"))) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone });
-    return true;
-  } catch {
-    return false;
+  let valid = validZones.get(timeZone);
+  if (valid === undefined) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone });
+      valid = true;
+    } catch {
+      valid = false;
+    }
+    validZones.set(timeZone, valid);
   }
+  return valid;
 }
 
 /** Returns the canonical spelling (e.g. "america/new_york" -> "America/New_York"), or undefined. */

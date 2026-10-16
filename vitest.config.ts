@@ -1,4 +1,13 @@
+import { existsSync, mkdirSync } from "node:fs";
 import { configDefaults, defineConfig } from "vitest/config";
+
+// Every live-app test writes its records through fsync. On a RAM disk that is
+// nearly free; on the runner's real disk it was about 40% of the suite's time.
+const RAM_TMP = "/dev/shm/tourcore-tests";
+const tmp = existsSync("/dev/shm") ? (mkdirSync(RAM_TMP, { recursive: true }), RAM_TMP) : undefined;
+
+// vi.mock replaces a module for the whole worker, so these files get their own.
+const OWN_MODULES = ["test/cleanerResetProperty.test.ts"];
 
 export default defineConfig({
   test: {
@@ -7,5 +16,14 @@ export default defineConfig({
     // on the GitHub runner while the rest of the suite passed.
     testTimeout: 20_000,
     exclude: [...configDefaults.exclude, "test/eval/**", "**/.cursor/**"],
+    ...(tmp ? { env: { TMPDIR: tmp } } : {}),
+    projects: [
+      {
+        extends: true,
+        // Reusing one module graph across files saves about a second of imports per file.
+        test: { name: "shared", isolate: false, setupFiles: ["test/resetGlobals.ts"], exclude: [...configDefaults.exclude, "test/eval/**", "**/.cursor/**", ...OWN_MODULES] },
+      },
+      { extends: true, test: { name: "isolated", include: OWN_MODULES } },
+    ],
   },
 });
