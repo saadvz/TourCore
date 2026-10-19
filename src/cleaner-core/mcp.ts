@@ -60,12 +60,13 @@ const TOOLS = [
     name: "save_sources",
     title: "Save the booking calendars",
     description:
-      "Saves where bookings come from. calendars replaces every saved link: each is a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8. A link on your secure card can't be passed here: pass uploadLink with the calendar's name instead, and post the link from your own computer to the one-time uploadUrl in the reply. Pass google true or false only to change Google Calendar; leaving it out keeps it. If the change would call off an upcoming cleaning, it is refused with wouldCancel: ask the host, then save again with dropJobs true. The reply never repeats a link.",
+      "Saves where bookings come from. calendars replaces every saved link: each is a name and its public https iCal url (Guesty, Airbnb, Vrbo, direct, or other), up to 8. A link on your secure card can't be passed here: pass uploadLink with the calendar's name instead, and post the link from your own computer to the one-time uploadUrl in the reply. Pass google true or false only to change Google Calendar; leaving it out keeps it. If the change would call off an upcoming cleaning, it is refused with wouldCancel: ask the host, then save again with dropJobs true. Pass done true once the host says there are no more calendars to add. The reply never repeats a link.",
     input: z.object({
       calendars: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
       google: z.boolean().optional(),
       dropJobs: z.boolean().optional(),
       uploadLink: z.object({ name: z.string().optional() }).optional(),
+      done: z.boolean().optional(),
     }),
   },
   {
