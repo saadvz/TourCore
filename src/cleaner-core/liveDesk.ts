@@ -146,7 +146,7 @@ const MIN_SCHEDULE_DAYS = 1;
 const MAX_SCHEDULE_DAYS = 14;
 /** A timed first cleaning text goes at this local time on its day. */
 const FIRST_TEXT_TIME = "09:00";
-const FIRST_TEXTS = ["when-confirmed", "days-after-check-in"] as const;
+const FIRST_TEXTS = ["when-confirmed", "days-after-check-in", "days-before-checkout"] as const;
 const REMINDERS = ["morning-of", "days-before-checkout"] as const;
 /**
  * The saved reminder's trigger id. It stays the same when its kind changes, so a reminder already
@@ -170,7 +170,7 @@ interface Contact {
 /** The messaging schedule. Times are "HH:MM". */
 interface Schedule {
   firstText: (typeof FIRST_TEXTS)[number];
-  /** Days after check-in, for days-after-check-in. */
+  /** Days after check-in, or days before checkout, for the timed first texts. */
   firstTextDays?: number;
   reminder: (typeof REMINDERS)[number];
   /** Days before checkout, for days-before-checkout. */
@@ -259,7 +259,7 @@ interface SourcesInput {
 }
 
 interface ScheduleInput {
-  firstText?: "when-confirmed" | "days-after-check-in";
+  firstText?: (typeof FIRST_TEXTS)[number];
   firstTextDays?: number;
   reminder?: "morning-of" | "days-before-checkout";
   reminderDays?: number;
@@ -923,12 +923,16 @@ export class LiveDesk {
     const saved = this.file.schedule ?? DEFAULT_SCHEDULE;
     const firstText = input.firstText ?? saved.firstText;
     const reminder = input.reminder ?? saved.reminder;
-    if (!(FIRST_TEXTS as readonly string[]).includes(firstText)) return this.fail("Send the first cleaning text when the times are confirmed, or a number of days after check-in.");
+    if (!(FIRST_TEXTS as readonly string[]).includes(firstText)) return this.fail("Send the first cleaning text when the times are confirmed, a number of days after check-in, or a number of days before checkout.");
     if (!(REMINDERS as readonly string[]).includes(reminder)) return this.fail("Send the reminder the morning of checkout, or a number of days before checkout.");
     const days = (value: number | undefined) => (value !== undefined && Number.isInteger(value) && value >= MIN_SCHEDULE_DAYS && value <= MAX_SCHEDULE_DAYS ? value : undefined);
     const dayRange = `${MIN_SCHEDULE_DAYS} to ${MAX_SCHEDULE_DAYS} days`;
-    const firstTextDays = firstText === "days-after-check-in" ? days(input.firstTextDays ?? saved.firstTextDays) : undefined;
-    if (firstText === "days-after-check-in" && firstTextDays === undefined) return this.fail(`Say how many days after check-in the first text goes, ${dayRange}.`);
+    const timedFirstText = firstText === "days-after-check-in" || firstText === "days-before-checkout";
+    const firstTextDays = timedFirstText ? days(input.firstTextDays ?? saved.firstTextDays) : undefined;
+    if (timedFirstText && firstTextDays === undefined) {
+      const side = firstText === "days-after-check-in" ? "after check-in" : "before checkout";
+      return this.fail(`Say how many days ${side} the first text goes, ${dayRange}.`);
+    }
     const reminderDays = reminder === "days-before-checkout" ? days(input.reminderDays ?? saved.reminderDays) : undefined;
     if (reminder === "days-before-checkout" && reminderDays === undefined) return this.fail(`Say how many days before checkout the reminder goes, ${dayRange}.`);
     const reminderText = input.reminderTime?.trim();
@@ -2311,8 +2315,8 @@ export class LiveDesk {
     const reminderDays = schedule.reminder === "days-before-checkout" ? schedule.reminderDays : undefined;
     return {
       offerTrigger:
-        schedule.firstText === "days-after-check-in" && schedule.firstTextDays !== undefined
-          ? { kind: "days-after-check-in", days: schedule.firstTextDays, localTime: FIRST_TEXT_TIME }
+        schedule.firstText !== "when-confirmed" && schedule.firstTextDays !== undefined
+          ? { kind: schedule.firstText, days: schedule.firstTextDays, localTime: FIRST_TEXT_TIME }
           : { kind: "when-confirmed" },
       triggers: [
         {

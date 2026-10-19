@@ -677,6 +677,27 @@ describe("Cleaner Core schedule: the first cleaning text", () => {
     expect(offers(sms.sent)).toHaveLength(1);
   });
 
+  for (const groupChat of ["0", "1"] as const) {
+    it(`days-before-checkout 2 holds the offer until checkout - 2 days at 9:00 AM, then sends it once (group ${groupChat})`, async () => {
+      const { desk, sms, groups, time } = await withSchedule({ firstText: "days-before-checkout", firstTextDays: 2 }, groupChat);
+      await optIn(desk, groupChat);
+      expect(offersAnywhere(sms.sent, groups.posts)).toEqual([]);
+      await alertsAt(desk, time, "2026-10-16T12:59:00.000Z");
+      expect(offersAnywhere(sms.sent, groups.posts)).toEqual([]);
+      await alertsAt(desk, time, "2026-10-16T13:00:00.000Z");
+      expect(offersAnywhere(sms.sent, groups.posts)).toHaveLength(1);
+      await alertsAt(desk, time, "2026-10-16T13:05:00.000Z");
+      expect(offersAnywhere(sms.sent, groups.posts)).toHaveLength(1);
+      expect(codeRecipients(sms.sent)).toEqual([]);
+    });
+  }
+
+  it("days-before-checkout already past sends the offer on the next check", async () => {
+    const { desk, sms } = await withSchedule({ firstText: "days-before-checkout", firstTextDays: 7 }, "0");
+    await optIn(desk, "0");
+    expect(offers(sms.sent)).toHaveLength(1);
+  });
+
   it("when-confirmed sends the offer right after the cleaner opts in", async () => {
     const { desk, sms } = await withSchedule({ firstText: "when-confirmed" }, "0");
     await optIn(desk, "0");
