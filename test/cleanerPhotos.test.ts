@@ -62,17 +62,17 @@ async function call(wired: WiredApp, name: string, args: Record<string, unknown>
 /** Sets up Lake House, takes the offer, and sends the private code, so the cleaning is in progress. */
 async function cleaning(clock = testClock()): Promise<WiredApp> {
   const wired = await app(clock);
-  await call(wired, "get_state", { said: "2" });
+  await call(wired, "get_state", { choice: "cleaners" });
   await call(wired, "save_property", { business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: "America/New_York" });
   await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
   await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" });
   await call(wired, "save_door_code", { code: DOOR_CODE, lockLocation: "back door lockbox" });
   await call(wired, "save_preferences", { checklist: ["Strip the beds"], photosRequired: true });
   await call(wired, "activate");
-  await call(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+  await call(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
   await wired.postTwilio(HOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-opt-in", token: CLEANER_AUTH });
   await wired.postTwilio(HOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-offer", token: CLEANER_AUTH });
-  await call(wired, "mark_guests_left", { said: "The guests have left" });
+  await call(wired, "mark_guests_left", { confirmed: true });
   expect(wired.cleanerSent.some((item) => item.to === CLEANER && item.body.includes(DOOR_CODE))).toBe(true);
   return wired;
 }

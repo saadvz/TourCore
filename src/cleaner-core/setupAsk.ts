@@ -43,14 +43,14 @@ export const START_ASK: SetupAsk = {
   tool: "get_state",
   questions: [
     {
-      field: "said",
+      field: "choice",
       ask: "what the host wants help with",
       required: true,
       options: [
-        { value: "1", label: "Letting renters tour a unit on their own" },
-        { value: "2", label: "Scheduling cleaners between guest stays" },
+        { value: "tours", label: "Letting renters tour a unit on their own" },
+        { value: "cleaners", label: "Scheduling cleaners between guest stays" },
       ],
-      how: "Call get_state again with said set to the option's value.",
+      how: "Call get_state again with choice set to the option's value.",
     },
   ],
 };

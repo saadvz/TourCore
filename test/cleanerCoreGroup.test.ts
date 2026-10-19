@@ -573,18 +573,18 @@ describe("group thread on the desk", () => {
     };
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: "12 Practice Lane, Teaneck, NJ 07666", timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    const missing = await desk.markGuestsLeft({ said: "The guests have left" }, undefined);
+    const missing = await desk.markGuestsLeft({ confirmed: true }, undefined);
     expect(missing).toEqual({ ok: false, error: PIN_MISSING });
     expect(calls).toEqual([]);
 
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
@@ -597,7 +597,7 @@ describe("group thread on the desk", () => {
     expect(sms.sent.filter((text) => text.body.startsWith("Turnover at"))).toEqual([]);
     const state = await desk.getState();
     expect(state.ok && (state.result.turns as { status: string }[])[0]?.status).toBe("host_confirmed");
-    const failed = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const failed = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(failed.ok).toBe(false);
     expect(JSON.stringify(failed).includes(DOOR_CODE)).toBe(false);
     expect(sms.sent.some((text) => text.body.includes(DOOR_CODE))).toBe(false);
@@ -633,7 +633,7 @@ describe("group thread on the desk", () => {
     const open = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
     const desk = open();
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
@@ -652,7 +652,7 @@ describe("group thread on the desk", () => {
     env.CLEANER_CORE_LIVE_SMS = "1";
     expect((await desk.runChecks()).ok).toBe(true);
     expect(clockBodies()).toEqual([]);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     const saved = await desk.getTurns();
     expect(saved.ok).toBe(true);
     if (saved.ok) {
@@ -869,14 +869,14 @@ describe("live group membership", () => {
       return desk;
     };
     const desk = boot();
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
@@ -942,20 +942,20 @@ describe("live group membership", () => {
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const boot = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
     const desk = boot();
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
     fetchBox.blockMembership();
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
+    const again = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === PRACTICE_TIME_LINE)).toEqual([]);
@@ -996,20 +996,20 @@ describe("live group membership", () => {
     setCleanerTwilioClient(heldSms);
     setCleanerGroupFetch(heldFetch.impl);
     const held = liveDeskFor(heldRoot, () => env, () => new Date(FROZEN));
-    expect((await held.getState("2")).ok).toBe(true);
+    expect((await held.getState("cleaners")).ok).toBe(true);
     expect((await held.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await held.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await held.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await held.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await held.setUpTexting()).ok).toBe(true);
     expect((await held.runChecks()).ok).toBe(true);
-    await held.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await held.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await held.inbound({ id: "yes-host-held", from: LIVE_HOST, text: "YES" });
     await held.inbound({ id: "yes-cleaner-held", from: LIVE_CLEANER, text: "YES" });
     await held.inbound({ id: "yes-schedule-held", from: LIVE_CLEANER, text: "YES" });
     heldFetch.blockMembership();
     await held.inbound({ id: "stop-before-sync", from: LIVE_CLEANER, text: "STOP" });
-    const stayed = await held.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const stayed = await held.markGuestsLeft({ confirmed: true }, pinKey);
     expect(stayed.ok).toBe(true);
     expect(heldFetch.posts.filter((text) => text.body === line || text.body === groupPin || text.body === alert || text.body === PRACTICE_TIME_LINE)).toEqual([]);
     expect(heldSms.sent.filter((text) => text.body === privatePin || text.body === line || text.body === groupPin)).toEqual([]);
@@ -1048,19 +1048,19 @@ describe("live group membership", () => {
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-host-fail", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner-fail", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule-fail", from: LIVE_CLEANER, text: "YES" });
     fetchBox.blockMembership();
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: failedAlert } });
     await desk.notePinDelivery({ sid: "SM-none", status: "sent" });
     const read = await desk.getState();
@@ -1102,14 +1102,14 @@ describe("live group membership", () => {
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-host-stop", from: LIVE_HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner-stop", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule-stop", from: LIVE_CLEANER, text: "YES" });
@@ -1122,7 +1122,7 @@ describe("live group membership", () => {
     const turns = await desk.getTurns();
     expect(turns.ok).toBe(true);
     if (turns.ok) expect(turns.result.held).toBe(true);
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left.ok).toBe(true);
     expect(sms.sent.filter((text) => text.body.includes("Door code:"))).toEqual([]);
     expect(fetchBox.posts.filter((text) => text.body.includes("Door code:") || text.body === line)).toEqual([]);
@@ -1158,14 +1158,14 @@ describe("live group membership", () => {
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     await desk.inbound({ id: "yes-cleaner-only", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule-only", from: LIVE_CLEANER, text: "YES" });
     // A contact is in the group, and the landlord has not chosen the whole group, so the code stays private.
@@ -1176,7 +1176,7 @@ describe("live group membership", () => {
 
   it("returns the sent sentence when Twilio accepts a private door code", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === privatePin).map((text) => text.to)).toEqual([]);
@@ -1191,12 +1191,12 @@ describe("live group membership", () => {
 
   it("posts the door code in the group and returns the sent sentence when only the landlord and the cleaner are in it", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost(false);
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT_GROUP } });
     const groupPin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. Maria, reply DONE when the cleaning is finished.`;
     expect(posts.filter((text) => text.body === groupPin)).toHaveLength(1);
     expect(sms.sent.filter((text) => text.body === privatePin || text.body.includes(DOOR_CODE))).toEqual([]);
-    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const again = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(posts.filter((text) => text.body === groupPin)).toHaveLength(1);
     expect(JSON.stringify(await desk.getState())).not.toContain(DOOR_CODE);
@@ -1204,9 +1204,9 @@ describe("live group membership", () => {
 
   it("returns the already-sent sentence while a private delivery report is pending", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
-    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const again = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
@@ -1222,7 +1222,7 @@ describe("live group membership", () => {
   it("returns the failed-send sentence after a failed private delivery report", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
     const line = "Maria got the door code privately.";
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     const pending = await desk.getState();
     expect(pending.ok).toBe(true);
@@ -1246,7 +1246,7 @@ describe("live group membership", () => {
   it("hides the private note after an undelivered report and returns the failed-send sentence", async () => {
     const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
     const line = "Maria got the door code privately.";
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     const pinText = sms.sent.find((text) => text.body === privatePin);
     await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
@@ -1308,14 +1308,14 @@ describe("live group membership", () => {
     }));
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
     expect((await desk.saveDoorCode({ code: DOOR_CODE }, pinKey)).ok).toBe(true);
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
     return { desk, sms, posts: fetchBox.posts, pinKey, root };
   }
 
@@ -1335,7 +1335,7 @@ describe("live group membership", () => {
     expect(notesOf(await solo.desk.getState())).toContain(hostHurt);
     await solo.desk.inbound({ id: "solo-stop", from: LIVE_CLEANER, text: "STOP" });
     expect(notesOf(await solo.desk.getState())).toContain(stopHold);
-    const held = await solo.desk.markGuestsLeft({ said: "The guests have left" }, solo.pinKey);
+    const held = await solo.desk.markGuestsLeft({ confirmed: true }, solo.pinKey);
     expect(held).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(await solo.desk.getState())).toContain(pinHeld);
     expect(solo.sms.sent.filter((text) => text.body.includes("Door code:"))).toEqual([]);
@@ -1358,7 +1358,7 @@ describe("live group membership", () => {
     const failed = await readyPractice(false, (body) => (body.includes("Door code:") ? "failed" : "queued"));
     await failed.desk.inbound({ id: "fail-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await failed.desk.inbound({ id: "fail-yes-schedule", from: LIVE_CLEANER, text: "YES" });
-    const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
+    const missed = await failed.desk.markGuestsLeft({ confirmed: true }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(notesOf(await failed.desk.getState()).join("\n").includes("Door code")).toBe(false);
     expect(hostBodies(failed.sms.sent)).toEqual([PIN_FAILED]);
@@ -1385,7 +1385,7 @@ describe("live group membership", () => {
     expect(notesOf(await grouped.desk.getState())).toContain(hostHurt);
     await grouped.desk.inbound({ id: "group-stop", from: LIVE_CLEANER, text: "STOP" });
     expect(notesOf(await grouped.desk.getState())).toContain(stopHold);
-    const groupHeld = await grouped.desk.markGuestsLeft({ said: "The guests have left" }, grouped.pinKey);
+    const groupHeld = await grouped.desk.markGuestsLeft({ confirmed: true }, grouped.pinKey);
     expect(groupHeld).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(await grouped.desk.getState())).toContain(pinHeld);
     expect(hostBodies(grouped.sms.sent)).toEqual([injuryHold, stopHold]);
@@ -1398,7 +1398,7 @@ describe("live group membership", () => {
     const line = "Maria got the door code privately.";
     const before = notesOf(await desk.getState());
     expect(before.filter((item) => item === line)).toEqual([]);
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const left = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
     const pinText = sms.sent.find((text) => text.body === privatePin);
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
@@ -1406,7 +1406,7 @@ describe("live group membership", () => {
     expect(hostBodies(sms.sent)).toEqual([]);
     await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
     expect(notesOf(await desk.getState())).toEqual(before);
-    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const again = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(sms.sent.filter((text) => text.body === privatePin)).toHaveLength(1);
     await desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "delivered" });
@@ -1489,7 +1489,7 @@ describe("live group membership", () => {
     const ignored = await grouped.desk.inbound({ id: "safety-cleaner-start", from: LIVE_CLEANER, text: "START" });
     expect(ignored.sent).toEqual([]);
     expect(await grouped.desk.getTurns()).toEqual({ ok: true, result: expect.objectContaining({ held: true }) });
-    const held = await grouped.desk.markGuestsLeft({ said: "The guests have left" }, grouped.pinKey);
+    const held = await grouped.desk.markGuestsLeft({ confirmed: true }, grouped.pinKey);
     expect(held).toEqual({ ok: true, result: { next: pinHeld } });
     const resumed = await grouped.desk.resumeCleaning();
     expect(resumed).toEqual({ ok: true, result: { next: resume } });
@@ -1505,12 +1505,12 @@ describe("live group membership", () => {
     const failed = await readyPractice(false, (body) => (body.includes("Door code:") ? "failed" : "queued"));
     await failed.desk.inbound({ id: "safety-fail-offer", from: LIVE_CLEANER, text: "YES" });
     await failed.desk.inbound({ id: "safety-fail-schedule", from: LIVE_CLEANER, text: "YES" });
-    const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
+    const missed = await failed.desk.markGuestsLeft({ confirmed: true }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(failed.sms.sent.filter((text) => text.to === LIVE_HOST).map((text) => text.body)).toEqual([PIN_FAILED]);
 
     const solo = await readyPractice(false);
-    expect(notesOf(await solo.desk.getState())).toContain(checkin);
+    expect(notesOf(await solo.desk.getState())).not.toContain(checkin);
     expect(solo.sms.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
   });
 
@@ -1526,7 +1526,7 @@ describe("live group membership", () => {
     const checkin = `Is check-in at ${PRACTICE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
 
     const solo = await readyPractice(false);
-    expect(notesOf(await solo.desk.getState())).toEqual([checkin, hold]);
+    expect(notesOf(await solo.desk.getState())).toEqual([hold]);
     await solo.desk.inbound({ id: "kinds-solo-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await solo.desk.inbound({ id: "kinds-solo-yes-schedule", from: LIVE_CLEANER, text: "YES" });
     const hurt = await solo.desk.inbound({ id: "kinds-solo-hurt", from: LIVE_CLEANER, text: "I fell at 2:00 PM and I'm hurt" });
@@ -1535,7 +1535,7 @@ describe("live group membership", () => {
     await solo.desk.inbound({ id: "kinds-solo-stop", from: LIVE_CLEANER, text: "STOP" });
     expect(notesOf(await solo.desk.getState())).toContain(PRACTICE_STOP);
     expect(await solo.desk.getTurns()).toEqual({ ok: true, result: expect.objectContaining({ held: true }) });
-    const held = await solo.desk.markGuestsLeft({ said: "The guests have left" }, solo.pinKey);
+    const held = await solo.desk.markGuestsLeft({ confirmed: true }, solo.pinKey);
     expect(held).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(await solo.desk.getState())).toContain(pinHeld);
     const started = await solo.desk.inbound({ id: "kinds-solo-start", from: LIVE_CLEANER, text: "START" });
@@ -1552,7 +1552,7 @@ describe("live group membership", () => {
     const failed = await readyPractice(false, (body) => (body.includes("Door code:") ? "failed" : "queued"));
     await failed.desk.inbound({ id: "kinds-fail-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await failed.desk.inbound({ id: "kinds-fail-yes-schedule", from: LIVE_CLEANER, text: "YES" });
-    const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
+    const missed = await failed.desk.markGuestsLeft({ confirmed: true }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(notesOf(await failed.desk.getState()).join("\n").includes("Door code")).toBe(false);
     expect(hostBodies(failed.sms.sent)).toEqual([PIN_FAILED]);
@@ -1560,9 +1560,9 @@ describe("live group membership", () => {
     const sentPin = await readyPractice(false);
     await sentPin.desk.inbound({ id: "kinds-pin-yes-offer", from: LIVE_CLEANER, text: "YES" });
     await sentPin.desk.inbound({ id: "kinds-pin-yes-schedule", from: LIVE_CLEANER, text: "YES" });
-    const left = await sentPin.desk.markGuestsLeft({ said: "The guests have left" }, sentPin.pinKey);
+    const left = await sentPin.desk.markGuestsLeft({ confirmed: true }, sentPin.pinKey);
     expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
-    const again = await sentPin.desk.markGuestsLeft({ said: "The guests have left" }, sentPin.pinKey);
+    const again = await sentPin.desk.markGuestsLeft({ confirmed: true }, sentPin.pinKey);
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(sentPin.sms.sent.filter((text) => text.body.includes("Door code:")).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(notesOf(await sentPin.desk.getState()).join("\n").includes("Door code")).toBe(false);
@@ -1595,7 +1595,7 @@ describe("live group membership", () => {
     const stillHeld = await grouped.desk.inbound({ id: "kinds-group-start-again", from: LIVE_CLEANER, text: "START" });
     expect(stillHeld.sent.map((text) => text.body)).toEqual([]);
     expect(await grouped.desk.getTurns()).toEqual({ ok: true, result: expect.objectContaining({ held: true }) });
-    const groupHeld = await grouped.desk.markGuestsLeft({ said: "The guests have left" }, grouped.pinKey);
+    const groupHeld = await grouped.desk.markGuestsLeft({ confirmed: true }, grouped.pinKey);
     expect(groupHeld).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(await grouped.desk.getState())).toContain(pinHeld);
     const resumed = await grouped.desk.resumeCleaning();
@@ -1622,9 +1622,9 @@ describe("live group membership", () => {
     await pending.desk.inbound({ id: "route-pending-offer", from: LIVE_CLEANER, text: "YES" });
     await pending.desk.inbound({ id: "route-pending-contact", from: OBSERVER, text: "YES" });
     await pending.desk.inbound({ id: "route-pending-schedule", from: LIVE_CLEANER, text: "YES" });
-    const pendingLeft = await pending.desk.markGuestsLeft({ said: "The guests have left" }, pending.pinKey);
+    const pendingLeft = await pending.desk.markGuestsLeft({ confirmed: true }, pending.pinKey);
     expect(pendingLeft).toEqual({ ok: true, result: { next: PIN_SENT } });
-    const pendingAgain = await pending.desk.markGuestsLeft({ said: "The guests have left" }, pending.pinKey);
+    const pendingAgain = await pending.desk.markGuestsLeft({ confirmed: true }, pending.pinKey);
     expect(pendingAgain).toEqual({ ok: true, result: { next: ALREADY } });
     expect(pending.sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(pending.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
@@ -1648,7 +1648,7 @@ describe("live group membership", () => {
     const blockedFetch = groupFetch();
     blockedFetch.blockMembership();
     setCleanerGroupFetch(blockedFetch.impl);
-    const blockedLeft = await blocked.desk.markGuestsLeft({ said: "The guests have left" }, blocked.pinKey);
+    const blockedLeft = await blocked.desk.markGuestsLeft({ confirmed: true }, blocked.pinKey);
     expect(blockedLeft).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(blocked.sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(blockedFetch.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
@@ -1667,11 +1667,11 @@ describe("live group membership", () => {
     await hostOut.desk.inbound({ id: "route-out-host", from: LIVE_HOST, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-schedule", from: LIVE_CLEANER, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-stop", from: LIVE_HOST, text: "STOP" });
-    const hostHeld = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
+    const hostHeld = await hostOut.desk.markGuestsLeft({ confirmed: true }, hostOut.pinKey);
     expect(hostHeld).toEqual({ ok: true, result: { next: `The cleaning at ${PRACTICE} is on hold because you opted out of texts. Tell your Grok Bot to restart it.` } });
     expect(hostOut.sms.sent.filter((text) => text.body === privatePin)).toEqual([]);
     await hostOut.desk.resumeCleaning();
-    const hostLeft = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
+    const hostLeft = await hostOut.desk.markGuestsLeft({ confirmed: true }, hostOut.pinKey);
     expect(hostLeft).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(hostOut.sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(hostOut.posts.filter((text) => text.body === line || text.body.includes("Door code:"))).toEqual([]);
@@ -1698,7 +1698,7 @@ describe("live group membership", () => {
     await grouped.desk.inbound({ id: "out-schedule", from: LIVE_CLEANER, text: "YES" });
     await grouped.desk.inbound({ id: "out-host-stop", from: LIVE_HOST, text: "STOP" });
     await grouped.desk.inbound({ id: "out-cleaner-stop", from: LIVE_CLEANER, text: "STOP" });
-    const held = await grouped.desk.markGuestsLeft({ said: "The guests have left" }, grouped.pinKey);
+    const held = await grouped.desk.markGuestsLeft({ confirmed: true }, grouped.pinKey);
     expect(held).toEqual({ ok: true, result: { next: pinHeld } });
     expect(notesOf(await grouped.desk.getState())).toContain(pinHeld);
     const resumed = await grouped.desk.resumeCleaning();
@@ -1741,12 +1741,12 @@ describe("live group membership", () => {
       "I couldn't send the checkout time to the group.",
     ]);
     expect((await view()).includes(DOOR_CODE)).toBe(false);
-    const failed = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const failed = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(failed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(JSON.stringify(failed).includes(DOOR_CODE)).toBe(false);
     expect((await view()).includes(DOOR_CODE)).toBe(false);
     expect((await view()).includes("got the door code")).toBe(false);
-    const retried = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const retried = await desk.markGuestsLeft({ confirmed: true }, pinKey);
     expect(retried).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(JSON.stringify(retried).includes(DOOR_CODE)).toBe(false);
     expect((await view()).includes(DOOR_CODE)).toBe(false);
@@ -1799,7 +1799,7 @@ describe("live group membership", () => {
     const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
     const invite = groupInviteBody("Harbor", PRACTICE);
     const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" })).ok).toBe(true);
     expect((await desk.saveCalendarLink({ url: CALENDAR_URL })).ok).toBe(true);
@@ -1810,7 +1810,7 @@ describe("live group membership", () => {
 
     expect((await desk.setUpTexting()).ok).toBe(true);
     expect((await desk.runChecks()).ok).toBe(true);
-    expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
+    expect((await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" })).ok).toBe(true);
     await desk.inbound({ id: "texting-seat-yes", from: LIVE_CLEANER, text: "YES" });
     const sid = fetchBox.posts[0]?.conversationSid;
     expect(sms.sent.filter((text) => text.to === LIVE_HOST)).toEqual([]);

@@ -23,7 +23,7 @@
   {
     "id": "review:missed-reminder:host",
     "to": "+15555550100",
-    "body": "My reminder to the cleaner for Wednesday, Oct 14 didn't go out. I didn't resend it. Reply RETRY to send it again.",
+    "body": "My reminder to the cleaner for Wednesday, Oct 14 didn't go out. I didn't resend it. Tell your Grok Bot if you want it sent again.",
     "kind": "review",
     "status": "sent"
   },
@@ -44,7 +44,7 @@
   {
     "id": "review:uncertain-sms:host",
     "to": "+15555550100",
-    "body": "My cleaning offer to the cleaner for Wednesday, Oct 14 may not have gone out. I didn't resend it. Reply RETRY to send it again.",
+    "body": "My cleaning offer to the cleaner for Wednesday, Oct 14 may not have gone out. I didn't resend it. Tell your Grok Bot if you want it sent again.",
     "kind": "review",
     "status": "sent"
   },

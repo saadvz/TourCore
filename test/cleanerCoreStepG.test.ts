@@ -256,6 +256,28 @@ describe("step G safety gates", () => {
     }
   });
 
+  it("sends an uncertain offer once when the host tells Grok to retry", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-halt-grok-"));
+    try {
+      const clock = { at: FRESH };
+      const first = engine(sink(), clock, { dataDir: dir, pin: lane.pin, hostName: lane.hostName, halt: "after-accept" });
+      await first.pollFeed(feed("guesty-lite-scratch.ics"));
+      await first.receive({ id: "opt", from: CLEANER, text: "YES" });
+      await first.receive({ id: "out", from: OWNER, text: "YES" });
+      await expect(first.receive({ id: "in", from: OWNER, text: "YES" })).rejects.toThrow(/after-accept/);
+      const secondBox = sink();
+      const second = engine(secondBox, clock, { dataDir: dir, pin: lane.pin, hostName: lane.hostName });
+      expect((await second.replay()).sent).toEqual([{ to: OWNER, body: UNCERTAIN_ALERT, kind: "review" }]);
+      const retried = await second.hostRetry("grok-retry-1");
+      expect(retried.sent).toEqual([{ to: CLEANER, body: OFFER, kind: "offer" }]);
+      expect((await second.hostRetry("grok-retry-2")).sent).toEqual([]);
+      expect((await second.hostRetry("grok-retry-1")).reason).toBe("duplicate");
+      expect((await second.replay()).sent).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("sends the door code after a crash that saved clearance, and only once", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cleaner-pin-halt-"));
     try {

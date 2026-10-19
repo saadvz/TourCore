@@ -86,7 +86,7 @@ describe("Cleaner Core live wiring", () => {
     expect(first.text).toContain(FIRST_QUESTION);
     expect(first.text).not.toMatch(PRODUCT);
 
-    const picked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    const picked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     remember(picked);
     expect(picked.text).toContain("That's Cleaner Core. It schedules cleaners between guest stays.");
     const later = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
@@ -123,7 +123,7 @@ describe("Cleaner Core live wiring", () => {
     remember(afterTimeText);
     expect(afterTimeText.text).not.toContain("10:30");
 
-    const confirmed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    const confirmed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
     remember(confirmed);
     expect(confirmed.isError).toBe(false);
     expect(confirmed.text).toMatch(/The cleaner got one text asking them to reply YES/);
@@ -154,7 +154,7 @@ describe("Cleaner Core live wiring", () => {
     const scheduled = toCleaner(newer(wired.cleanerSent.slice(0, scheduleBefore), wired.cleanerSent));
     expect(scheduled.map((item) => item.body).join("\n")).toMatch(/Cleaning is scheduled/);
 
-    const ignored = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "11:00 AM" });
+    const ignored = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: false });
     remember(ignored);
     expect(ignored.isError).toBe(true);
     expect(ignored.text).toMatch(/won't guess from the calendar/i);
@@ -176,7 +176,7 @@ describe("Cleaner Core live wiring", () => {
     expect(waiting.text).toContain("\"status\":\"confirmed\"");
     expect(waiting.text).not.toContain("cleared");
 
-    const left = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const left = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     remember(left);
     expect(left.text).toContain(PIN_SENT);
     expect(left.text).not.toMatch(HOST_LEAK);
@@ -189,7 +189,7 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.to !== CLEANER && item.body.includes(DOOR_CODE))).toEqual([]);
     expect(leftBefore.some((body) => body.includes(DOOR_CODE))).toBe(false);
 
-    const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     remember(again);
     expect(again.text).toContain(PIN_REPEAT);
     expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toHaveLength(1);
@@ -270,7 +270,7 @@ describe("Cleaner Core live wiring", () => {
   it("tells the host once after an undelivered callback and resends only on the next tool call", async () => {
     const wired = await app();
     await throughSchedule(wired, "fail");
-    const marked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const marked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(marked.text).toContain(PIN_SENT);
     expect(marked.raw).not.toContain(DOOR_CODE);
     expect(marked.raw).not.toContain(TEST_PIN_KEY);
@@ -282,7 +282,7 @@ describe("Cleaner Core live wiring", () => {
 
     const queued = await wired.postStatus({ sid: attempt?.sid ?? "", status: "queued" });
     expect(queued.status).toBe(200);
-    const repeat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const repeat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(repeat.text).toContain(PIN_REPEAT);
     expect(pins()).toHaveLength(1);
 
@@ -306,7 +306,7 @@ describe("Cleaner Core live wiring", () => {
     expect(again.text).not.toContain(PIN_FAILED);
     expect(pins()).toHaveLength(1);
 
-    const resent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const resent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(resent.text).toContain(PIN_SENT);
     expect(pins()).toHaveLength(2);
     expect(wired.cleanerSent.filter((item) => item.to === HOST).map((item) => item.body).join("\n")).not.toMatch(FALSE_RETRY);
@@ -332,7 +332,7 @@ describe("Cleaner Core live wiring", () => {
 
   it("sends nothing when live texts are off", async () => {
     const wired = await app({ live: false });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
@@ -340,7 +340,7 @@ describe("Cleaner Core live wiring", () => {
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
     const checks = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
     expect(checks.isError).toBe(false);
-    const times = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    const times = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
     expect(times.text).toMatch(/Nothing was sent/);
     expect(times.text).not.toMatch(/got one text/i);
     const inbound = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-live-off", token: CLEANER_AUTH });
@@ -351,7 +351,7 @@ describe("Cleaner Core live wiring", () => {
 
   it("keeps a STOP on the number that was texted, even when it arrives on the other route", async () => {
     const wired = await app();
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
 
@@ -442,7 +442,7 @@ describe("Cleaner Core live wiring", () => {
     const first = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(first.text).toContain(FIRST_QUESTION);
     expect(first.text).not.toMatch(PRODUCT);
-    const picked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "1" });
+    const picked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "tours" });
     expect(picked.text).toContain("That's Tour Core. It lets renters tour a unit on their own.");
     const later = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(later.text).not.toMatch(PRODUCT);
@@ -451,7 +451,7 @@ describe("Cleaner Core live wiring", () => {
 
   it("sends one STOP acknowledgement when the same text is delivered again, including after a restart", async () => {
     const wired = await app();
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     const sid = "SM-early-stop";
@@ -473,14 +473,14 @@ describe("Cleaner Core live wiring", () => {
 
   it("sends the door code once when the departure text, START, and STOP are retried", async () => {
     const wired = await app();
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
     await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-once-yes-1", token: CLEANER_AUTH });
     await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-once-yes-1", token: CLEANER_AUTH });
     await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-once-yes-2", token: CLEANER_AUTH });
@@ -493,9 +493,9 @@ describe("Cleaner Core live wiring", () => {
     const directState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(directState.text).toContain(DIRECT_REPLY);
     resetLiveDesks();
-    const sent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const sent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(sent.text).toContain(PIN_SENT);
-    const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(again.text).toContain(PIN_REPEAT);
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => ({ to: item.to, body: item.body }))).toEqual([
       { to: CLEANER, body: `Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you. Reply DONE when the cleaning is finished.` },
@@ -527,7 +527,7 @@ describe("Cleaner Core live wiring", () => {
 
   it("seals with the server's own key when the header is missing, and refuses a wrong header key", async () => {
     const wired = await app();
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
@@ -547,11 +547,11 @@ describe("Cleaner Core live wiring", () => {
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
     await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-key-yes-1", token: CLEANER_AUTH });
     await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-key-yes-2", token: CLEANER_AUTH });
     const wrongKey = Buffer.alloc(32, 9).toString("base64");
-    const wrong = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" }, { pinKey: wrongKey });
+    const wrong = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true }, { pinKey: wrongKey });
     expect(wrong.isError).toBe(true);
     expect(wrong.text).toBe(PIN_REENTER);
     expect(wrong.raw).not.toContain(DOOR_CODE);
@@ -562,7 +562,7 @@ describe("Cleaner Core live wiring", () => {
     expect(stored).not.toContain(TEST_PIN_KEY);
     expect(stored).not.toContain(DOOR_CODE);
     // The header sealed this code, so the server's key can't open it.
-    const absent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" }, { pinKey: null });
+    const absent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true }, { pinKey: null });
     expect(absent.text).toBe(PIN_REENTER);
     expect(absent.raw).not.toContain(serverKey);
     expect(stored).not.toContain(serverKey);
@@ -572,7 +572,7 @@ describe("Cleaner Core live wiring", () => {
     parsed.pinSeal = sealPin(DOOR_CODE, pinKeyFor(parsed.propertyId));
     writeFileSync(savedPath, `${JSON.stringify(parsed)}\n`);
     resetLiveDesks();
-    const stale = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    const stale = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { confirmed: true });
     expect(stale.text).toBe(PIN_REENTER);
     expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
     expect(readFileSync(savedPath, "utf8")).not.toContain(TEST_PIN_KEY);
@@ -587,16 +587,16 @@ describe("Cleaner Core live wiring", () => {
     for (const tool of tools.result?.tools ?? []) {
       expect(Object.keys(tool.inputSchema?.properties ?? {}).join(" ")).not.toMatch(/key/i);
     }
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
-    const chat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: DOOR_CODE });
+    const chat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "send_message", { to: "cleaner", text: DOOR_CODE });
     expect(chat.isError).toBe(true);
     expect(chat.text).toBe(PIN_CHAT);
     expect(chat.raw).not.toContain(DOOR_CODE);
     await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
-    const echoed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: `the door code is ${DOOR_CODE}` });
+    const echoed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "send_message", { to: "cleaner", text: `the door code is ${DOOR_CODE}` });
     expect(echoed.text).toBe(PIN_CHAT);
     expect(echoed.raw).not.toContain(DOOR_CODE);
     expect(echoed.raw).not.toContain(TEST_PIN_KEY);
@@ -640,14 +640,14 @@ describe("Cleaner Core live wiring", () => {
 });
 
 async function throughSchedule(wired: WiredApp, tag: string): Promise<void> {
-  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { choice: "cleaners" });
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
   await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
-  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
   await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: `${tag}-yes-1`, token: CLEANER_AUTH });
   await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: `${tag}-yes-2`, token: CLEANER_AUTH });
 }

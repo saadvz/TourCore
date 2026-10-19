@@ -64,14 +64,14 @@ async function setup(options: { failDeletes?: boolean; block?: boolean; texted?:
   setCleanerGroupFetch(fake.impl);
   const wired = await startWiredApp({ groupChat: true });
   open.push(wired);
-  await must(wired, "get_state", { said: "2" });
+  await must(wired, "get_state", { choice: "cleaners" });
   await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
   await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", groupChat: "cleaner-and-host", hostName: "Dana" });
   await must(wired, "save_calendar_link", { url: CALENDAR_URL });
   await must(wired, "save_door_code", { code: DOOR_CODE });
   await must(wired, "set_up_texting");
   await must(wired, "run_checks");
-  await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+  await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
   if (options.texted !== false) {
     expect((await sms(wired, HOST, "YES")).status).toBe(200);
     expect((await sms(wired, CLEANER, "YES")).status).toBe(200);

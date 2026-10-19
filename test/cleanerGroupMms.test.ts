@@ -323,14 +323,14 @@ function groupText(conversationSid: string, author: string, body: string, extra:
 async function groupReady(people: Record<string, unknown> = { hostName: "Dana" }, allowlist?: string) {
   const fake = useFake();
   const wired = await app(allowlist);
-  await must(wired, "get_state", { said: "2" });
+  await must(wired, "get_state", { choice: "cleaners" });
   await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
   await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", groupChat: "cleaner-and-host", ...people });
   await must(wired, "save_calendar_link", { url: CALENDAR_URL });
   await must(wired, "save_door_code", { code: DOOR_CODE });
   await must(wired, "set_up_texting");
   await must(wired, "run_checks");
-  await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+  await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
   expect((await sms(wired, HOST, "YES")).status).toBe(200);
   expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
   const conversationSid = fake.posts[0]?.conversationSid ?? "";
@@ -411,7 +411,7 @@ describe("group texting: the conversation webhook", () => {
   it("posts the door code in the group of Dana and Mike after a YES in the group, and never one-to-one", async () => {
     const { wired, conversationSid, fake } = await groupReady();
     await hook(wired, groupText(conversationSid, CLEANER, "YES"));
-    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    await must(wired, "mark_guests_left", { confirmed: true });
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
     expect(fake.posts.filter((post) => post.body.includes(DOOR_CODE)).map((post) => [...post.to].sort())).toEqual([[HOST, CLEANER].sort()]);
   });
@@ -419,7 +419,7 @@ describe("group texting: the conversation webhook", () => {
   it("keeps a group photo from Mike during the cleaning, read through the Conversations media service", async () => {
     const { wired, conversationSid } = await groupReady();
     await hook(wired, groupText(conversationSid, CLEANER, "YES"));
-    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    await must(wired, "mark_guests_left", { confirmed: true });
     const service = `IS${"a".repeat(32)}`;
     const media = `ME${"b".repeat(32)}`;
     const temporary = "https://media.us1.twilio.com/temporary/made-up";
@@ -450,14 +450,14 @@ describe("group texting: when the group can't be made", () => {
   it("sends the one-to-one offer, tells the host, and takes Mike's YES by text", async () => {
     const fake = useFake({ failWebhooks: true });
     const wired = await app();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", hostName: "Dana", groupChat: "cleaner-and-host" });
     await must(wired, "save_calendar_link", { url: CALENDAR_URL });
     await must(wired, "save_door_code", { code: DOOR_CODE });
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
-    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
     expect((await sms(wired, HOST, "YES")).status).toBe(200);
     expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
     expect(fake.posts).toEqual([]);
@@ -490,7 +490,7 @@ describe("group texting: what the webhook reads", () => {
   it("skips a group photo whose media ids or temporary link look wrong", async () => {
     const { wired, conversationSid } = await groupReady();
     await hook(wired, groupText(conversationSid, CLEANER, "YES"));
-    await must(wired, "mark_guests_left", { said: "The guests have left" });
+    await must(wired, "mark_guests_left", { confirmed: true });
     const fetched: string[] = [];
     setCleanerPhotoFetch(async (url) => {
       fetched.push(url);
@@ -517,14 +517,14 @@ describe("group texting: a Scratch reset", () => {
   async function scratchGroup(fake: FakeConversations) {
     const wired = await startWiredApp({ groupChat: true, scratchTools: true, allowlist: `${lane.ownerPhone},${lane.cleanerPhone}` });
     open.push(wired);
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: "Scratch", address: scratchAddress, timeZone: "America/New_York" });
     await must(wired, "save_people", { host: lane.ownerPhone, cleaner: lane.cleanerPhone, cleanerName: "Mike", groupChat: "cleaner-and-host" });
     await must(wired, "save_calendar_link", { url: CALENDAR_URL });
     await must(wired, "save_door_code", { code: DOOR_CODE });
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
-    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
     expect((await sms(wired, lane.ownerPhone, "YES")).status).toBe(200);
     expect((await sms(wired, lane.cleanerPhone, "YES")).status).toBe(200);
     const conversationSid = fake.posts[0]?.conversationSid ?? "";
@@ -584,7 +584,7 @@ describe("group texting: the host's name", () => {
   it("refuses a host name that is too long", async () => {
     useFake();
     const wired = await app();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     const reply = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, hostName: "D".repeat(41) });
     expect(reply.isError).toBe(true);
@@ -594,14 +594,14 @@ describe("group texting: the host's name", () => {
   it("names the saved host in the invite", async () => {
     const fake = useFake();
     const wired = await app();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", hostName: "Dana", groupChat: "cleaner-and-host" });
     await must(wired, "save_calendar_link", { url: CALENDAR_URL });
     await must(wired, "save_door_code", { code: DOOR_CODE });
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
-    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
     const invite = wired.cleanerSent.find((item) => item.to === CLEANER)?.body;
     expect(invite).toBe(groupInviteBody("Dana", ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
@@ -611,14 +611,14 @@ describe("group texting: the host's name", () => {
   it("names the business when no host name is saved, never Cory", async () => {
     useFake();
     const wired = await app();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", groupChat: "cleaner-and-host" });
     await must(wired, "save_calendar_link", { url: CALENDAR_URL });
     await must(wired, "save_door_code", { code: DOOR_CODE });
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
-    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
     expect(wired.cleanerSent.find((item) => item.to === CLEANER)?.body).toBe(groupInviteBody(BUSINESS, ADDRESS));
     expect(wired.cleanerSent.some((item) => item.body.includes("Cory"))).toBe(false);
   });

@@ -76,7 +76,7 @@ async function call(wired: WiredApp, name: string, args?: Record<string, unknown
 
 async function saveLane(wired: WiredApp): Promise<void> {
   if (!LANE) throw new Error("missing lane");
-  expect((await call(wired, "get_state", { said: "2" })).isError).toBe(false);
+  expect((await call(wired, "get_state", { choice: "cleaners" })).isError).toBe(false);
   expect((await call(wired, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: "America/New_York" })).isError).toBe(false);
   expect((await call(wired, "save_people", { host: HOST, cleaner: LANE.cleanerPhone, observer: OBSERVER })).isError).toBe(false);
   expect((await call(wired, "save_calendar_link", { url: CALENDAR_URL })).isError).toBe(false);
@@ -87,7 +87,7 @@ async function saveLane(wired: WiredApp): Promise<void> {
 
 async function confirmJob(wired: WiredApp): Promise<void> {
   if (!LANE) throw new Error("missing lane");
-  expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+  expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
   expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" }))).toBe("The test text went through.");
   expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" }))).toBe("The test text went through.");
 }
@@ -102,7 +102,7 @@ describe("live Scratch failures from 19087415", () => {
     const wired = await scratchApp();
     await saveLane(wired);
     await confirmJob(wired);
-    const left = await call(wired, "mark_guests_left", { said: "The guests have left" });
+    const left = await call(wired, "mark_guests_left", { confirmed: true });
     expect(nextOf(left)).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([
       { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished." },
@@ -123,7 +123,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
     expect(redact(wired.cleanerSent, LANE.pin).filter((item) => item.body === PIN_FAILED)).toHaveLength(1);
 
-    const resent = await call(wired, "mark_guests_left", { said: "guests left" });
+    const resent = await call(wired, "mark_guests_left", { confirmed: true });
     expect(nextOf(resent)).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(2);
 
@@ -133,11 +133,11 @@ describe("live Scratch failures from 19087415", () => {
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "undelivered" }))).toBe("Door code text to the cleaner: undelivered.");
     expect(redact(wired.cleanerSent, LANE.pin).filter((item) => item.body === PIN_FAILED)).toHaveLength(2);
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "delivered" }))).toBe("Door code text to the cleaner: undelivered.");
-    const again = await call(wired, "mark_guests_left", { said: "they left" });
+    const again = await call(wired, "mark_guests_left", { confirmed: true });
     expect(nextOf(again)).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(3);
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "delivered" }))).toBe("Door code text to the cleaner: delivered.");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_REPEAT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_REPEAT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(3);
     expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
   }, 40_000);
@@ -152,19 +152,19 @@ describe("live Scratch failures from 19087415", () => {
     const state = await call(wired, "get_state");
     expect(nextOf(state)).toBe(INJURY_HOLD);
     expect(state.text).toContain("\"held\":true");
-    const blocked = await call(wired, "mark_guests_left", { said: "The guests have left" });
+    const blocked = await call(wired, "mark_guests_left", { confirmed: true });
     expect(nextOf(blocked)).toBe(INJURY_HOLD);
     expect(blocked.text).not.toContain("I sent the door code");
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_state")).text).toContain(INJURY_HOLD);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "guests left" }))).toBe(INJURY_HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(INJURY_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     const resumed = await call(wired, "resume_job");
     expect(resumed.text).toContain("The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.");
     expect(nextOf(await call(wired, "get_state"))).not.toBe(INJURY_HOLD);
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
     const added = redact(wired.cleanerSent.slice(before), LANE.pin);
     expect(added.filter((item) => item.body === PIN_FAILED || item.body === PIN_REPEAT)).toEqual([]);
@@ -189,7 +189,7 @@ describe("live Scratch failures from 19087415", () => {
       const state = await call(wired, "get_state");
       expect(state.text).toContain(OWNER_HOLD);
       expect(state.text).toContain("\"held\":true");
-      expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(OWNER_HOLD);
+      expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(OWNER_HOLD);
       expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
       const repeatBefore = wired.cleanerSent.length;
       const notesBefore = ((await call(wired, "get_state")).structured?.notes as string[] | undefined)?.length ?? 0;
@@ -211,10 +211,10 @@ describe("live Scratch failures from 19087415", () => {
     expect(afterStart.text).toContain(OWNER_HOLD);
     expect(afterStart.text).toContain(HOST_START);
     expect(afterStart.text).toContain(HOST_STOP);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(OWNER_HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(OWNER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect((await call(wired, "resume_job")).text).toContain("is back on");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
   }, 40_000);
 
@@ -235,10 +235,10 @@ describe("live Scratch failures from 19087415", () => {
     expect(state.text).toContain(CLEANER_HOLD);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_state")).text).toContain("on hold");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(CLEANER_HOLD);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(CLEANER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     expect((await call(wired, "resume_job")).isError).toBe(false);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
   }, 40_000);
 
@@ -247,7 +247,7 @@ describe("live Scratch failures from 19087415", () => {
     const wired = await scratchApp();
     await saveLane(wired);
     await confirmJob(wired);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
@@ -267,7 +267,7 @@ describe("live Scratch failures from 19087415", () => {
     const wired = await scratchApp();
     await saveLane(wired);
     await confirmJob(wired);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([
       { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished." },
     ]);
@@ -298,7 +298,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(resumed.text).toContain(backOn);
     expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
     expect(notesOf(await call(wired, "get_state"))).toContain(backOn);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(held);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(held);
     expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
     const notes = notesOf(await call(wired, "get_state"));
@@ -312,7 +312,7 @@ describe("live Scratch failures from 19087415", () => {
     const wired = await scratchApp();
     await saveLane(wired);
     await confirmJob(wired);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
     const beforeStop = wired.cleanerSent.length;

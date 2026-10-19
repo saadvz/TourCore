@@ -71,11 +71,11 @@ export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDe
 }
 
 function offerDeliveryNote(day: string): string {
-  return `My cleaning offer to the cleaner for ${day} may not have gone out. I didn't resend it. Reply RETRY to send it again.`;
+  return `My cleaning offer to the cleaner for ${day} may not have gone out. I didn't resend it. Tell your Grok Bot if you want it sent again.`;
 }
 
 function reminderDeliveryNote(day: string): string {
-  return `My reminder to the cleaner for ${day} didn't go out. I didn't resend it. Reply RETRY to send it again.`;
+  return `My reminder to the cleaner for ${day} didn't go out. I didn't resend it. Tell your Grok Bot if you want it sent again.`;
 }
 
 /** Host-facing rotation and offboarding steps. The demo does not change the lock. */

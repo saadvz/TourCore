@@ -147,7 +147,7 @@ function shown(sent: { to: string; body: string }[]): { to: string; body: string
 async function saveLane(wired: WiredApp, people?: { host?: string; cleaner?: string }): Promise<void> {
   const host = people?.host ?? HOST;
   const cleaner = people?.cleaner ?? CLEANER;
-  await call(wired, "get_state", { said: "2" });
+  await call(wired, "get_state", { choice: "cleaners" });
   await call(wired, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: LANE.property.timeZone });
   await call(wired, "save_people", { host, cleaner });
   const saved = await call(wired, "save_door_code", { code: LANE.pin });
@@ -177,7 +177,7 @@ describe("Scratch test turnover", () => {
       groupChat: true,
       allowlist: `${HOST},${CLEANER}`,
     });
-    await call(practice, "get_state", { said: "2" });
+    await call(practice, "get_state", { choice: "cleaners" });
     await call(practice, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     await call(practice, "save_people", { host: HOST, cleaner: CLEANER });
     await call(practice, "save_calendar_link", { url: "https://calendar.example/harbor.ics" });
@@ -193,7 +193,7 @@ describe("Scratch test turnover", () => {
       groupChat: true,
       allowlist: `${SAVED_HOST},${SAVED_CLEANER}`,
     });
-    await call(savedOffScratch, "get_state", { said: "2" });
+    await call(savedOffScratch, "get_state", { choice: "cleaners" });
     await call(savedOffScratch, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     await call(savedOffScratch, "save_people", { host: SAVED_HOST, cleaner: SAVED_CLEANER });
     await call(savedOffScratch, "save_calendar_link", { url: "https://calendar.example/harbor.ics" });
@@ -372,7 +372,7 @@ describe("Scratch test turnover", () => {
     expect(wired.cleanerSent.some((item) => item.body.includes("Door code:"))).toBe(false);
 
     expect(nextOf(await remember(call(wired, "send_test_text", { from: HOST, text: "YES" })))).toBe(WENT);
-    const left = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const left = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(left.isError).toBe(false);
     expect(left.text).toContain("I sent the door code to the cleaner.");
     const pins = wired.cleanerSent.filter((item) => item.body.includes("Door code:"));

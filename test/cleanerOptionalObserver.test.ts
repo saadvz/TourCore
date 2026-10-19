@@ -76,7 +76,7 @@ function open(phones: string[]) {
 }
 
 async function setup(desk: ReturnType<typeof open>["desk"], observer?: string) {
-  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.getState("cleaners")).ok).toBe(true);
   expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
   const saved = await desk.savePeople(observer === undefined ? { host: HOST, cleaner: CLEANER } : { host: HOST, cleaner: CLEANER, observer, doorCodeTo: "cleaner" });
   expect(saved.ok).toBe(true);
@@ -84,7 +84,7 @@ async function setup(desk: ReturnType<typeof open>["desk"], observer?: string) {
   expect((await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY)).ok).toBe(true);
   expect((await desk.setUpTexting()).ok).toBe(true);
   expect((await desk.runChecks()).ok).toBe(true);
-  expect((await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" })).ok).toBe(true);
+  expect((await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" })).ok).toBe(true);
 }
 
 function asksForThird(text: string): boolean {
@@ -102,8 +102,8 @@ function bodyHasCode(body: string): boolean {
 describe("optional observer", () => {
   it("saves with the observer left empty and does not ask for a third number", async () => {
     const { desk, root } = open([HOST, CLEANER]);
-    expect((await desk.getState("2")).ok).toBe(true);
-    const asked = await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York", checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
+    expect((await desk.getState("cleaners")).ok).toBe(true);
+    const asked = await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York", checkoutTime: "11:00", checkInTime: "16:00" });
     expect(asked.ok).toBe(true);
     if (asked.ok) {
       // In the diagram order the booking sources come before the people.
@@ -155,7 +155,7 @@ describe("optional observer", () => {
     expect(withObserver.length).toBe(1);
     expect(withObserver[0]?.to).toEqual([OLD, HOST, CLEANER].sort());
 
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
+    const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);
     expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
     expect(posts.some((post) => bodyHasCode(post.body))).toBe(false);
@@ -186,7 +186,7 @@ describe("optional observer", () => {
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "time-two", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
+    const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);
     expect(posts.filter((post) => post.body === TIME).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
     expect(posts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
@@ -198,7 +198,7 @@ describe("optional observer", () => {
 
   it("keeps a three-number setup on group copies only, and never sends the code to the observer", async () => {
     const { desk, sms, posts } = open([HOST, CLEANER, OLD]);
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
     const people = await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OLD, doorCodeTo: "cleaner" });
     expect(people.ok).toBe(true);
@@ -214,7 +214,7 @@ describe("optional observer", () => {
     expect(posts.find((post) => post.body === TIME)?.to).toEqual([OLD, HOST, CLEANER].sort());
     expect(sms.sent.filter((item) => item.to === OLD).length).toBeGreaterThan(0);
     expect(sms.sent.filter((item) => item.to === OLD).some((item) => bodyHasCode(item.body))).toBe(false);
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
+    const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);
     expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
     expect(posts.some((post) => bodyHasCode(post.body) || post.to.includes(""))).toBe(false);
@@ -222,7 +222,7 @@ describe("optional observer", () => {
 
   it("still answers STOP from both numbers, sends nothing for HELP, and skips an opted-out number", async () => {
     const early = open([HOST, CLEANER]);
-    expect((await early.desk.getState("2")).ok).toBe(true);
+    expect((await early.desk.getState("cleaners")).ok).toBe(true);
     expect((await early.desk.saveProperty({ business: "Harbor", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await early.desk.savePeople({ host: HOST, cleaner: CLEANER })).ok).toBe(true);
     const helpBefore = early.sms.sent.length;
@@ -260,7 +260,7 @@ describe("optional observer", () => {
     expect(posts.slice(afterStop)).toEqual([]);
     expect(sms.sent.filter((item) => item.body === TIME).map((item) => item.to)).toEqual([HOST]);
     expect(codeRecipients(sms.sent.filter((item) => item.to === CLEANER))).toEqual([]);
-    const left = await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY);
+    const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);
     expect(codeRecipients(sms.sent)).toEqual([]);
   });

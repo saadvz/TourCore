@@ -52,19 +52,22 @@ routine runs, it wakes once, and `check_now` returns all of them.
 3. Post each line in `alerts` in your own short words. Post nothing when
    `alerts` is empty. A new booking asks the host to confirm the usual times.
    "Have the guests left?" asks the host about the checkout. Only the host's
-   yes in chat sends the door code, with `mark_guests_left`.
+   yes in chat sends the door code, with `mark_guests_left`. When an alert
+   says a cleaning offer or reminder may not have gone out, ask the host
+   whether to send it again. Only the host's yes in chat resends it, with
+   `retry_send`.
 4. Read every item in `messages`. Tell the host in your own words when one
    needs them: running late, a question, a problem, supplies, an arrival time,
    a decline, STOP, or an injury. Stay quiet on routine replies.
-5. When a message gives an arrival time, call `save_arrival` with it, like
-   11:30 AM.
+5. When a message gives an arrival time, call `save_arrival` with it as 24-hour
+   HH:MM, like 11:30.
 6. If a message needs a reply, draft one and offer it to the host. Don't send
    it from the routine. It goes out with `send_message` only after the host's
    yes in chat.
 7. If the reply has `completed`, call `get_job_photos`, look at the photos, and
    compare them with the checklist. Summarize the cleaning in your own words.
 8. If the reply has `needsTimes`, ask the host for the checkout time and the
-   next check-in time, then call `confirm_times`.
+   next check-in time, then call `confirm_times` with each as 24-hour HH:MM.
 9. Never show a door code, an id, or the webhook payload.
 
 ## Connecting it

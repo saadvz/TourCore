@@ -33,7 +33,7 @@
   {
     "id": "review:uncertain-sms:offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
     "to": "+15555550100",
-    "body": "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.",
+    "body": "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Tell your Grok Bot if you want it sent again.",
     "kind": "review",
     "status": "sent"
   }
