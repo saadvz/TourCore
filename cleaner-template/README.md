@@ -12,20 +12,65 @@ Host ─► Grok Bot ─► hosted Cleaner Core (hostedCleanerCoreUrl/mcp/cleane
 
 ## How a host starts
 
-1. Open a new Grok Bot.
-2. Paste the prompt in [`SETUP_PROMPT.md`](SETUP_PROMPT.md).
+From the team template (the usual way):
+
+1. Open the Cleaner Core template link and click **Add to Grok Bot**, then
+   **Add Bot**.
+2. Say "Set up Cleaner Core".
 3. Click Allow when the connection asks.
 
-Grok clones the repository only to read
-[`CLEANER_CORE_BOOTSTRAP.md`](../CLEANER_CORE_BOOTSTRAP.md). Then it asks the
-setup questions one at a time. The host never leaves the chat.
+Without the template, open a new Grok Bot and paste the prompt in
+[`SETUP_PROMPT.md`](SETUP_PROMPT.md) instead.
+
+Either way, Grok clones the repository only to read
+[`CLEANER_CORE_BOOTSTRAP.md`](../CLEANER_CORE_BOOTSTRAP.md) and the routine
+docs, so a bot always follows the current guide, not a copy frozen when the
+template was shared. Then it asks the setup questions one at a time. The host
+never leaves the chat.
+
+## Build the team template
+
+A Grok Bot template is made from a configured bot: **Share as Template**
+packages its profile, instructions, skills, standard plugins, and routines. It
+leaves out custom MCP servers, code, and secrets. Build it from a clean bot so
+nothing from a real setup comes along.
+
+1. Create a new Grok Bot. Don't chat with it.
+2. In **Bot actions → Edit Profile**, enter the name, title, and description
+   from [`bot-profile.md`](bot-profile.md), and paste its **Standing
+   instructions** section as the bot's instructions. Add the suggested
+   starting prompts.
+3. Don't connect Cleaner Core, don't create the routines, and don't run setup.
+   The hosted service belongs to the first bot that clicks Allow, so the
+   template bot must never claim it. Each installed bot connects and creates
+   its own routines during setup.
+4. Open the bot's settings and click **Share as Template**. In **View
+   Details**, check that it has the instructions and nothing else: no
+   memories, no integrations, no routines.
+5. Choose **Team** and click **Publish**. Share the link with the team.
+6. Test it: add the template as a new bot, say "Set up Cleaner Core", and check
+   that it connects to the hosted service and starts the setup questions.
+
+Update the template only when `bot-profile.md` changes. Changes to the guide
+or the routine docs reach every bot on its next setup without re-sharing.
+
+### Demos
+
+The hosted Cleaner Core serves one host at a time. It belongs to the first bot
+that clicks Allow and refuses any other bot. To demo again:
+
+- With the same bot: ask it to reset the property (`reset_property`), then
+  set up again.
+- With a new bot: the operator sets `CLEANER_CORE_HOSTED_OWNER_RESET` to
+  `reset-cleaner-owner` for one deploy, then removes it. The next bot to click
+  Allow becomes the owner.
 
 ## What's in the template
 
 | Part | File | How it gets into Grok Bot |
 | --- | --- | --- |
-| The paste-in prompt | `SETUP_PROMPT.md` | The host pastes it into a new Grok Bot |
-| Profile and standing instructions | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions |
+| The paste-in prompt | `SETUP_PROMPT.md` | Fallback without the template: the host pastes it into a new Grok Bot |
+| Profile and standing instructions | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions. They name the repository and the hosted address, so the template needs no paste-in prompt |
 | Routine: Cleaner Core Check | `routines/cleaner-core-check.md` | Grok creates it after Activate (scheduled trigger) |
 | Routine: Cleaner Core Alerts | `routines/cleaner-core-alerts.md` | Grok creates it after Activate (authenticated webhook trigger) |
 | Manifest | `template.json` | For reviewers. It lists every item and what's never included |

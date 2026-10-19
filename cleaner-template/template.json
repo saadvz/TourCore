@@ -44,9 +44,10 @@
     }
   ],
   "marketplace": {
-    "ships": ["the paste-in prompt", "the bot profile and standing instructions", "the Cleaner Core Check and Cleaner Core Alerts routine definitions"],
-    "neverShips": ["the Alerts routine's webhook address or token", "Cleaner Core OAuth tokens", "Google OAuth tokens", "Twilio credentials", "a door code", "phone numbers", "live booking or cleaning records"],
-    "activation": "A new host pastes the prompt, connects to the hosted Cleaner Core named by hostedCleanerCoreUrl, and clicks Allow once. They never run a server."
+    "ships": ["the bot profile and standing instructions, which name the repository and the hosted address"],
+    "neverShips": ["memories from a real setup", "the Alerts routine's webhook address or token", "Cleaner Core OAuth tokens", "Google OAuth tokens", "Twilio credentials", "a door code", "phone numbers", "live booking or cleaning records"],
+    "activation": "A teammate adds the bot from the team template link and says Set up Cleaner Core, or pastes the prompt into a new bot. Either way it connects to the hosted Cleaner Core named by hostedCleanerCoreUrl, and the host clicks Allow once. They never run a server.",
+    "build": "README.md#build-the-team-template"
   },
   "suggestedPrompts": ["Set up Cleaner Core", "Check my calendars", "Show the upcoming cleanings", "The guests have left", "Text the cleaner", "Show the last cleaning's photos"],
   "neverIncluded": [

@@ -107,6 +107,26 @@ describe("Cleaner Core template manifest", () => {
     }
   });
 
+  it("lets a bot from the team template start setup with no paste-in prompt", () => {
+    const m = manifest();
+    const profile = read(join(TEMPLATE, m.profile));
+    const instructions = profile.slice(profile.indexOf("## Standing instructions"));
+    // A Grok Bot template carries only the profile and instructions, so they name the repository and the service.
+    expect(instructions).toContain(m.repository.url);
+    expect(instructions).toContain(`${m.hostedCleanerCoreUrl}/mcp/cleaner-core`);
+    expect(instructions).toContain(`\`${m.repository.bootstrap}\``);
+    expect(instructions).not.toContain("hostedCleanerCoreUrl");
+    expect(instructions).toMatch(/clone[\s\S]{0,40}only to read/);
+    expect(instructions).toMatch(/never start a tunnel/i);
+    expect(m.suggestedPrompts[0]).toBe("Set up Cleaner Core");
+    // The build guide keeps the template bot from claiming the hosted service or carrying memories.
+    const readme = read(join(TEMPLATE, m.readme));
+    expect(readme).toContain("## Build the team template");
+    expect(readme).toMatch(/Don't connect Cleaner Core, don't create the routines, and don't run setup/);
+    expect(readme).toMatch(/no\s+memories/);
+    expect(readme).toContain("CLEANER_CORE_HOSTED_OWNER_RESET");
+  });
+
   it("has the suggested prompts in the bot profile", () => {
     const m = manifest();
     const profile = read(join(TEMPLATE, m.profile));
