@@ -1,6 +1,6 @@
 # CI runs the cleaner suite both ways
 
-Every pull request to master installs, typechecks, builds, runs the full test suite, runs the cleaner-core tests with the flag on and off, scans for configured scratch codes, and checks that the Grok setup prompt is unchanged. GitHub Actions still runs `scripts/ci-check.sh` for that.
+Every pull request to master installs, typechecks, builds, runs the full test suite (the cleaner-core flag tests set the flag on and off themselves), scans for configured scratch codes, and checks that the Grok setup prompt is unchanged. GitHub Actions runs `scripts/ci-check.sh` for that, then `scripts/ci-proofs.sh` for the verify-cleanercore proofs. In that CI job the step G gate is skipped, because `ci-check.sh` already ran.
 
 `prove-step-g.sh` does not run that full script on every local proof. It reads the git diff and picks one gate.
 

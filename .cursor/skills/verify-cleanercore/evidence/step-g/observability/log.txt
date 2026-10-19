@@ -1,3 +1,0 @@
-{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"host-checkout","outcome":"sent","to":"***0100"}
-{"at":"2026-10-14T15:00:00.000Z","tenant":"scratch-lane","kind":"host-checkin","outcome":"sent","to":"***0100"}
-{"at":"2026-10-14T18:00:00.001Z","tenant":"scratch-lane","kind":"review","outcome":"sent","to":"***0100"}

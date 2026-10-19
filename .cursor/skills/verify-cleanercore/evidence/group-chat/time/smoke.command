@@ -1,1 +1,0 @@
-smoke --group-chat --with-pin --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --confirm-times 11:00 AM|4:00 PM --reply +15555550100=YES --reply +15555550101=YES --reply +15555550101=YES --group-reply +15555550101=Let's say 2:00 PM --group-reply +15555550100=Sounds good

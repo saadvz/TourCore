@@ -1,2 +1,0 @@
-feature: host-override-beats-stale-feed
-pass

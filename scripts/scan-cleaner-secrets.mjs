@@ -14,7 +14,6 @@ const allow = new Set([
   "src/cleaner-core/fixtures/annex-lock.txt",
   "src/cleaner-core/fixtures/google-lane-read.json",
   "test/cleanerCore.test.ts",
-  "docs/cleaner-core-v5.1-plan.pdf",
   ".cursor/skills/verify-cleanercore/features/no-pin.md",
   ".cursor/skills/verify-cleanercore/features/tenant-isolation.md",
   ".cursor/skills/verify-cleanercore/scripts/assert-report.mjs",

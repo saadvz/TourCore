@@ -94,7 +94,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Observer injury outside a group](./observer-injury-solo.md) covers the same injury path when texts are one-to-one. `prove-step-f.sh`.
 - [Owner injury](./owner-injury.md) covers the 911 line to the host, with no alert back to that host. `prove-step-f.sh`.
 - [Injury wordings](./injury-wording.md) covers hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one. `prove-step-f.sh`.
-- [CI both ways](./g-ci-local.md) covers typecheck, the full suite, cleaner-core with the flag on and off, and the secret scan. `prove-step-g.sh`.
+- [CI both ways](./g-ci-local.md) covers typecheck, the full suite (including the cleaner-core flag tests), the secret scan, and the proofs in `scripts/ci-proofs.sh`. `prove-step-g.sh`.
 - [Stale feed](./g-stale-source.md) covers one host alert and no offer until a fresh read. `prove-step-g.sh`.
 - [Host time beats a stale feed](./g-host-override.md) covers a 2:00 PM host clock that a stale feed does not replace. `prove-step-g.sh`.
 - [Private door code and exposure review](./g-permanent-code.md) covers the redacted private send, group and mirror copies, and one exposure review. `prove-step-g.sh`.

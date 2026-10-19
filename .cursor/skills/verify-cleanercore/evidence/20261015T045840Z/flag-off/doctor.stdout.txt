@@ -1,6 +1,0 @@
-{
-  "ok": true,
-  "enabled": false,
-  "sends": false,
-  "note": "Cleaner Core is off. Touring texts are unchanged."
-}

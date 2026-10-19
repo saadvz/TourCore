@@ -23,9 +23,9 @@ run_log() {
 
 run_log typecheck npm run typecheck
 run_log build npm run build
+# The cleaner-core flag tests set CLEANER_CORE_ENABLED themselves and clear it after each test,
+# so they run on and off inside the full suite.
 run_log test-default npm test
-run_log test-on env CLEANER_CORE_ENABLED=1 npx vitest run test/cleanerCore.test.ts test/cleanerCoreStepG.test.ts
-run_log test-off env -u CLEANER_CORE_ENABLED npx vitest run test/cleanerCore.test.ts test/cleanerCoreStepG.test.ts
 run_log secret-scan node scripts/scan-cleaner-secrets.mjs ci-logs
 run_log tracked-scan node scripts/scan-cleaner-secrets.mjs --tracked
 run_log test-eval npm run test:eval
@@ -36,5 +36,3 @@ git diff --exit-code origin/master -- grok-template/SETUP_PROMPT.md
 printf '%s\n' "SETUP_PROMPT ok"
 
 printf '%s\n' "test-default $(grep -E 'Tests[[:space:]]+[0-9]+ passed' ci-logs/test-default.log | tail -n 1)"
-printf '%s\n' "test-on $(grep -E 'Tests[[:space:]]+[0-9]+ passed' ci-logs/test-on.log | tail -n 1)"
-printf '%s\n' "test-off $(grep -E 'Tests[[:space:]]+[0-9]+ passed' ci-logs/test-off.log | tail -n 1)"

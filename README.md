@@ -900,7 +900,7 @@ src/install/       deployment modes, installation manifest, SecretStore, setting
 src/eval/          phase 0 baseline harness (config diff, golden tasks, click path). See docs/eval.md
 src/alerts/        operator events, notification sinks (Grok Routine), durable outbox, exception scanner
 scripts/           bootstrap-grok.mjs (dependency-installing entry point for npm run bootstrap:grok)
-.grok/skills/      Install Tour Core plus the six Grok operator skills (SKILL.md)
+.grok/skills/      Install Tour Core plus the seven Grok operator skills (SKILL.md)
 grok-template/     Tour Core Bot profile, context, routine, safe examples, integration notes, manifest
 src/intent/        what a typed message means: intent schema, rule-based interpreter, optional language-model
                    interpreter behind a vendor-neutral interface

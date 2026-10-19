@@ -75,7 +75,7 @@ The base is the step F engine and the single `emit` path. A second job or review
 
 - Off-box backup storage, dashboards beyond these counters, a poll-cadence screen, lock rotation through a lock MCP, and horizontal scaling are later. None of them block this demo: the fixture feeds, the frozen clock, and the JSON plus SQLite snapshot cover the journeys above.
 - "that hurt my schedule lol" and an ordinary "fall" can still match the injury words. That stays a later copy problem. STOP and HELP still run before the injury check.
-- The secret scan allowlists the historical tenant store, the Annex lock fixture, the step C through F proofs that already name those values, and `docs/cleaner-core-v5.1-plan.pdf`, which already contains them. New docs, new tests, and `evidence/step-g` are not on that list.
+- The secret scan allowlists the historical tenant store, the Annex lock fixture, the step C through F proofs that already name those values. New docs, new tests, and `evidence/step-g` are not on that list.
 
 ## Next implementation step
 

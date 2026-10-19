@@ -157,7 +157,7 @@ Covers: the re-read, the snapshot, reminders, new alerts, and no overlap.
 **Files:**
 - Modify: `src/cleaner-core/mcp.ts`: the `initialize` instructions
 - Modify: `src/cleaner-core/liveDesk.ts`: the `cleaningState` next steps
-- Create: `grok-template/routines/cleaner-core-check.md`, `grok-template/routines/cleaner-core-alerts.md`
+- Create: `grok-template/routines/cleaner-core-check.md`, `grok-template/routines/cleaner-core-alerts.md` (later moved to `cleaner-template/routines/`)
 - Test: `test/cleanerGrokDemo.test.ts`
 
 Copy decisions:

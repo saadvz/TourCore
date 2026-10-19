@@ -8,7 +8,6 @@
   "scripts": {
     "setup": "tsx src/web/server.ts",
     "setup:dev": "tsx src/web/server.ts --dev",
-    "setup:web": "tsx src/web/server.ts",
     "setup:cli": "tsx src/cli/setup.ts",
     "sendblue:status": "tsx src/tools/sendblue.ts status",
     "sendblue:configure": "tsx src/tools/sendblue.ts configure",
@@ -18,7 +17,6 @@
     "grok:status": "tsx src/tools/grok.ts status",
     "grok:disconnect": "tsx src/tools/grok.ts disconnect",
     "grok:tools": "tsx src/tools/grok.ts tools",
-    "hosted:owner-claim": "tsx src/install/ownerClaimCli.ts",
     "bootstrap:grok": "node scripts/bootstrap-grok.mjs --mode=GROK_MANAGED_P0",
     "bootstrap:self-hosted": "node scripts/bootstrap-grok.mjs --mode=SELF_HOSTED",
     "service:start": "tsx src/install/serviceCli.ts start",
@@ -36,7 +34,6 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:eval": "vitest run --config vitest.eval.config.ts",
-    "test:all": "vitest run && vitest run --config vitest.eval.config.ts",
     "eval:baseline": "tsx src/eval/cli.ts",
     "eval:rebaseline": "tsx src/eval/cli.ts rebaseline",
     "eval:live": "tsx src/eval/cli.ts live",

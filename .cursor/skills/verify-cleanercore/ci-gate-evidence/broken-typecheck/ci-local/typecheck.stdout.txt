@@ -1,5 +1,0 @@
-
-> tour-core@0.1.0 typecheck
-> tsc --noEmit
-
-src/cleaner-core/flag.ts(13,14): error TS2322: Type 'string' is not assignable to type 'number'.
