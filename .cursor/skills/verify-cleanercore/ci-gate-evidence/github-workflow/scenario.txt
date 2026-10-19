@@ -1,1 +1,0 @@
-The diff against origin/master is .github/workflows/ci.yml. The gate runs scripts/ci-check.sh.

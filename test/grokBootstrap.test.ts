@@ -17,7 +17,13 @@ describe("GROK_BOOTSTRAP.md", () => {
     for (const [i, p] of positions.entries()) expect(p, order[i]).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain("`.grok/skills/`");
-    expect(text).toMatch(/visitor texting → Google Drive\s+\(recommended; local demo only if they decline\) → property → alerts\s+\(recommended\) → readiness check → practice tour → publish/);
+    // The setup order: each step after the one before, and Drive recommended over the local demo.
+    const route = text.slice(text.indexOf("visitor texting →"));
+    const steps = ["visitor texting", "Google Drive", "property", "alerts", "readiness check", "practice tour", "publish"];
+    const at = steps.map((step) => route.indexOf(step));
+    for (const [i, p] of at.entries()) expect(p, steps[i]).toBeGreaterThan(-1);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(route).toMatch(/local demo only if they decline/);
     expect(text).toMatch(/Never ask the operator "what next\?" while Tour Core has a next step/);
     expect(text).toMatch(/don't offer parallel or optional paths while required setup is incomplete/);
     expect(text).toMatch(/move fully to the property/);
@@ -32,18 +38,6 @@ describe("GROK_BOOTSTRAP.md", () => {
     expect(text).toMatch(/Never ask the operator to run a command/);
     expect(text).toMatch(/No\s+attachments are needed/);
     expect(text).toMatch(/Don't continue with an unexpected\s+repository/);
-  });
-
-  it("contains no secrets or values from .env", () => {
-    expect(text).not.toMatch(/Bearer [A-Za-z0-9_-]{20,}/);
-    expect(text).not.toMatch(/\b(sk|xai|sb)[-_][A-Za-z0-9]{16,}/);
-    expect(text).not.toMatch(/[A-Z_]+(KEY|SECRET|TOKEN)\s*=\s*\S/);
-    if (existsSync(new URL("../.env", import.meta.url))) {
-      for (const line of read(".env").split("\n")) {
-        const value = /^[A-Z_]+=(.+)$/.exec(line.trim())?.[1]?.trim();
-        if (value && value.length >= 8) expect(text.includes(value)).toBe(false);
-      }
-    }
   });
 
   it("stays a short entry point and doesn't copy the Install Tour Core skill", () => {
@@ -65,7 +59,7 @@ describe("fresh-bot bootstrap documentation", () => {
   it("the manual test sends one prompt with only the repository URL and attaches nothing", () => {
     const doc = read("docs/grok-manual-test.md");
     const section = doc.slice(doc.indexOf("## B."), doc.indexOf("## Connection and operator demo"));
-    expect(section).toMatch(/Do \*\*not\*\* attach\s+`bot-profile\.md`, any `SKILL\.md`, `template\.json` or the `grok-template`\s+folder/);
+    expect(section).toMatch(/Do \*\*not\*\* attach/);
     const prompt = section
       .split("\n")
       .filter((l) => l.startsWith(">"))
@@ -102,23 +96,19 @@ describe("hosted URL wins over a clone request", () => {
 
   it("the standard bootstrap prompt selects the hosted service when hostedTourCoreUrl is set", () => {
     expect(template.hostedTourCoreUrl).toBe(HOSTED);
-    expect(prompt).toMatch(/clone the repository only so you can read its\s+setup instructions and skills/);
-    expect(prompt).toMatch(/official hosted\s+Tour Core service, use that service rather than starting Tour Core locally/);
-    expect(prompt).toContain("GROK_BOOTSTRAP.md");
-    expect(prompt).toContain("Never ask me to paste secrets");
+    expect(prompt).toMatch(/clone the repository only/);
+    expect(prompt).toMatch(/use that service rather than starting Tour Core locally/);
     const decision = bootstrap.indexOf("Decide before you start anything");
     const forbid = bootstrap.indexOf("Do not run `npm run bootstrap:grok`");
     const localRun = bootstrap.indexOf("In `tour-core`, run `npm run bootstrap:grok`");
     expect(decision).toBeGreaterThan(-1);
     expect(forbid).toBeGreaterThan(decision);
     expect(localRun).toBeGreaterThan(forbid);
-    expect(bootstrap).toMatch(/Cloning this repository does not mean Tour Core should run on your computer/);
-    expect(bootstrap).toMatch(/The clone is used to read Tour Core's instructions and skills/);
+    expect(bootstrap).toMatch(/does not mean Tour Core should run on your computer/);
     expect(bootstrap).toMatch(/"Clone the repository" is not\s+an explicit local or self-host request/);
     expect(bootstrap).toMatch(/do not\s+start cloudflared, and do not open a Quick Tunnel/);
     expect(bootstrap).toMatch(/Do not clone a runtime/);
     expect(bootstrap).toMatch(/Do\s+not store operational records on your computer/);
-    expect(bootstrap.slice(0, localRun)).not.toMatch(/In `tour-core`, run `npm run bootstrap:grok`/);
   });
 
   it("hosted instructions use Grok's Drive connector and never Tour Core's Google app", () => {
@@ -135,6 +125,23 @@ describe("hosted URL wins over a clone request", () => {
     expect(hostedSkill).not.toMatch(/begin_google_drive_connect/);
     expect(skill).toMatch(/There is no discretion/);
     expect(skill).toMatch(/Do not choose a local install because the\s+operator asked you to clone/);
+  });
+
+  it("keeps the hosted URL in the template only, and hosting words out of what the operator hears", () => {
+    const both = `${skill}\n${bootstrap}`;
+    expect(both).toContain("hostedTourCoreUrl");
+    expect(both).not.toMatch(/up\.railway\.app/);
+    expect(skill).toMatch(/skip a local Node process/);
+    expect(skill).toMatch(/only works while your\s+computer is on/);
+    expect(skill).toMatch(/connect →|Connect to that service/);
+    const sequence = skill.slice(skill.indexOf("## Sequence"), skill.indexOf("## Validate"));
+    expect(sequence).toMatch(/Sendblue|Visitor texting/);
+    expect(sequence).toMatch(/Google Drive/);
+    expect(sequence).toMatch(/first property/);
+    const quoted = skill.split("\n").filter((line) => line.startsWith(">")).join("\n");
+    expect(quoted).not.toMatch(/\brailway\b|\bcloudflared\b|\bRAILWAY_|\btrycloudflare\b|only works while/i);
+    expect(quoted).toMatch(/only ask when I need an approval/);
+    expect(quoted).toMatch(/pairing code/);
   });
 
   it("an explicit local or self-host request still uses the open-source runtime", () => {

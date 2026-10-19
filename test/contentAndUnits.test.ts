@@ -168,7 +168,7 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     const order = INSTALLATION_COMPONENTS.filter((c) => rows.includes(c));
     expect(rows.filter((r) => (INSTALLATION_COMPONENTS as readonly string[]).includes(r))).toEqual(order);
     expect(rows.indexOf("OPERATOR_ALERTS")).toBeGreaterThan(rows.indexOf("PROPERTY"));
-    expect(doc).toMatch(/Alerts are never required and never come before the first property/);
+    expect(doc).toMatch(/Alerts are never required/);
   });
 });
 

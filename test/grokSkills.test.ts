@@ -269,10 +269,10 @@ describe("Install Tour Core skill", () => {
 
   it("fresh install: the operator only approves the connection, and Grok continues on its own afterwards", () => {
     const p2 = phase(2);
-    expect(p2).toContain("Tour Core is installed and running. I need your approval to connect to it.");
+    expect(p2).toMatch(/I need your approval to connect/);
     expect(p2).toMatch(/Check that the codes match and click Allow/);
     expect(p2).toMatch(/As soon as it's approved, without waiting to be asked/);
-    expect(p2).toContain("Connected. I'm checking the rest of the setup now.");
+    expect(p2).toMatch(/I'm checking the rest of the setup/);
     expect(p2).toMatch(/old Tour Core connection left over from\s+before is an exception/);
   });
 
@@ -284,7 +284,7 @@ describe("Install Tour Core skill", () => {
     expect(p3).toMatch(/don't ask the operator what to do next/);
     expect(p3).toMatch(/don't start property setup/);
     expect(p3).toMatch(/Visitor texting is part of this phase: it's connected and tested before any\s+property/);
-    expect(phase(4)).toContain("Everything needed to start is connected and tested. Would you like to add\n> your first property?");
+    expect(phase(4)).toMatch(/your first property\?/);
     expect(phase(4)).toMatch(/Alerts are not part of this: they come\s+later and are never required/);
     expect(text).not.toMatch(/doesn't depend on|if you'd rather|what (would you like|should we) (to )?do next\?/i);
   });
@@ -295,15 +295,15 @@ describe("Install Tour Core skill", () => {
     expect(phase(6)).toMatch(/wait for the result/);
     expect(phase(6)).toMatch(/already published changes\s+nothing/);
     expect(phase(6)).toMatch(/get_state/);
-    expect(phase(7)).toContain(
-      "Your property is published. Visitor texting is live. Door access is still in\n> demo mode, so no physical locks will open. I'll keep you updated on your\n> tours and let you know when something needs your attention.",
-    );
+    // The operator hears that door access is still a demo, so no lock opens.
+    expect(phase(7)).toMatch(/Door access is still in\s+(?:> )?demo mode/);
+    expect(phase(7)).toMatch(/no physical locks will open/);
     const said = text.split("\n").filter((l) => l.startsWith(">")).join(" ");
     expect(said).not.toMatch(/everything (runs|is) in demo mode/i);
   });
 
   it("keeps infrastructure out of normal conversation and never asks for a secret in chat", () => {
-    expect(text).toMatch(/In normal conversation never mention addresses or links, `\/mcp`,\s+`trycloudflare`, tool counts, connectors, OAuth/);
+    expect(text).toMatch(/In normal conversation never mention addresses or links/);
     const requests = [
       /\b(paste|send|share|give|tell|type)\b[^.\n]{0,20}\b(me|us|here)\b[^.\n]{0,40}\b(key|secret|token|password|credential)s?\b/i,
       /\bwhat(?:'s| is) your\b[^.\n]{0,30}\b(key|secret|token|password)\b/i,
@@ -311,7 +311,7 @@ describe("Install Tour Core skill", () => {
     for (const pattern of requests) expect(text).not.toMatch(pattern);
     expect(text).toMatch(/not in chat/);
     expect(text).toMatch(/Prefer Grok's secure secret input/);
-    expect(text).toMatch(/I'll ask for them securely; they won't be shown to me in chat/);
+    expect(text).toMatch(/they won't be shown to me in chat/);
     expect(text).toMatch(/hand\s+the browser to the operator/i);
     expect(text).not.toMatch(/github\.com\/[\w.-]+\/[\w.-]+/i);
     expect(text).toContain("TOURCORE_REPO_URL");

@@ -124,6 +124,15 @@ function containsCode(text: string): boolean {
   return text.includes(LANE.pin) || text.includes(COURT.pin);
 }
 
+/**
+ * A scratch code standing alone as a number. Saved files also hold random ids (event ids, hashes,
+ * secrets) that can contain the same four digits by chance, so a match inside a longer token is not
+ * a leak. A leaked code is always set apart, as in `Door code: <code>.` or a quoted JSON value.
+ */
+function containsStandaloneCode(text: string): boolean {
+  return [LANE.pin, COURT.pin].some((pin) => new RegExp(`(?<![A-Za-z0-9_-])${pin}(?![A-Za-z0-9_-])`).test(text));
+}
+
 function treeContainsCode(dir: string): boolean {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
@@ -131,7 +140,7 @@ function treeContainsCode(dir: string): boolean {
       if (treeContainsCode(path)) return true;
       continue;
     }
-    if (containsCode(readFileSync(path, "utf8"))) return true;
+    if (containsStandaloneCode(readFileSync(path, "utf8"))) return true;
   }
   return false;
 }
@@ -171,6 +180,15 @@ async function textIn(wired: WiredApp, from: string, body: string): Promise<void
 }
 
 describe("Scratch test turnover", () => {
+  it("finds a door code saved in a file, and not four matching digits inside a random id", () => {
+    for (const pin of [LANE.pin, COURT.pin]) {
+      expect(containsStandaloneCode(`Door code: ${pin}. Reply DONE.`)).toBe(true);
+      expect(containsStandaloneCode(`{"pin":"${pin}"}`)).toBe(true);
+      expect(containsStandaloneCode(`evt_f5060a${pin}b9d1`)).toBe(false);
+      expect(containsStandaloneCode(`9${pin}0`)).toBe(false);
+    }
+  });
+
   it("refuses any property that is not Scratch", async () => {
     const practice = await scratchApp({
       blockSms: true,

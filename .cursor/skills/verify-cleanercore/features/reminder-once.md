@@ -24,7 +24,7 @@ Preconditions:
 - **Poll twice and remind twice.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --data <dir> --now 2026-10-18T12:00:00.000Z --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --reply +15555550100=YES --remind --remind`. Exit code 0.
 - **One reminder.** The transcript ends with `Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.` That line appears once. `sent` has one `kind` `reminder`.
 - **Restart.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --data <dir> --no-poll --now 2026-10-18T12:00:00.000Z --remind`. Exit code 0. This process's `sent` is `[]`. The transcript still shows the one reminder from the first process.
-- **Proof.** Save both commands, both stdouts, the transcript, and the outbox with feature id `reminder-once`. The harness is `prove-step-c.sh`, which creates the temporary directory.
+- **Proof.** `test/cleanerCore.test.ts`, in the "one Scratch turnover" block. The old `prove-step-c.sh` was retired.
 
 ## Gotchas
 

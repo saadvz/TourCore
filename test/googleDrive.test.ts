@@ -407,13 +407,8 @@ describe("Google authorization and Grok copy", () => {
       expect(started.technical).toMatch(/no documented xAI API/);
     }
     const template = readFileSync(new URL("../grok-template/template.json", import.meta.url), "utf8");
-    const driveDoc = readFileSync(new URL("../grok-template/integrations/google-drive.md", import.meta.url), "utf8");
     const skill = readFileSync(new URL("../.grok/skills/install-tour-core/SKILL.md", import.meta.url), "utf8");
-    for (const text of [template, driveDoc, skill]) {
-      expect(text).not.toMatch(/ya29\./);
-      expect(text).not.toMatch(/folder_[A-Za-z0-9]{10,}/);
-      expect(text).not.toMatch(/1\/\/[A-Za-z0-9_-]{10,}/);
-    }
+    // Google tokens and folder ids stay out of the template and skills: the secrets scan in grokTemplate.test.ts.
     expect(template).toContain("Google Drive");
     expect(template).toContain("travelsWithTemplate");
     expect(skill).toMatch(/built-in Google Drive connector/);

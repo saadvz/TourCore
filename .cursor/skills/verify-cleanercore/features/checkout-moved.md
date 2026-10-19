@@ -28,4 +28,4 @@ Preconditions:
 ## Gotchas
 
 - The first "guests have left" is part of the command. Removing it proves a different path.
-- The update names 2:00 PM. A feed change is the step C corrected-time journey, not this one.
+- The update names 2:00 PM. A feed change is the corrected-time journey, not this one.

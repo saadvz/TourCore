@@ -19,5 +19,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Typecheck, tests, cleaner-core flag off and on, secret scan
+      - name: Typecheck, build, tests, secret scan, eval
         run: bash scripts/ci-check.sh
+      - name: Cleaner Core proofs (555 Scratch numbers only)
+        run: bash scripts/ci-proofs.sh

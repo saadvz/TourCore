@@ -27,4 +27,4 @@ Preconditions:
 ## Gotchas
 
 - The unit test that checks the sink may see the private text in memory. That process is not this evidence folder.
-- Step C's `no-pin` journey must still omit both the digits and the phrase `door code`. This journey is allowed to say `door code` only in the redacted private text and the host notice.
+- The `no-pin` journey (`test/cleanerCore.test.ts`) must still omit both the digits and the phrase `door code`. This journey is allowed to say `door code` only in the redacted private text and the host notice.

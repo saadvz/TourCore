@@ -1,4 +1,0 @@
-features: eligible private held stop-host resume time injury problem before-yes inert done done-without-start twice failed desk
-script: .cursor/skills/verify-cleanercore/scripts/prove-group-chat.sh
-phones: 555 only
-pins: redacted

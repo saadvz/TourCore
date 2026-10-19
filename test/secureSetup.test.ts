@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, LINE, PUBLIC } from "./fakeSendblue";
 import { at } from "./grokHarness";
 import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET } from "./installHarness";
+import { filesUnder } from "./files";
 
 /**
  * The secure setup page as the operator uses it in the Tour Core computer's
@@ -22,13 +23,6 @@ import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET } from "./inst
 const TOKEN = "test-operator-token-abcdef";
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
-
-function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    return statSync(p).isDirectory() ? files(p) : [p];
-  });
-}
 
 async function startApp() {
   const root = mkdtempSync(join(tmpdir(), "tourcore-secure-"));
@@ -169,7 +163,7 @@ describe("secure setup page", () => {
     const everything = [JSON.stringify(out.body), JSON.stringify(again.body), status.text, (await app.grok("test_visitor_messaging")).text].join("\n");
     for (const secret of [SB_KEY, SB_SECRET, incoming]) expect(everything).not.toContain(secret);
     // Nowhere on disk but the secret store: not the manifest, install state, runtime records, audit or exports.
-    for (const f of files(app.root).filter((f) => !f.endsWith(join("install", "secrets.json")))) {
+    for (const f of filesUnder(app.root).filter((f) => !f.endsWith(join("install", "secrets.json")))) {
       const text = readFileSync(f, "utf8");
       for (const secret of [SB_KEY, SB_SECRET, incoming]) expect(text.includes(secret), f).toBe(false);
     }
@@ -210,7 +204,7 @@ describe("secure setup page", () => {
       expect(text).not.toContain(ROUTINE_KEY);
       expect(text).not.toContain(ROUTINE_URL);
     }
-    for (const f of files(app.root).filter((f) => !f.endsWith(join("install", "secrets.json")))) expect(readFileSync(f, "utf8").includes(ROUTINE_KEY), f).toBe(false);
+    for (const f of filesUnder(app.root).filter((f) => !f.endsWith(join("install", "secrets.json")))) expect(readFileSync(f, "utf8").includes(ROUTINE_KEY), f).toBe(false);
   });
 
   it("a refused routine key is reported as an error with a secure-setup next step", async () => {

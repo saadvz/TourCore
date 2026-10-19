@@ -1,6 +1,6 @@
 # CI runs the cleaner suite both ways
 
-Every pull request to master installs, typechecks, builds, runs the full test suite, runs the cleaner-core tests with the flag on and off, scans for configured scratch codes, and checks that the Grok setup prompt is unchanged. GitHub Actions still runs `scripts/ci-check.sh` for that.
+Every pull request to master installs, typechecks, builds, runs the full test suite (the cleaner-core flag tests set the flag on and off themselves), scans for configured scratch codes, and checks that the Grok setup prompt is unchanged. GitHub Actions runs `scripts/ci-check.sh` for that, then `scripts/ci-proofs.sh` for the verify-cleanercore proofs. In that CI job the step G gate is skipped, because `ci-check.sh` already ran.
 
 `prove-step-g.sh` does not run that full script on every local proof. It reads the git diff and picks one gate.
 
@@ -64,6 +64,6 @@ Preconditions:
 ## Gotchas
 
 - Node 20 cannot open the SQLite backup store. CI uses Node 22.
-- The secret scan allowlists the historical tenant store and the step C through F proofs. A new file that contains a configured scratch code fails the scan.
+- The secret scan allowlists the historical tenant store and the step D through F proofs. A new file that contains a configured scratch code fails the scan.
 - `prove-step-g.sh` runs this gate after the step D, E, and F proofs.
 - A related-test failure exits before typecheck. A typecheck failure exits before the flag-off smoke.

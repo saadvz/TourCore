@@ -169,6 +169,11 @@ run_logged() {
 run_ci_gate() {
   local dir="$EVIDENCE/ci-local"
   mkdir -p "$dir"
+  # scripts/ci-proofs.sh runs after scripts/ci-check.sh in CI, so the gate has already run there.
+  if [[ "${CLEANER_CI_CHECK_DONE:-}" == "1" ]]; then
+    printf '%s\n' "skipped: scripts/ci-check.sh already ran in this CI job" >"$dir/decision.txt"
+    return
+  fi
   local changed=()
   mapfile -t changed < <(collect_changed_files | sed '/^$/d' | sort -u)
   if ((${#changed[@]})); then
@@ -539,7 +544,7 @@ This run used the in-process doctor/smoke CLI. A live cleaning job will not do t
 4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. Temporary directories were removed after stdout was saved.
 5. Applied each --reply inside the process. A reply that starts with @ reads a file inside the process. The exposure reply file was a temporary file outside this evidence folder and was deleted. Neither path received an inbound SMS.
 6. Printed no door code. A crash is --crash after-accept or --crash before-pin, which stops the process after the durable row is saved. It is not a kill of a live host.
-7. The local CI gate reads the git diff. When a changed file is under .github/workflows/, or is scripts/ci-check.sh, or is shared pipeline code listed in the script, ci-local runs scripts/ci-check.sh. That run is typecheck, build, the full test suite, the cleaner-core tests with the flag on and off, the secret scan, the baseline eval, and the SETUP_PROMPT check. Any other diff runs npx vitest related --run on the changed files, then npm run typecheck. A failing related test or a failing typecheck exits nonzero. Then a flag-off smoke exited 2.
+7. The local CI gate reads the git diff. When a changed file is under .github/workflows/, or is scripts/ci-check.sh, or is shared pipeline code listed in the script, ci-local runs scripts/ci-check.sh. That run is typecheck, build, the full test suite (including the cleaner-core flag tests), the secret scan, the baseline eval, and the SETUP_PROMPT check. Any other diff runs npx vitest related --run on the changed files, then npm run typecheck. A failing related test or a failing typecheck exits nonzero. Then a flag-off smoke exited 2.
 EOF
 
 printf '%s\n' "$EVIDENCE"

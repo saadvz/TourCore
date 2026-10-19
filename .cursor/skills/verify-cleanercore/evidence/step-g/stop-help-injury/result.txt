@@ -1,3 +1,0 @@
-feature: stop-help-injury
-pass
-everyday from +15555550101, one-to-one: "that hurt my schedule lol, running late" was treated as an injury.

@@ -112,7 +112,7 @@ function assertHostWording(body: string): void {
   expect(body.toLowerCase().includes("reply yes")).toBe(false);
 }
 
-describe("host texts after 46105bc", () => {
+describe("host STOP, START, resume, and ready texts", () => {
   it("uses the host STOP and START wording, and START leaves the hold in place", async () => {
     if (!LANE) throw new Error("missing lane");
     const root = mkdtempSync(join(tmpdir(), "host-copy-"));

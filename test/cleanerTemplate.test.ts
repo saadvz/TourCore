@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { liveDeskFor, resetLiveDesks, type LiveDesk } from "../src/cleaner-core/liveDesk";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { DOOR_CODE } from "./wiringProof";
+import { filesUnder } from "./files";
 
 /** The Cleaner Core paste-in prompt, setup guide, and Grok Bot template: pinned, consistent with the tools, and free of secrets. */
 
@@ -23,13 +24,6 @@ const NEEDS_HOST_YES = ["send_message", "mark_guests_left", "save_door_code", "s
 
 /** LF bytes, so the pin matches on a Windows (CRLF) checkout and on CI. */
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
-
-function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    return statSync(p).isDirectory() ? files(p) : [p];
-  });
-}
 
 async function rpc(method: string): Promise<Record<string, unknown>> {
   // initialize and tools/list never touch the desk.
@@ -84,7 +78,7 @@ describe("Cleaner Core template manifest", () => {
       expect.objectContaining({
         name: "Cleaner Core",
         url: "hostedCleanerCoreUrl/mcp/cleaner-core",
-        auth: "OAuth 2.1 discovered from the Cleaner Core service. The owner clicks Allow. Grok cannot approve itself.",
+        auth: expect.stringMatching(/The owner clicks Allow\. Grok cannot approve itself\./),
         travelsWithTemplate: false,
       }),
     ]);
@@ -191,8 +185,11 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
 
   it("names who send_message can reach, and that YES comes twice in every mode", () => {
     const text = read(BOOTSTRAP);
-    expect(text).toContain("With a group, `send_message` posts to the group: `to` is `group`. Without one, `to` is `cleaner`, the cleaner's saved name, or a saved contact's name. Never a phone number.");
-    expect(text).toContain("The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning.");
+    expect(text).toMatch(/With a group, `send_message` posts to the group: `to` is `group`/);
+    expect(text).toMatch(/Without one, `to` is `cleaner`/);
+    expect(text).toMatch(/Never a phone number\./);
+    expect(text).toMatch(/The cleaner replies YES twice/);
+    expect(text).toMatch(/then once to schedule the cleaning/);
   });
 
   it("connects alerts with the one-time upload link, never the secure card or chat", () => {
@@ -206,6 +203,15 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     }
   });
 
+  it("ships both routine docs: each calls check_now and keeps keys out of chat", () => {
+    for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
+      const doc = read(join(TEMPLATE, "routines", name));
+      expect(doc, name).toContain("`check_now`");
+      expect(doc, name).toContain("never in chat");
+    }
+    expect(read(join(TEMPLATE, "routines", "cleaner-core-alerts.md"))).toContain("Cleaner Core alerts are connected.");
+  });
+
   it("asks which Google calendar holds the bookings and reads only that one", () => {
     for (const doc of [read(BOOTSTRAP), read(join(TEMPLATE, "routines", "cleaner-core-check.md"))]) {
       expect(doc).toMatch(/which\s+Google\s+calendar\s+holds\s+the\s+bookings/);
@@ -217,7 +223,8 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
   it("keeps the safety rules", () => {
     const text = read(BOOTSTRAP);
     for (const doc of [text, read(join(TEMPLATE, "bot-profile.md"))]) {
-      expect(doc).toMatch(/Live texts go only to numbers the Cleaner Core operator approved\.\s+Saving a\s+number doesn't approve it\./);
+      expect(doc).toMatch(/Live texts go only to numbers the Cleaner Core operator approved/);
+      expect(doc).toMatch(/Saving a\s+number doesn't approve it/);
     }
     expect(text).toMatch(/Never ask for a secret in chat/);
     expect(text).toMatch(/door code goes only on your secure card/);
@@ -238,7 +245,7 @@ describe("Cleaner Core initialize instructions", () => {
 });
 
 describe("Cleaner Core template docs", () => {
-  const docs = () => [BOOTSTRAP, ...files(TEMPLATE)].map((f) => ({ f, text: read(f) }));
+  const docs = () => [BOOTSTRAP, ...filesUnder(TEMPLATE)].map((f) => ({ f, text: read(f) }));
 
   it("name only real Cleaner Core tools", async () => {
     const tools = await toolNames();

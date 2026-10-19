@@ -29,7 +29,7 @@ Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, t
 
 - Capture the command, stdout, stderr, and exit code under `.cursor/skills/verify-cleanercore/evidence/<UTC timestamp>/`.
 - Record the feature id and the entry point in that directory's `result.txt`.
-- Default smoke stdout is the record of texts. Step C journeys also save the transcript, the job list, and the outbox from that stdout.
+- Default smoke stdout is the record of texts. Step D through G journeys also save the transcript, the job list, and the outbox from that stdout.
 - Report an unreachable path with the attempted command and the unmet precondition.
 - Do not report a skipped entry point as verified through a different path. Flag-on smoke with no operation confirms the built-in turnover. That is not proof of STOP, a feed change, a block, or a failed send.
 
@@ -48,16 +48,16 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [No door code](./door-code.md) covers the confirmed turnover and an unapproved YES. Neither texts a door code. `prove-turnover.sh` and `prove-safety.sh`.
 - [STOP, HELP, and injury](./stop-help-injury.md) covers opt-out, a HELP text that sends nothing, and one emergency reply per sender on the built-in job. `prove-safety.sh`.
 - [Flag off sends nothing](./flag-off.md) covers doctor and smoke with `CLEANER_CORE_ENABLED` unset. `prove-safety.sh`.
-- [Read the Guesty Lite feed](./read-feed.md) covers checkout, next check-in, a free night, a same-day turn, and a block that is not a departure. `prove-step-c.sh`.
-- [Host time wins](./host-time.md) covers a host clock that stays after a later feed publishes a different clock. `prove-step-c.sh`.
-- [Corrected time](./corrected-time.md) covers the update text after an offer, with the old offer left behind. `prove-step-c.sh`.
-- [One reminder](./reminder-once.md) covers one reminder across a second poll and a restart. `prove-step-c.sh`.
-- [Blocks create no job](./blocks.md) covers an owner block and a blocked date. `prove-step-c.sh`.
-- [One live job](./one-live-job.md) covers a removed stay: the job list after the change, not only the outbox. `prove-step-c.sh`.
-- [STOP silences later texts](./stop-silences.md) covers opt-out, then a feed change and a reminder, with no new text to the owner. `prove-step-c.sh`.
-- [Persisted store has no door code](./no-pin.md) covers a confirmed job whose stdout and store omit the scratch door code. `prove-step-c.sh`.
-- [Safety replies in new states](./safety-states.md) covers STOP, a quiet HELP, and one emergency phrase while waiting, after the host confirms both times, and after a corrected-time text. `prove-step-c.sh`.
-- [Failed send is not delivered](./failed-send.md) covers a reminder whose first send fails and whose retry sends it once. `prove-step-c.sh`.
+- [Read the Guesty Lite feed](./read-feed.md) covers checkout, next check-in, a free night, a same-day turn, and a block that is not a departure. `test/cleanerCore.test.ts`.
+- [Host time wins](./host-time.md) covers a host clock that stays after a later feed publishes a different clock. `test/cleanerCore.test.ts`.
+- [Corrected time](./corrected-time.md) covers the update text after an offer, with the old offer left behind. `test/cleanerCore.test.ts`.
+- [One reminder](./reminder-once.md) covers one reminder across a second poll and a restart. `test/cleanerCore.test.ts`.
+- [Blocks create no job](./blocks.md) covers an owner block and a blocked date. `test/cleanerCore.test.ts`.
+- [One live job](./one-live-job.md) covers a removed stay: the job list after the change, not only the outbox. `test/cleanerCore.test.ts`.
+- [STOP silences later texts](./stop-silences.md) covers opt-out, then a feed change and a reminder, with no new text to the owner. `test/cleanerCore.test.ts`.
+- [Persisted store has no door code](./no-pin.md) covers a confirmed job whose stdout and store omit the scratch door code. `test/cleanerCore.test.ts`.
+- [Safety replies in new states](./safety-states.md) covers STOP, a quiet HELP, and one emergency phrase while waiting, after the host confirms both times, and after a corrected-time text. `test/cleanerCore.test.ts`.
+- [Failed send is not delivered](./failed-send.md) covers a reminder whose first send fails and whose retry sends it once. `test/cleanerCore.test.ts`.
 - [Door code only after departure](./pin-after-departure.md) covers a same-day turn that holds the code until the host says the guests have left, then sends it once. `prove-step-d.sh`.
 - [Approved and opted in](./opted-in-only.md) covers no code without a cleaner YES, no code for `+15555550199`, and no opt-in for an unapproved cleaner. `prove-step-d.sh`.
 - [Later checkout holds the code](./checkout-moved.md) covers a checkout moved to 2:00 PM and a code that waits for the cleaner's new YES. `prove-step-d.sh`.
@@ -94,7 +94,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Observer injury outside a group](./observer-injury-solo.md) covers the same injury path when texts are one-to-one. `prove-step-f.sh`.
 - [Owner injury](./owner-injury.md) covers the 911 line to the host, with no alert back to that host. `prove-step-f.sh`.
 - [Injury wordings](./injury-wording.md) covers hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one. `prove-step-f.sh`.
-- [CI both ways](./g-ci-local.md) covers typecheck, the full suite, cleaner-core with the flag on and off, and the secret scan. `prove-step-g.sh`.
+- [CI both ways](./g-ci-local.md) covers typecheck, the full suite (including the cleaner-core flag tests), the secret scan, and the proofs in `scripts/ci-proofs.sh`. `prove-step-g.sh`.
 - [Stale feed](./g-stale-source.md) covers one host alert and no offer until a fresh read. `prove-step-g.sh`.
 - [Host time beats a stale feed](./g-host-override.md) covers a 2:00 PM host clock that a stale feed does not replace. `prove-step-g.sh`.
 - [Private door code and exposure review](./g-permanent-code.md) covers the redacted private send, group and mirror copies, and one exposure review. `prove-step-g.sh`.

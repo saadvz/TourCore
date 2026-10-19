@@ -1,6 +1,6 @@
 # Pstack skill source
 
-Skill folders under `.cursor/skills/` were copied unchanged from the pstack plugin.
+`create-verification-skill/` and `maintain-verification-skill/` were copied unchanged from the pstack plugin. `verify-cleanercore/SKILL.md` uses them. The rest of the plugin's skills are not kept here.
 
 - Source repository: https://github.com/cursor/plugins
 - Plugin path: `pstack/skills/`

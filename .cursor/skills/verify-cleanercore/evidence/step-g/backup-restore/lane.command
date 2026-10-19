@@ -1,1 +1,0 @@
-smoke --with-pin --data /tmp/tmp.QrYi8UFHY6 --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=STOP --backup /tmp/tmp.QrYi8UFHY6/turn.db

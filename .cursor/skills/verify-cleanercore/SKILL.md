@@ -87,11 +87,7 @@ A Scratch test number is E.164 `+1` whose national number either has area code 5
 
 Any other argument fails the same way. `npm run cleaner:smoke -- STOP` exits 1, writes `Unexpected argument STOP` on stderr, and does not book the turnover. Do not pass a real phone.
 
-The ten step C blockers are one script. It reads fixtures under `src/cleaner-core/fixtures/` and writes `evidence/<UTC timestamp>/step-c/`:
-
-```
-.cursor/skills/verify-cleanercore/scripts/prove-step-c.sh
-```
+The ten step C journeys (feed read, host time, corrected time, one reminder, blocks, one live job, STOP silences, no door code, safety states, failed send) are unit tests in `test/cleanerCore.test.ts`. The old `prove-step-c.sh` assumed the host's own number took the offer without a cleaner opting in, which steps D and G replaced, so it was retired.
 
 The step D blockers are one script. It overwrites the fixed directory `evidence/step-d/` and does not add a timestamp:
 
@@ -119,13 +115,13 @@ The step G safety gates are one script. It overwrites the fixed directory `evide
 
 ## Evidence
 
-Write one directory per turnover, safety, or step C run:
+Write one directory per turnover or safety run:
 
 `.cursor/skills/verify-cleanercore/evidence/<UTC timestamp>/`
 
 Step D, step E, and step F are the exceptions. `prove-step-d.sh` overwrites `.cursor/skills/verify-cleanercore/evidence/step-d/`. `prove-step-e.sh` overwrites `.cursor/skills/verify-cleanercore/evidence/step-e/`. `prove-step-f.sh` overwrites `.cursor/skills/verify-cleanercore/evidence/step-f/`. None of them creates a timestamped folder.
 
-Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. Step C journeys also save `transcript`, `jobs`, and `outbox` extracted from that stdout. The transcript lists each outbound body and each inbound Scratch reply, as `+15555550100: YES`. Assert every `+1` number in smoke stdout is a Scratch test number. A Scratch Lane recipient is `+15555550100` or `+15555550101`. A Scratch Court recipient is `+15555550110` or `+15555550111`. A drive without `--with-pin` requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-c.sh` greps the new evidence tree and fails if that code appears. `prove-step-d.sh` overwrites `evidence/step-d/` and fails if those digits appear there. The phrase `door code` is allowed in that folder only as the redacted private text and the host notice. `prove-step-e.sh` overwrites `evidence/step-e/` and fails if a scratch pin loaded from `src/cleaner-core/tenants.ts` appears there. `prove-step-f.sh` overwrites `evidence/step-f/` and fails if a scratch pin loaded from `src/cleaner-core/tenants.ts` or the annex lock fixture appears there. The Annex lock reply is an `@` path, not the digits. `prove-step-g.sh` overwrites `evidence/step-g/` and fails if a configured scratch code appears there. The exposure reply is an `@` path to a temporary file that is deleted.
+Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. The transcript lists each outbound body and each inbound Scratch reply, as `+15555550100: YES`. Assert every `+1` number in smoke stdout is a Scratch test number. A Scratch Lane recipient is `+15555550100` or `+15555550101`. A Scratch Court recipient is `+15555550110` or `+15555550111`. A drive without `--with-pin` requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-d.sh` overwrites `evidence/step-d/` and fails if those digits appear there. The phrase `door code` is allowed in that folder only as the redacted private text and the host notice. `prove-step-e.sh` overwrites `evidence/step-e/` and fails if a scratch pin loaded from `src/cleaner-core/tenants.ts` appears there. `prove-step-f.sh` overwrites `evidence/step-f/` and fails if a scratch pin loaded from `src/cleaner-core/tenants.ts` or the annex lock fixture appears there. The Annex lock reply is an `@` path, not the digits. `prove-step-g.sh` overwrites `evidence/step-g/` and fails if a configured scratch code appears there. The exposure reply is an `@` path to a temporary file that is deleted.
 
 The default smoke process exits and leaves the in-memory sink behind. The saved stdout is the record of what that sink accepted. Journeys that pass `--data` also persist `cleaner-core.json` for the life of that directory. Capture stdout before removing the temporary directory. Cleanup must not delete the evidence directory.
 
@@ -160,14 +156,6 @@ Prove the safety journeys with:
 ```
 
 That script also takes no arguments. It doctors, then drives, in this order: `flag-off`, `stop`, `help`, `injury`, `unapproved-yes`. Each journey gets a subdirectory with the command, stdout, stderr, exit code, and `result.txt`. Flag-off smoke must exit 2 and match `scripts/expected/smoke-off.json`. The other four must exit 0 and match `smoke-stop.json`, `smoke-help.json`, `smoke-injury.json`, and `smoke-unapproved.json`. All five forbid a door code. The script prints each subdirectory path.
-
-Prove the ten step C blockers with:
-
-```
-.cursor/skills/verify-cleanercore/scripts/prove-step-c.sh
-```
-
-That script takes no arguments. It doctors before each journey, then drives `read-feed`, `host-time`, `corrected-time`, `reminder-once`, `blocks`, `one-live-job`, `stop-silences`, `no-pin`, `safety-states`, and `failed-send`. Evidence is `evidence/<UTC timestamp>/step-c/<journey>/`. The script prints the `step-c` directory.
 
 Prove the step D blockers with:
 
@@ -213,6 +201,6 @@ After any script exits, its evidence directory must still be on disk. A cleanup 
 
 ## Feature map
 
-Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-c.sh` drives the ten step C blockers. `prove-step-d.sh` drives the step D blockers and overwrites `evidence/step-d`. `prove-step-e.sh` drives the step E blockers and overwrites `evidence/step-e`. `prove-step-f.sh` drives the step F blockers and overwrites `evidence/step-f`. `prove-step-g.sh` drives the step G safety gates and overwrites `evidence/step-g`. `prove-group-chat.sh` drives the group thread and overwrites `evidence/group-chat`. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
+Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-d.sh` drives the step D blockers and overwrites `evidence/step-d`. `prove-step-e.sh` drives the step E blockers and overwrites `evidence/step-e`. `prove-step-f.sh` drives the step F blockers and overwrites `evidence/step-f`. `prove-step-g.sh` drives the step G safety gates and overwrites `evidence/step-g`. `prove-group-chat.sh` drives the group thread and overwrites `evidence/group-chat`. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
 
 When the map changes, run `/maintain-verification-skill` against `verify-cleanercore`.
