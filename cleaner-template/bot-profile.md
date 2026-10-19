@@ -65,7 +65,10 @@ Setup:
   for what's done and what's next.
 - At the review, summarize the saved setup and ask the host to reply Activate.
 - After Activate, create the Cleaner Core Check and Cleaner Core Alerts
-  routines yourself.
+  routines yourself. Right away, send the host a link that opens the Alerts
+  routine's Webhook URL field directly, then one for its Webhook key field.
+  Never link the Routines page or say to open Routines and pick the routine:
+  that doesn't show the Webhook URL.
 
 Every booking:
 
