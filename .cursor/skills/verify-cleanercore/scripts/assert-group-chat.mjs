@@ -86,10 +86,11 @@ const checks = {
     if (!clock || clock.status === "cleared" || clock.status === "done") fail("job moved");
   },
   "stop-host"() {
-    const time = groups.filter((text) => text.body === TIME);
-    if (time.length !== 1) fail("time reply");
-    if (JSON.stringify(time[0].audience) !== JSON.stringify([CLEANER])) fail("host still in the audience");
-    if (sent.some((text) => text.to === OWNER && text.body === TIME)) fail("time went to the host");
+    // A time from the cleaner goes to Grok. Cleaner Core sends no time line, and nothing in the group reaches the host after STOP.
+    if (sent.some((text) => text.body === TIME)) fail("time reply");
+    const stop = sent.findIndex((text) => text.kind === "stop" && text.to === OWNER);
+    if (stop < 0) fail("host stop");
+    if (sent.slice(stop + 1).some((text) => text.to === OWNER || text.audience?.includes(OWNER))) fail("host still in the audience");
   },
   resume() {
     const notes = sent.filter((text) => text.body === RESUME);
@@ -102,8 +103,7 @@ const checks = {
     if (!clock || clock.checkoutTime !== "11:00 AM") fail("clock moved");
     const copy = groups.filter((text) => text.body === OFFER_COPY);
     if (copy.length !== 1 || JSON.stringify(copy[0].audience) !== JSON.stringify([OWNER, CLEANER])) fail("offer copy");
-    if (groups.filter((text) => text.body === TIME).length !== 1) fail("time reply");
-    if (groups.some((text) => text.body !== TIME && text.body !== OFFER_COPY)) fail("extra group text");
+    if (sent.some((text) => text.body === TIME)) fail("time reply");
   },
   injury() {
     const emergency = sent.filter((text) => text.kind === "emergency");
@@ -115,10 +115,9 @@ const checks = {
     if (sent.some((text) => text.body === TIME)) fail("group handling ran first");
   },
   problem() {
-    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group saw the hold");
-    if (!sent.some((text) => text.to === OWNER && text.kind === "review" && text.body === HOLD)) fail("host hold");
-    if (!sent.some((text) => text.to === CLEANER && text.kind === "held" && text.body === HOLD)) fail("cleaner hold");
-    if (pins.length !== 0) fail("pin during hold");
+    // Only the host pauses a cleaning, through Grok. A problem text holds nothing and opens no review.
+    if (sent.some((text) => text.kind === "review" || text.body === HOLD || text.body.includes("is on hold"))) fail("automatic hold");
+    if (pins.length !== 0) fail("pin");
   },
   "before-yes"() {
     if (groups.length !== 0) fail("group text before YES");

@@ -1,3 +1,4 @@
+import { approvedTool } from "./hostApproval";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -148,6 +149,7 @@ describe("Scratch test tools", () => {
       "save_alert_routine",
       "send_message",
       "retry_send",
+      "hold_job",
       "resume_job",
       "reset_property",
       "reset_scratch",
@@ -459,7 +461,7 @@ describe("Scratch test tools", () => {
     const wired = await scratchApp({ groupChat: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
     await saveScratch(wired, { address: LANE.property.address, host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, pin: LANE.pin }, "Scratch");
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.ownerPhone, text: "STOP" }))).toBe(WENT_THROUGH);
-    const resumed = await call(wired, "resume_job");
+    const resumed = await approvedTool((args) => call(wired, "resume_job", args));
     const sentence = `The cleaning at ${LANE.property.address} is back on.`;
     expect(resumed.isError).toBe(false);
     expect(resumed.text).toContain(sentence);

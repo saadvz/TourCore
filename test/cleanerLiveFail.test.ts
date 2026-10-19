@@ -1,3 +1,4 @@
+import { approvedTool } from "./hostApproval";
 import { afterEach, describe, expect, it } from "vitest";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
@@ -160,7 +161,7 @@ describe("live Scratch failures from 19087415", () => {
     expect((await call(wired, "get_state")).text).toContain(INJURY_HOLD);
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(INJURY_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
-    const resumed = await call(wired, "resume_job");
+    const resumed = await approvedTool((args) => call(wired, "resume_job", args));
     expect(resumed.text).toContain("The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.");
     expect(nextOf(await call(wired, "get_state"))).not.toBe(INJURY_HOLD);
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");
@@ -213,7 +214,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(afterStart.text).toContain(HOST_STOP);
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(OWNER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
-    expect((await call(wired, "resume_job")).text).toContain("is back on");
+    expect((await approvedTool((args) => call(wired, "resume_job", args))).text).toContain("is back on");
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
   }, 40_000);
@@ -237,7 +238,7 @@ describe("live Scratch failures from 19087415", () => {
     expect((await call(wired, "get_state")).text).toContain("on hold");
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(CLEANER_HOLD);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
-    expect((await call(wired, "resume_job")).isError).toBe(false);
+    expect((await approvedTool((args) => call(wired, "resume_job", args))).isError).toBe(false);
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
   }, 40_000);
@@ -292,7 +293,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
     expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: HOST_STOP }]);
     const afterStop = wired.cleanerSent.length;
-    const resumed = await call(wired, "resume_job");
+    const resumed = await approvedTool((args) => call(wired, "resume_job", args));
     const backOn = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.";
     const held = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
     expect(resumed.text).toContain(backOn);

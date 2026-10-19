@@ -2,11 +2,11 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { groupTimeLine } from "../src/cleaner-core/cleanerTexts";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { fakeConversations } from "./fakeConversations";
+import { postToGroup } from "./hostApproval";
 import { PUBLIC } from "./fakeSendblue";
 import {
   ADDRESS,
@@ -24,7 +24,9 @@ import {
 
 const OLD = "+15555550103";
 /** LiveDesk names the business when no host name is saved. */
-const TIME = groupTimeLine("Harbor");
+const TIME = "Harbor will confirm that time.";
+/** A host message to the group: the probe for who is in it. */
+const NOTE = "Please bring extra towels.";
 const PIN_KEY = Buffer.from(TEST_PIN_KEY, "base64");
 
 interface GroupPost {
@@ -150,8 +152,8 @@ describe("optional observer", () => {
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-observer", from: OLD, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
-    await desk.inbound({ id: "time-with-observer", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    const withObserver = posts.filter((post) => post.body === TIME);
+    expect((await postToGroup(desk, NOTE)).ok).toBe(true);
+    const withObserver = posts.filter((post) => post.body === NOTE);
     expect(withObserver.length).toBe(1);
     expect(withObserver[0]?.to).toEqual([OLD, HOST, CLEANER].sort());
 
@@ -170,9 +172,9 @@ describe("optional observer", () => {
 
     const smsAt = sms.sent.length;
     const postsAt = posts.length;
-    await desk.inbound({ id: "time-after-clear", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
+    expect((await postToGroup(desk, NOTE)).ok).toBe(true);
     const laterPosts = posts.slice(postsAt);
-    const laterCopy = laterPosts.find((post) => post.body === TIME);
+    const laterCopy = laterPosts.find((post) => post.body === NOTE);
     expect(laterCopy?.to).toEqual([HOST, CLEANER].sort());
     expect(laterPosts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.slice(smsAt).some((item) => item.to === OLD || item.to === "")).toBe(false);
@@ -185,10 +187,10 @@ describe("optional observer", () => {
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
-    await desk.inbound({ id: "time-two", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    expect((await postToGroup(desk, NOTE)).ok).toBe(true);
     const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);
-    expect(posts.filter((post) => post.body === TIME).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
+    expect(posts.filter((post) => post.body === NOTE).map((post) => post.to)).toEqual([[HOST, CLEANER].sort()]);
     expect(posts.some((post) => post.to.includes(OLD) || post.to.includes(""))).toBe(false);
     expect(sms.sent.some((item) => item.to === OLD || item.to === "")).toBe(false);
     // The group holds only the host and the cleaner, so the code goes into it and nowhere else.
@@ -210,8 +212,8 @@ describe("optional observer", () => {
     await desk.inbound({ id: "yes-cleaner-3", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-observer-3", from: OLD, text: "YES" });
     await desk.inbound({ id: "yes-schedule-3", from: CLEANER, text: "YES" });
-    await desk.inbound({ id: "time-3", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    expect(posts.find((post) => post.body === TIME)?.to).toEqual([OLD, HOST, CLEANER].sort());
+    expect((await postToGroup(desk, NOTE)).ok).toBe(true);
+    expect(posts.find((post) => post.body === NOTE)?.to).toEqual([OLD, HOST, CLEANER].sort());
     expect(sms.sent.filter((item) => item.to === OLD).length).toBeGreaterThan(0);
     expect(sms.sent.filter((item) => item.to === OLD).some((item) => bodyHasCode(item.body))).toBe(false);
     const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
@@ -256,9 +258,9 @@ describe("optional observer", () => {
     expect(sms.sent.filter((item) => item.to === CLEANER).some((item) => /opted out/i.test(item.body))).toBe(true);
     const afterStop = posts.length;
     await desk.inbound({ id: "time-after-stop", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    // Only the host is left in the group, so the line is a plain text to the host, not a group post.
+    // A time from the cleaner goes to Grok. Cleaner Core posts nothing and texts no one.
     expect(posts.slice(afterStop)).toEqual([]);
-    expect(sms.sent.filter((item) => item.body === TIME).map((item) => item.to)).toEqual([HOST]);
+    expect(sms.sent.filter((item) => item.body === TIME)).toEqual([]);
     expect(codeRecipients(sms.sent.filter((item) => item.to === CLEANER))).toEqual([]);
     const left = await desk.markGuestsLeft({ confirmed: true }, PIN_KEY);
     expect(left.ok).toBe(true);

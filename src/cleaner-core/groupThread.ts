@@ -25,24 +25,3 @@ export function codeRoute(seats: readonly GroupSeat[]): CodeRoute {
   if (!cleaner?.approved || cleaner.consent !== "in") return "held";
   return "private";
 }
-
-export type GroupTurn = "injury" | "stop" | "problem" | "time" | "host" | "cleaner";
-
-export function groupTurn(input: {
-  injury: boolean;
-  stop: boolean;
-  problem: boolean;
-  time: boolean;
-  role: GroupSeatRole;
-}): GroupTurn {
-  if (input.injury) return "injury";
-  if (input.stop) return "stop";
-  if (input.problem) return "problem";
-  if (input.time) return "time";
-  if (input.role === "host") return "host";
-  return "cleaner";
-}
-
-export function isProblemText(text: string): boolean {
-  return /\b(problem|problems|issue|issues|stuck|broken|locked out)\b/i.test(text);
-}

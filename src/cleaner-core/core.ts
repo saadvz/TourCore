@@ -25,8 +25,8 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { waitingForYesNote, withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupTimeLine, groupUnconfirmedLine, holdNote, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
-import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
+import { waitingForYesNote, withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupUnconfirmedLine, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, jobHoldLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { codeRoute, GroupNotConfirmed, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
@@ -232,6 +232,7 @@ export type ReceiveReason =
   | "done"
   | "wrong-tenant"
   | "review"
+  | "held"
   | "retry";
 
 /** What Cleaner Core did with an inbound text, for Grok to read beside the message. */
@@ -417,6 +418,11 @@ export interface CleanerCore {
   hostDeparture(id: string): Promise<ReceiveResult>;
   /** The host told Grok to send an uncertain offer or reminder once more. */
   hostRetry(id: string): Promise<ReceiveResult>;
+  /**
+   * The host told Grok to pause the cleaning. No offer, reminder, or door code goes out until the host
+   * resumes it. The cleaner gets one short hold line. A second pause sends nothing.
+   */
+  hostHold(id: string): Promise<ReceiveResult>;
   /**
    * Times every open turnover the host hasn't timed yet with the same checkout and check-in, in a
    * group setup. Turnovers that already have a host time keep it. Offers still go one at a time.
@@ -916,6 +922,21 @@ class Engine implements CleanerCore {
     return this.hostAction(id, "guests have left", () => (this.pin ? this.clearDeparture(id) : Promise.resolve(this.markIgnored(id))));
   }
 
+  async hostHold(id: string): Promise<ReceiveResult> {
+    return this.hostAction(id, "pause the cleaning", async () => {
+      this.inboundIds.push(id);
+      if (this.problemHold) {
+        this.save();
+        return { handled: true, reason: "duplicate", sent: [] };
+      }
+      this.problemHold = true;
+      const to = this.cleanerRecord()?.phone;
+      const note = to ? await this.emit({ id: `host-hold:${id}`, to, kind: "held", body: jobHoldLine(this.options.property.address) }) : null;
+      this.save();
+      return { handled: true, reason: "held", sent: note ? [note] : [] };
+    });
+  }
+
   async hostRetry(id: string): Promise<ReceiveResult> {
     return this.hostAction(id, "retry", () => this.retryUncertain(id));
   }
@@ -957,22 +978,11 @@ class Engine implements CleanerCore {
     if (isInjuryReport(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
-    if (grouped) {
-      const role = from === this.owner ? "host" : from === this.cleanerPhone ? "cleaner" : "other";
-      const turn = groupTurn({
-        injury: false,
-        stop: false,
-        problem: isProblemText(input.text),
-        time: clockMinutes(input.text) !== undefined,
-        role,
-      });
-      if (turn === "problem") return this.groupProblem(from, input.id);
-      if (turn === "time") return this.groupTimeReply(input.id);
-      if (turn === "host") {
-        const ignored = this.markIgnored(input.id);
-        this.save();
-        return ignored;
-      }
+    // Grok reads every other group message and tells the host. Only the host decides to pause a cleaning.
+    if (grouped && from === this.owner) {
+      const ignored = this.markIgnored(input.id);
+      this.save();
+      return ignored;
     }
     if (from === this.owner && stripFiller(normalize(input.text)) === "booked on airbnb") {
       const alert = await this.openReview("airbnb-exception", input.id, true);
@@ -2693,32 +2703,6 @@ class Engine implements CleanerCore {
       if (held) note.push(held);
     }
     return { handled: true, reason: "stop", sent: [...result.sent, ...note], seen: this.replySeen("stop", inboundId, result.sent.length) };
-  }
-
-  private async groupProblem(from: string, id: string): Promise<ReceiveResult> {
-    this.problemHold = true;
-    const alert = await this.openReview("group-problem", id, true);
-    const sent: CleanerText[] = alert ? [alert] : [];
-    if (from !== this.owner) {
-      const note = await this.emit({
-        id: `problem:${id}`,
-        to: from,
-        kind: "held",
-        body: holdNote(this.options.property.address),
-      });
-      if (note) sent.push(note);
-    }
-    this.inboundIds.push(id);
-    this.save();
-    return { handled: true, reason: "review", sent };
-  }
-
-  private async groupTimeReply(id: string): Promise<ReceiveResult> {
-    if (!this.groupChat) return this.markIgnored(id);
-    const text = await this.emitGroup(`group-time:${id}`, groupTimeLine(this.groupChat.hostName), "confirm");
-    this.inboundIds.push(id);
-    this.save();
-    return { handled: true, reason: "ignored", sent: text ? [text] : [] };
   }
 
   private groupSeats(): GroupSeat[] {

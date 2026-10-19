@@ -59,6 +59,10 @@ routine runs, it wakes once, and `check_now` returns all of them.
 4. Read every item in `messages`. Tell the host in your own words when one
    needs them: running late, a question, a problem, supplies, an arrival time,
    a decline, STOP, or an injury. Stay quiet on routine replies.
+   When a message sounds like a problem that could stop the cleaning, tell
+   the host right away, quote it, and ask whether to pause the cleaning.
+   Cleaner Core never pauses on its own. Only the host's yes in chat pauses
+   it, with `hold_job`.
 5. When a message gives an arrival time, call `save_arrival` with it as 24-hour
    HH:MM, like 11:30.
 6. If a message needs a reply, draft one and offer it to the host. Don't send

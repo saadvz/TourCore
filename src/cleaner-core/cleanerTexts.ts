@@ -283,11 +283,8 @@ const GROUP_SEND_TOPICS = new Map<string, string>([
 ]);
 
 export function groupUnconfirmedLine(kind: string): string {
+  if (kind === "host-message") return "I couldn't send your message to the group.";
   const topic = GROUP_SEND_TOPICS.get(kind);
   if (!topic) return "I couldn't send that to the group.";
   return `I couldn't send the ${topic} to the group.`;
-}
-
-export function groupTimeLine(hostName: string): string {
-  return `${hostName} will confirm that time.`;
 }
