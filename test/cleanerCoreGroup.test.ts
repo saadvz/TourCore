@@ -35,7 +35,7 @@ const NOTE = "Please bring extra towels.";
 const HOLD = holdNote(ADDRESS);
 const JOB_HOLD = jobHoldLine(ADDRESS);
 const RESUME = resumeNote(ADDRESS);
-const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
+const ON_HOLD = "The cleaning is on hold. I'll send an update when it can start again.";
 const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 /** The offer as the group gets it, once, asking the cleaner by name. */
@@ -1592,7 +1592,7 @@ describe("live group membership", () => {
     expect(notesOf(await grouped.desk.getState())).toContain(hold);
     const ignored = await grouped.desk.inbound({ id: "kinds-group-start", from: LIVE_CLEANER, text: "START" });
     expect(ignored.sent.map((text) => text.body)).toEqual([
-      "The cleaning is on hold. I'll text you when it can start again.",
+      "The cleaning is on hold. I'll send an update when it can start again.",
     ]);
     expect(notesOf(await grouped.desk.getState()).includes(resume)).toBe(false);
     const groupHurt = await grouped.desk.inbound({ id: "kinds-group-hurt", from: LIVE_CLEANER, text: "I fell at 2:00 PM and I'm hurt", channel: "group" });

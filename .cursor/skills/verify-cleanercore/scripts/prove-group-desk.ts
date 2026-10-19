@@ -78,20 +78,20 @@ const env: NodeJS.ProcessEnv = {
 };
 const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
 const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-await desk.getState("2");
+await desk.getState("cleaners");
 await desk.saveProperty({ business: "Harbor", address: "12 Practice Lane, Teaneck, NJ 07666", timeZone: "America/New_York" });
-await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER });
+await desk.savePeople({ host: HOST, cleaner: CLEANER, observer: OBSERVER, doorCodeTo: "cleaner" });
 await desk.saveCalendarLink({ url: CALENDAR_URL });
 await desk.saveDoorCode({ code: DOOR_CODE }, pinKey);
 await desk.setUpTexting();
 await desk.runChecks();
-const missing = await desk.markGuestsLeft({ said: "The guests have left" }, undefined);
-await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+const missing = await desk.markGuestsLeft({ confirmed: true }, undefined);
+await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" });
 await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
 await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
 await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
-const failed = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+const failed = await desk.markGuestsLeft({ confirmed: true }, pinKey);
+const again = await desk.markGuestsLeft({ confirmed: true }, pinKey);
 const fetchesAfterFailure = calls.length;
 
 setCleanerGroupFetch(async () => {

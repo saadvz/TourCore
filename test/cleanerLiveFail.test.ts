@@ -324,7 +324,7 @@ describe("live Scratch failures from 19087415", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
     const after = redact(wired.cleanerSent.slice(afterStop), LANE.pin);
     expect(after.filter((item) => item.to === HOST)).toEqual([]);
-    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "The cleaning is on hold. I'll text you when it can start again." }]);
+    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "The cleaning is on hold. I'll send an update when it can start again." }]);
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
     expect((await call(wired, "get_turns")).text).not.toContain("\"status\":\"done\"");
     expect(nextOf(await call(wired, "get_state"))).toBe(OWNER_HOLD);
