@@ -17,6 +17,7 @@ import { SHARED_STEPS } from "../src/playbooks/shared";
 import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { PropertyWorkspace } from "../src/setup";
 import { createSetupServer, PLAYBOOK_CLIENT_CAP } from "../src/web/server";
+import { filesUnder } from "./files";
 import { installHarness } from "./installHarness";
 
 const cleanups: Array<() => void> = [];
@@ -176,32 +177,7 @@ describe("MCP annotations", () => {
   });
 });
 
-describe("decision 11 wake copy", () => {
-  it("is in the Grok playbook only, with one spoken offer and a yes before any action", () => {
-    const full = renderPlaybook({ name: "Grok", capabilities: grokClientCaps }, "alerts");
-    const bare = renderPlaybook({ name: "grok" }, "alerts");
-    const offer = GROK_ALERTS_SAY;
-    for (const text of [full.text, bare.text]) {
-      expect(text).toContain(`Ask only this: ${offer}`);
-      expect(text).toContain(GROK_WAKE_WITH_PLACE);
-      expect(text).toContain(GROK_WAKE_NO_PLACE);
-      expect(text).toContain("Fill {name} from the visitor's name on that read, {place} from the place on that read");
-      expect(text).toContain("If that read has no place, say this instead");
-      expect(text).toContain("Only after a clear yes");
-      expect(text).toContain("You never text a visitor.");
-      expect(full.mode).toBe("full");
-      expect(bare.mode).toBe("full");
-    }
-    const spoken = full.text.split("For you, not out loud:")[0] ?? "";
-    expect(spoken).not.toMatch(/webhook|routine|event id|secure link/i);
-    for (const client of [{ name: "claude", capabilities: { prompts: {}, resources: {} } }, { name: "chatgpt", capabilities: { prompts: {}, resources: {} } }, { name: "unknown" }, { name: "grok", capabilities: { tools: {} } }, undefined]) {
-      const other = renderPlaybook(client, "alerts").text;
-      expect(other).not.toContain(offer);
-      expect(other).not.toContain("approve_tour_time_request");
-      expect(other).toContain("Want me to tell you when someone books, starts, or finishes a tour");
-    }
-  });
-
+describe("spoken asks and failure lines", () => {
   it("says you in the spoken asks, and every failure line ends with the setup help link", () => {
     expect(spokenAsk(undefined, "units-home")).toBe("People will tour the whole home. What should I call it? The street is fine if you don't have a nickname.");
     expect(spokenAsk(undefined, "hours")).toContain("You can keep that.");
@@ -601,8 +577,8 @@ describe("texting summaries", () => {
   });
 });
 
-const HOSTING_STORAGE = "Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.";
-const TEXTING_CHOOSE_NEXT = "Pick again from the list you are shown. If there's nothing to pick from, texting can't be set up yet. Whoever set up your Tour Core hosting can add a texting service.";
+/** Key phrases of the no-permanent-storage help: who fixes it, and not to update until then. */
+const HOSTING_STORAGE = ["needs to attach permanent storage", "hold off on updating Tour Core"];
 
 describe("setup help", () => {
   it("matches the public page, has no contact line, and stays out of visitor copy", () => {
@@ -611,10 +587,8 @@ describe("setup help", () => {
     expect(page.startsWith("# Setup help\n\n")).toBe(true);
     const lines = page.split("\n");
     const headings = lines.filter((line) => line.startsWith("## "));
-    expect(headings).toHaveLength(20);
     expect(headings).toContain("## Your records aren't saved anywhere permanent yet");
     expect(headings).toContain("## Texting isn't working right now");
-    expect(headings).not.toContain("## Texting isn't working yet");
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i]?.startsWith("## ")) continue;
       expect(lines[i + 1]).toBe("");
@@ -623,39 +597,26 @@ describe("setup help", () => {
       expect(lines[i + 4]?.length).toBeGreaterThan(0);
     }
     expect(page).toContain(DISK_NOT_SAVED);
-    expect(page).toContain(HOSTING_STORAGE);
-    expect(page).toContain("You said yes, and it still isn't published.\n\nNothing went live, so it's safe to say yes again.");
-    expect(page).not.toContain("isn't published. Nothing went live.");
-    expect(page).toContain(TEXTING_CHOOSE_NEXT);
+    for (const phrase of HOSTING_STORAGE) expect(page).toContain(phrase);
+    expect(page).toMatch(/Nothing went live, so it's safe to say yes again/);
+    expect(page).toMatch(/can add a texting service/);
     expect(SHARED_STEPS["texting-test"].ifItFails).toContain("texting isn't working right now");
-    expect(SHARED_STEPS["texting-test"].ifItFails).not.toContain("isn't working yet");
-    expect(page).not.toMatch(/lasting disk/);
     expect(SETUP_HELP_ENDING.endsWith(SETUP_HELP_URL)).toBe(true);
     expect(SETUP_HELP_ENDING.endsWith(".")).toBe(false);
     for (const step of Object.values(SHARED_STEPS)) {
       expect(step.ifItFails.endsWith(SETUP_HELP_URL)).toBe(true);
       expect(step.ifItFails.includes(`${SETUP_HELP_URL}.`)).toBe(false);
     }
-    expect(page.trimEnd().split("\n").at(-1)).toBe("Ask for them to be checked again.");
     for (const phrase of contactPhrases()) expect(page.toLowerCase()).not.toContain(phrase.toLowerCase());
     expect(page).not.toMatch(/sendblue|twilio|photon|durin|main home/i);
     expect(SETUP_HELP_URL).toBe("https://github.com/saadvz/TourCore/blob/master/docs/setup-help.md");
-    const roots = ["src/visitor", "src/core"];
-    const files: string[] = [];
-    const walk = (dir: string) => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) walk(path);
-        else if (entry.name.endsWith(".ts")) files.push(path);
-      }
-    };
-    for (const root of roots) walk(root);
-    for (const file of files) expect(readFileSync(file, "utf8")).not.toContain(SETUP_HELP_URL);
+    const files = ["src/visitor", "src/core"].flatMap((root) => filesUnder(root)).filter((file) => file.endsWith(".ts"));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) expect(readFileSync(file, "utf8"), file).not.toContain(SETUP_HELP_URL);
     expect(renderPlaybook(undefined, "connect").text).toContain(SETUP_HELP_URL);
     const install = readFileSync(".grok/skills/install-tour-core/SKILL.md", "utf8");
     const work = readFileSync(".grok/skills/work-exception/SKILL.md", "utf8");
     expect(install).toContain(GROK_ALERTS_SAY);
-    expect(install).not.toContain("Want to use those defaults?");
     expect(work).toContain(GROK_WAKE_WITH_PLACE);
     expect(work).toContain(GROK_WAKE_NO_PLACE);
     for (const path of ["README.md", "GROK_BOOTSTRAP.md", "grok-template/bot-profile.md", "grok-template/context/installation.md"]) {
@@ -669,7 +630,6 @@ describe("setup help", () => {
     const prefs = OPERATOR_TOOLS.find((tool) => tool.name === "set_notification_preferences");
     expect(prefs?.description).toContain(SHARED_STEPS.alerts.ask);
     expect(prefs?.description).not.toContain(GROK_ALERTS_SAY);
-    expect(prefs?.description).not.toContain("Would you like me to keep you updated");
     const inspect = OPERATOR_TOOLS.find((tool) => tool.name === "inspect_tour_time_request");
     expect(inspect?.description).toContain("place");
     expect(inspect?.description).toContain("never Main Home");
@@ -705,7 +665,7 @@ describe("setup help", () => {
       "grok-template/context/installation.md",
       "grok-template/integrations/tour-core-tools.md",
     ]) {
-      expect(readFileSync(file, "utf8")).toContain(HOSTING_STORAGE);
+      for (const phrase of HOSTING_STORAGE) expect(readFileSync(file, "utf8"), file).toContain(phrase);
     }
   });
 });

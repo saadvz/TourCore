@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import { BUILDING_ACCESS_QUESTION, BUILDING_ENTRANCE_QUESTION, ENTRY_INSTRUCTION
 import { VisitorDemoRegistry } from "../src/visitor";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
+import { repoFilesUnder } from "./files";
 
 /**
  * Landlord-facing instructions may name only the 21 landlord tools, plus
@@ -45,16 +46,8 @@ const FOREIGN_RE = new RegExp(`\\b(${FOREIGN.join("|")})\\b`, "g");
 const REMOVED_RE = new RegExp(`\\b(${REMOVED.join("|")})\\b`, "g");
 
 const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md", "docs"];
-
-function filesUnder(rel: string): string[] {
-  const abs = join(ROOT, rel);
-  if (!statSync(abs).isDirectory()) return rel.endsWith("SETUP_PROMPT.md") ? [] : [rel];
-  return readdirSync(abs).flatMap((name) => {
-    if (name === "SETUP_PROMPT.md") return [];
-    const child = join(rel, name);
-    return statSync(join(ROOT, child)).isDirectory() ? filesUnder(child) : [child];
-  });
-}
+/** SETUP_PROMPT.md is pinned byte for byte in grokTemplate.test.ts, so it is not scanned here. */
+const docFiles = () => DOC_ROOTS.flatMap((rel) => repoFilesUnder(rel, ["SETUP_PROMPT.md"]));
 
 function withoutNames(line: string, names: readonly string[]): string {
   let out = line;
@@ -132,7 +125,7 @@ function withoutMarkedSections(text: string, includeConnectorSections: boolean):
 }
 
 /** Landlord-facing prose. QA, ops, and historical sections are removed before the scan. */
-export function landlordFacingText(text: string): string {
+function landlordFacingText(text: string): string {
   return withoutMarkedSections(text, true);
 }
 
@@ -171,7 +164,7 @@ describe("landlord-facing tool names", () => {
   });
 
   it("scans grok-template except SETUP_PROMPT.md, and the template setup doc", () => {
-    const files = DOC_ROOTS.flatMap(filesUnder);
+    const files = docFiles();
     expect(files).toContain("docs/grok-template-setup.md");
     expect(files).toContain("grok-template/bot-profile.md");
     expect(files.some((file) => file.endsWith("SETUP_PROMPT.md"))).toBe(false);
@@ -179,7 +172,7 @@ describe("landlord-facing tool names", () => {
 
   it("keeps skills, the template, the bootstrap, and the README on landlord tools outside QA and ops sections", () => {
     const hits: string[] = [];
-    for (const rel of DOC_ROOTS.flatMap(filesUnder)) {
+    for (const rel of docFiles()) {
       const found = foreignTools(landlordFacingText(read(rel)));
       for (const name of found) hits.push(`${rel}: ${name}`);
     }
@@ -197,6 +190,18 @@ describe("landlord-facing tool names", () => {
     expect(removedTools(untilHeading)).toEqual(["create_property_setup"]);
   });
 
+  it("keeps each skill's Call only line on that skill's connector tools", () => {
+    const hits: string[] = [];
+    for (const rel of repoFilesUnder(".grok/skills").filter((file) => file.endsWith("SKILL.md"))) {
+      const scope = rel.includes("simulate-tour") ? new Set<string>(QA_TOOL_NAMES) : LANDLORD;
+      const callOnly = read(rel).split("\n").filter((line) => line.startsWith("Call only")).join("\n");
+      for (const match of callOnly.matchAll(/`([a-z][a-z0-9_]*)`/g)) {
+        if (OPERATOR_TOOL_NAMES.includes(match[1]!) && !scope.has(match[1]!)) hits.push(`${rel}: ${match[1]}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("keeps the client matrix on tools that are on a connector", () => {
     const hits: string[] = [];
     for (const rel of ["docs/client-matrix.md", "src/eval/clientMatrix.ts", "src/playbooks/select.ts"]) {
@@ -207,7 +212,7 @@ describe("landlord-facing tool names", () => {
 
   it("keeps skills, the template, the bootstrap, and the README off tools that are not on any connector", () => {
     const hits: string[] = [];
-    for (const rel of DOC_ROOTS.flatMap(filesUnder)) {
+    for (const rel of docFiles()) {
       const found = removedTools(read(rel));
       for (const name of found) hits.push(`${rel}: ${name}`);
     }

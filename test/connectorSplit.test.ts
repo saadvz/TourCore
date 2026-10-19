@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,8 +9,7 @@ import { DRIVE_NOT_SET_UP_LINE } from "../src/install/stateView";
 import { resetLocalSmsOutbox } from "../src/messaging/local/outbox";
 import { OPERATOR_SCOPE } from "../src/mcp/oauth/provider";
 import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
-import { HOSTED_OWNER_TOOL, LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
-import { OPERATOR_TOOL_NAMES } from "../src/operator/tools";
+import { LANDLORD_CORE_TOOLS, QA_TOOL_NAMES } from "../src/mcp/scopes";
 import { PropertyWorkspace } from "../src/setup";
 import { FakeGoogleDrive } from "../src/storage/googleDrive";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
@@ -18,9 +17,9 @@ import { createSetupServer } from "../src/web/server";
 import { grokHarness } from "./grokHarness";
 
 /**
- * QA gate cases for the connector split. Each `it` name starts with its case number.
- * Cases the previous head cannot satisfy are the new refusal, the Drive sentence,
- * and the doc tool lists.
+ * Gate cases for the landlord, ops, and QA connector split. Each `it` name starts
+ * with its case number. Which tools the docs may name is checked in
+ * landlordFacingTools.test.ts, and the tool tables in grokTemplate.test.ts.
  */
 
 const LANDLORD = "landlord-token-gate-1234567890";
@@ -82,31 +81,7 @@ function resultOf(json: unknown): Record<string, unknown> {
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-function backtickTools(text: string): Array<{ name: string; index: number }> {
-  const known = new Set(OPERATOR_TOOL_NAMES);
-  return [...text.matchAll(/`([a-z][a-z0-9_]*)`/g)].flatMap((match) => {
-    const name = match[1]!;
-    return known.has(name) ? [{ name, index: match.index ?? 0 }] : [];
-  });
-}
-
-/** Landlord steps may name a QA or ops tool only in the sentence that says which connector it belongs to. */
-function landlordDocTools(text: string): string[] {
-  const landlord = new Set<string>([...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL]);
-  const qa = new Set<string>(QA_TOOL_NAMES);
-  const ops = new Set<string>(OPS_TOOL_NAMES);
-  const bad: string[] = [];
-  for (const hit of backtickTools(text)) {
-    if (landlord.has(hit.name)) continue;
-    const window = text.slice(Math.max(0, hit.index - 120), hit.index + hit.name.length + 80);
-    if (qa.has(hit.name) && /QA connector/.test(window)) continue;
-    if (ops.has(hit.name) && /ops connector/.test(window)) continue;
-    bad.push(hit.name);
-  }
-  return [...new Set(bad)];
-}
-
-describe("QA gate cases", () => {
+describe("landlord, ops, and QA connector split", () => {
   it("gate 1: flag off, landlord /mcp lists the 21 tools and refuses an ops or QA tool by name", async () => {
     const root = mkdtempSync(join(tmpdir(), "tourcore-gate1-"));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
@@ -279,9 +254,7 @@ describe("QA gate cases", () => {
   });
 
   it("gate 6: flag off, a fresh landlord reaches publish on the 21 tools, the Drive line shows, and records stay local", async () => {
-    for (const path of ["GROK_BOOTSTRAP.md", "grok-template/integrations/google-drive.md", "grok-template/examples/first-run.md", "grok-template/context/installation.md"]) {
-      expect(landlordDocTools(read(path)), path).toEqual([]);
-    }
+    // Which tools those docs may name is checked in landlordFacingTools.test.ts.
     const skill = read(".grok/skills/install-tour-core/SKILL.md");
     expect(skill).toContain(DRIVE_APPROVAL_LINE);
     expect(skill).toContain(DRIVE_NOT_SET_UP_LINE);
@@ -365,37 +338,4 @@ describe("QA gate cases", () => {
     expect(inst.files.manifest()?.storageProvider).not.toBe("GOOGLE_DRIVE");
     expect(used.every((name) => (LANDLORD_CORE_TOOLS as readonly string[]).includes(name))).toBe(true);
   }, 120_000);
-
-  it("gate 7: README connector section, tool tables, and skills only name tools in their connector scope", () => {
-    const readme = read("README.md");
-    const section = readme.slice(readme.indexOf("### Ops and QA connectors"), readme.indexOf("## Getting started"));
-    const universe = new Set<string>([...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL, ...OPS_TOOL_NAMES, ...QA_TOOL_NAMES]);
-    for (const hit of backtickTools(section)) expect(universe, hit.name).toContain(hit.name);
-
-    const catalog = read("grok-template/integrations/tour-core-tools.md");
-    const landlordTable = catalog.slice(catalog.indexOf("## Landlord connector"), catalog.indexOf("## Ops connector"));
-    const opsTable = catalog.slice(catalog.indexOf("## Ops connector"), catalog.indexOf("## QA connector"));
-    const qaTable = catalog.slice(catalog.indexOf("## QA connector"));
-    const rows = (text: string) => [...text.matchAll(/^\| `([a-z_]+)` \|/gm)].map((match) => match[1]!);
-    expect(rows(landlordTable)).toEqual([...LANDLORD_CORE_TOOLS]);
-    expect(rows(opsTable)).toEqual([...OPS_TOOL_NAMES]);
-    expect(rows(qaTable)).toEqual([...QA_TOOL_NAMES]);
-    expect(landlordTable).toContain("`reset_hosted_demo`");
-    const health = rows(opsTable).indexOf("check_runtime_health");
-    const healthLine = opsTable.split("\n").find((line) => line.includes("`check_runtime_health`")) ?? "";
-    expect(health).toBeGreaterThanOrEqual(0);
-    expect(healthLine).toMatch(/^\| `check_runtime_health` \| read \| When records aren't on permanent storage:/);
-
-    const skills = readdirSync(new URL("../.grok/skills", import.meta.url));
-    const landlord = new Set<string>([...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL]);
-    for (const name of skills) {
-      const text = read(`.grok/skills/${name}/SKILL.md`);
-      const front = /^---\n([\s\S]*?)\n---\n/.exec(text)?.[1] ?? "";
-      const allowed = /allowed-tools:\s*(.+)/.exec(front)?.[1]?.split(/\s+/) ?? [];
-      const scope = name === "simulate-tour" ? new Set<string>(QA_TOOL_NAMES) : landlord;
-      for (const tool of allowed) expect(scope, `${name} allowed-tools ${tool}`).toContain(tool);
-      const callOnly = text.split("\n").filter((line) => line.startsWith("Call only")).join("\n");
-      for (const hit of backtickTools(callOnly)) expect(scope, `${name} ${hit.name}`).toContain(hit.name);
-    }
-  });
 });

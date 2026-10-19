@@ -17,7 +17,8 @@ import { grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness } from "./installHarness";
 
 /**
- * Phase 5a gate cases. Each case fails on master 8a36c2b and passes here.
+ * Two-word cities, state and ZIP, zone copy, midnight hours, the day menu,
+ * day export grants, and restore hardening.
  */
 
 const cleanups: Array<() => void> = [];

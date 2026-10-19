@@ -56,7 +56,7 @@ function chooseUnit(message: string, units: { name: string }[]) {
   return interpretByRules(ctx);
 }
 
-describe("QA round 1", () => {
+describe("properties published before name normalization", () => {
   it("keeps a pre-normalization published property published through content edits, and drafts a real structural change", async () => {
     const h = harness();
     const id = await h.publish();

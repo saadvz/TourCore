@@ -27,7 +27,8 @@ import { installHarness } from "./installHarness";
 import { at, hillsideConfig, liveApp, PHONE } from "./liveApp";
 
 /**
- * Phase 6a gate cases. Each behavior case fails on master 430bd96.
+ * Days a visitor can say, a missing or cleared time zone before and during a
+ * tour, the no-clock extension refusal, and the connector list refresh.
  */
 
 const cleanups: Array<() => void> = [];

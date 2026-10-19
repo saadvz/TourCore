@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,6 +23,7 @@ import {
   startWiredApp,
   type WiredApp,
 } from "./wiringProof";
+import { filesUnder } from "./files";
 
 const PATH = "/mcp/cleaner-core";
 const ZONE = "America/New_York";
@@ -145,13 +146,6 @@ async function upload(wired: WiredApp, link: string, body: string, contentType =
   return { status: res.status, raw: await res.text() };
 }
 
-function filesIn(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    return entry.isDirectory() ? filesIn(path) : entry.isFile() ? [path] : [];
-  });
-}
-
 describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
   it("refuses a masked link and points Grok to the upload link", async () => {
     const wired = await app();
@@ -197,7 +191,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
     expect(replies.includes(GUESTY_LINK)).toBe(false);
     expect(wired.logs.join("\n").includes(GUESTY_LINK)).toBe(false);
     expect(wired.logs.join("\n").includes(code)).toBe(false);
-    for (const path of filesIn(wired.root)) expect(readFileSync(path, "utf8").includes(code), path).toBe(false);
+    for (const path of filesUnder(wired.root)) expect(readFileSync(path, "utf8").includes(code), path).toBe(false);
   });
 
   it("replaces only the calendar with the same name and keeps the others", async () => {
@@ -358,7 +352,7 @@ describe("Cleaner Core setup: the door code from Grok's secure card", () => {
     expect(JSON.stringify((await call(wired, "get_state")).structured?.setup)).toContain("front door keypad");
     for (const text of [JSON.stringify(state), issued.raw, saved.raw, wired.logs.join("\n")]) expect(text.includes(DOOR_CODE)).toBe(false);
     expect(wired.logs.join("\n").includes(code)).toBe(false);
-    for (const path of filesIn(wired.root)) {
+    for (const path of filesUnder(wired.root)) {
       const text = readFileSync(path, "utf8");
       expect(text.includes(code), path).toBe(false);
       expect(new RegExp(`(^|\\D)${DOOR_CODE}(\\D|$)`).test(text), path).toBe(false);

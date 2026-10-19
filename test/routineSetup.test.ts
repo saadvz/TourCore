@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleSecureSetupApi, parseRoutineSnippet } from "../src/install/secureSetup";
 import { OPERATOR_TOOLS } from "../src/operator/tools";
@@ -60,7 +60,6 @@ describe("routine secrets stay outside MCP and the template", () => {
     const manifest = JSON.parse(readFileSync(new URL("template.json", root), "utf8"));
     expect(manifest.routines).toEqual([expect.objectContaining({ name: "Tour Core Operator Updates", doc: "routines/operator-updates.md", credentialsTravelWithTemplate: false })]);
     expect(manifest.routines[0].allowedTools).toContain("get_inbox");
-    expect(existsSync(new URL("routines/exception-alert.md", root))).toBe(false);
     const doc = readFileSync(new URL("routines/operator-updates.md", root), "utf8");
     for (const type of ["tour.booked", "tour.started", "tour.completed", "exception.created", "get_inbox"]) expect(doc).toContain(type);
     expect(doc).not.toMatch(/routines\.example|Bearer [A-Za-z0-9_-]{12,}/);

@@ -17,7 +17,7 @@ function harness(): GrokHarness {
   return h;
 }
 
-describe("QA round 2", () => {
+describe("street names, tour days, walking routes, and tour hours", () => {
   it("treats St. Marks with and without the period as the same place and keeps the typed display", async () => {
     expect(canonicalAddressKey("12 St. Marks Place, Brooklyn, NY 11217")).toBe(canonicalAddressKey("12 St Marks Place, Brooklyn, NY 11217"));
     expect(canonicalizeStreet("12 St. Marks Place")).toBe("12 St. Marks Place");
@@ -116,8 +116,9 @@ describe("QA round 2", () => {
   it("documents the identity choices, same-day tour hours, and consequential publish", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     const skill = readFileSync(join(root, ".grok/skills/setup-property/SKILL.md"), "utf8").replace(/\s+/g, " ");
-    expect(skill).toContain("Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in.");
-    expect(skill).toContain("Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?");
+    expect(skill).toMatch(/short identity form before their tour\? I recommend it/);
+    // Turning the form off needs its own yes, after the warning that anyone could get in.
+    expect(skill).toMatch(/anyone who texts can book a tour and get in without telling you who they are\. Want to go ahead with no form\?/);
     const catalog = readFileSync(join(root, "grok-template/integrations/tour-core-tools.md"), "utf8");
     expect(catalog).toMatch(/\| `publish` \| consequential \|/);
     expect(catalog).toMatch(/\| `save_hours` \| change \|[^\n]*Tours have to end later the same day/);

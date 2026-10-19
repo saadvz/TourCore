@@ -143,7 +143,7 @@ describe("a weekday inside a question at the open day menu", () => {
     30_000,
   );
 
-  it("keeps a clock on a weekday on the same custom-time path as master 06c491d", async () => {
+  it("keeps a clock on a weekday on the custom-time path while the day menu is open", async () => {
     // Captured from master 06c491d with the day menu open, each phrase on a fresh property.
     const clocks = [
       { text: "Friday at 2", intent: { type: "REQUEST_CUSTOM_TIME" as const, hour: 2, minute: 0, weekday: "FRI" as const }, booked: "Great, you're booked for 2:00 PM on Friday, Oct 2." },

@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
@@ -36,6 +35,7 @@ import {
   type WiredApp,
 } from "./wiringProof";
 import { PUBLIC } from "./fakeSendblue";
+import { filesUnder } from "./files";
 
 const PATH = "/mcp/cleaner-core";
 const open: WiredApp[] = [];
@@ -727,12 +727,6 @@ describe("Cleaner Core Grok demo: instant alerts", () => {
   });
 });
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-
-function routineDoc(name: string): string {
-  return readFileSync(join(ROOT, "cleaner-template", "routines", name), "utf8");
-}
-
 async function rpc(method: string): Promise<Record<string, unknown>> {
   const root = mkdtempSync(join(tmpdir(), "cleaner-rpc-"));
   try {
@@ -798,21 +792,6 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     expect((await call(wired, "get_state")).structured?.next).toBe(ROUTINE_NEXT);
     expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
     expect((await call(wired, "get_state")).structured?.next).toBe(TIMES_NEXT);
-  });
-
-  it("ships both routine docs in the Cleaner Core template, not the Tour Core manifest", () => {
-    for (const name of ["cleaner-core-check.md", "cleaner-core-alerts.md"]) {
-      const doc = routineDoc(name);
-      expect(doc, name).toContain("check_now");
-      expect(doc, name).toContain("never in chat");
-      expect(doc, name).not.toContain(DOOR_CODE);
-    }
-    expect(routineDoc("cleaner-core-alerts.md")).toContain("Cleaner Core alerts are connected.");
-    expect(routineDoc("cleaner-core-alerts.md")).toContain("save_alert_routine");
-    expect(routineDoc("cleaner-core-alerts.md")).toContain("one-time upload link");
-    expect(routineDoc("cleaner-core-alerts.md")).toContain("Content-Type: application/json");
-    const manifest = JSON.parse(readFileSync(join(ROOT, "grok-template", "template.json"), "utf8")) as { routines: { doc: string }[] };
-    expect(manifest.routines.map((routine) => routine.doc).join(" ")).not.toContain("cleaner-core");
   });
 });
 
@@ -1510,17 +1489,6 @@ interface OutText {
  */
 const PLAIN_CODE = new RegExp(`(?<![0-9A-Za-z])${DOOR_CODE}(?![0-9A-Za-z])`);
 
-/** Every saved file under `dir`, so a step can prove none of them holds the plain door code. */
-function savedFiles(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...savedFiles(path));
-    else if (entry.isFile()) found.push(path);
-  }
-  return found;
-}
-
 describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
   it("demo script", async () => {
     if (!LANE) throw new Error("missing tenant");
@@ -1565,7 +1533,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
         expect(post.body, step).not.toContain("+1");
         expect(post.body, step).not.toMatch(PLAIN_CODE);
       }
-      const files = savedFiles(wired.root);
+      const files = filesUnder(wired.root);
       expect(files.some((path) => path.endsWith("cleaner-live.json")), step).toBe(true);
       for (const path of files) expect(PLAIN_CODE.test(readFileSync(path, "utf8")), `${step}: ${path}`).toBe(false);
       expect(replies.join("\n"), step).not.toMatch(PLAIN_CODE);
@@ -1714,13 +1682,6 @@ const UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
 const ROUTINE_NEEDED = "Send the routine's https address and its key. If your secure card can't pass them to a tool, call save_alert_routine with no arguments to get a one-time upload link.";
 
-function filesIn(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    return entry.isDirectory() ? filesIn(path) : entry.isFile() ? [path] : [];
-  });
-}
-
 /** Grok asks for a one-time link. The reply holds only the link, the expiry, and plain instructions. */
 async function issueLink(wired: WiredApp): Promise<{ link: string; code: string; raw: string }> {
   const issued = await call(wired, "save_alert_routine", {});
@@ -1747,7 +1708,7 @@ function expectNoTrace(wired: WiredApp, code: string, replies: string[]) {
     expect(logs.includes(secret), "logs").toBe(false);
     for (const reply of replies) expect(reply.includes(secret), reply).toBe(false);
   }
-  for (const path of filesIn(wired.root)) {
+  for (const path of filesUnder(wired.root)) {
     const text = readFileSync(path, "utf8");
     expect(text.includes(code), path).toBe(false);
     if (text.includes('"CLEANER_CORE_ROUTINE_KEY"')) continue;

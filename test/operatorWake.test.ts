@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { timeRequestedEvent } from "../src/alerts/operatorEvents";
-import { GROK_WAKE_NO_PLACE, GROK_WAKE_WITH_PLACE } from "../src/playbooks/grok";
+import { GROK_ALERTS_SAY, GROK_WAKE_NO_PLACE, GROK_WAKE_WITH_PLACE } from "../src/playbooks/grok";
 import { renderPlaybook } from "../src/playbooks/compose";
 import { installHarness } from "./installHarness";
 import { liveApp } from "./liveApp";
 
 const cleanups: Array<() => void> = [];
+const grokClientCaps = { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } };
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
 
-describe("decision 11 alert destination", () => {
+describe("operator wake alert", () => {
   it("replaces the one saved webhook, and the wake body has no visitor name, number, or message", async () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
@@ -36,8 +37,34 @@ describe("decision 11 alert destination", () => {
     const inspected = await a.grok("inspect_tour_time_request", { tourTimeRequestId: id });
     expect(inspected.place).toBe("Unit 1A");
     expect(JSON.stringify(inspected)).not.toContain("Main Home");
-    const wake = renderPlaybook({ name: "Grok", capabilities: { elicitation: {}, sampling: {} } }, "alerts").text;
-    expect(wake).toContain(GROK_WAKE_WITH_PLACE);
-    expect(wake).toContain(`If that read has no place, say this instead: "${GROK_WAKE_NO_PLACE}"`);
+    // The wake copy that reads this place out loud is checked in "Grok wake copy" below.
+  });
+});
+
+describe("Grok wake copy", () => {
+  it("is in the Grok playbook only, with one spoken offer and a yes before any action", () => {
+    const full = renderPlaybook({ name: "Grok", capabilities: grokClientCaps }, "alerts");
+    const bare = renderPlaybook({ name: "grok" }, "alerts");
+    const partial = renderPlaybook({ name: "Grok", capabilities: { elicitation: {}, sampling: {} } }, "alerts");
+    const offer = GROK_ALERTS_SAY;
+    for (const text of [full.text, bare.text, partial.text]) {
+      expect(text).toContain(`Ask only this: ${offer}`);
+      expect(text).toContain(GROK_WAKE_WITH_PLACE);
+      expect(text).toContain(GROK_WAKE_NO_PLACE);
+      expect(text).toContain("Fill {name} from the visitor's name on that read, {place} from the place on that read");
+      expect(text).toContain(`If that read has no place, say this instead: "${GROK_WAKE_NO_PLACE}"`);
+      expect(text).toContain("Only after a clear yes");
+      expect(text).toContain("You never text a visitor.");
+      expect(full.mode).toBe("full");
+      expect(bare.mode).toBe("full");
+    }
+    const spoken = full.text.split("For you, not out loud:")[0] ?? "";
+    expect(spoken).not.toMatch(/webhook|routine|event id|secure link/i);
+    for (const client of [{ name: "claude", capabilities: { prompts: {}, resources: {} } }, { name: "chatgpt", capabilities: { prompts: {}, resources: {} } }, { name: "unknown" }, { name: "grok", capabilities: { tools: {} } }, undefined]) {
+      const other = renderPlaybook(client, "alerts").text;
+      expect(other).not.toContain(offer);
+      expect(other).not.toContain("approve_tour_time_request");
+      expect(other).toContain("Want me to tell you when someone books, starts, or finishes a tour");
+    }
   });
 });

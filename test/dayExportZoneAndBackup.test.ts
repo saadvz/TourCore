@@ -23,7 +23,8 @@ import { installHarness } from "./installHarness";
 import { hillsideConfig, liveApp, type LiveApp } from "./liveApp";
 
 /**
- * Phase 5c gate cases. Each case fails on master 8a69f5d and passes here.
+ * Day export JSON, daily summary denials, tour time questions, an unset time
+ * zone, the restore upload drain, backup decline copy, and the state-only ZIP check.
  */
 
 const cleanups: Array<() => void> = [];

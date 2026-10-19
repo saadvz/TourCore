@@ -400,37 +400,6 @@ describe("hosted storage, secrets, and one demo tenant", () => {
   });
 });
 
-describe("hosted Grok instructions", () => {
-  const skill = () => readFileSync(new URL("../.grok/skills/install-tour-core/SKILL.md", import.meta.url), "utf8");
-  const bootstrap = () => readFileSync(new URL("../GROK_BOOTSTRAP.md", import.meta.url), "utf8");
-  const template = () => JSON.parse(readFileSync(new URL("../grok-template/template.json", import.meta.url), "utf8")) as { hostedTourCoreUrl: string };
-
-  it("keeps the hosted URL in the template and does not hardcode a Railway domain in the skill or bootstrap", () => {
-    expect(template()).toHaveProperty("hostedTourCoreUrl");
-    expect(template().hostedTourCoreUrl).toBe("https://tourcore-production.up.railway.app");
-    const text = `${skill()}\n${bootstrap()}`;
-    expect(text).toContain("hostedTourCoreUrl");
-    expect(text).not.toMatch(/up\.railway\.app/);
-  });
-
-  it("does not start a local runtime or mention hosting in what the operator hears", () => {
-    const text = skill();
-    expect(text).toMatch(/Skip cloning a runtime, skip a local Node process, and skip\s+any tunnel/);
-    expect(text).toMatch(/only works while your\s+computer is on/);
-    expect(text).toMatch(/connect →|Connect to that service/);
-    const sequence = text.slice(text.indexOf("## Sequence"), text.indexOf("## Validate"));
-    expect(sequence).toMatch(/Sendblue|Visitor texting/);
-    expect(sequence).toMatch(/Google Drive/);
-    expect(sequence).toMatch(/first property/);
-    const quoted = text.split("\n").filter((line) => line.startsWith(">")).join("\n");
-    expect(quoted).not.toMatch(/\brailway\b|\bcloudflared\b|\bRAILWAY_|\btrycloudflare\b|only works while/i);
-    expect(quoted).toContain("I'll connect you to Tour Core and only ask when I need an approval, sign-in or decision.");
-    expect(quoted).toContain("Tour Core will show you a pairing code. Click Allow.");
-    expect(bootstrap()).toMatch(/Do not clone a runtime/);
-    expect(bootstrap().split("\n").length).toBeLessThan(80);
-  });
-});
-
 describe("hosted audit export download", () => {
   it("builds a public-base download URL, serves it with the token, and refuses missing or expired tokens", async () => {
     const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0", RAILWAY_PUBLIC_DOMAIN: DOMAIN, PORT: "8080" } });

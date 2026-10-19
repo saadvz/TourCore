@@ -7,7 +7,7 @@ import { mcpToolList } from "../src/mcp/mcpBridge";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { VisitorDenialCopy } from "../src/core/TourCore";
 import { ConfirmationBook } from "../src/operator/confirmations";
-import { OPERATOR_TOOLS, redactSecrets, type ToolContext } from "../src/operator/tools";
+import { OPERATOR_TOOLS, redactSecrets } from "../src/operator/tools";
 import { OperatorTeamCopy, PropertyWorkspace } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 import { sendblueEnv } from "./fakeSendblue";
@@ -672,5 +672,3 @@ describe("confirmations", () => {
   });
 });
 
-// Keeps the ToolContext type exercised for hosts that construct it themselves.
-export type _Ctx = ToolContext;

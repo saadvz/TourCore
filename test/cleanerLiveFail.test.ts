@@ -97,7 +97,7 @@ function codeTexts(sent: SentSms[], pin: string): { to: string; body: string }[]
   return redact(sent, pin).filter((item) => item.body.includes("Door code:"));
 }
 
-describe("live Scratch failures from 19087415", () => {
+describe("failed reports, holds, and STOP on the live Scratch lane", () => {
   it("a failed or undelivered report tells Cory once and the next guests left sends the code once", async () => {
     if (!LANE) throw new Error("missing lane");
     const wired = await scratchApp();

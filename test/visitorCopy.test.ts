@@ -43,7 +43,7 @@ const GROUP_THEN_STOP = [
   "Is this a senior building?",
 ];
 
-describe("phase 4a visitor copy", () => {
+describe("visitor copy", () => {
   it("uses the team name in every team template, and property team when the name does not end in team", () => {
     expect(visitorTeamName("Acme Realty")).toBe("property team");
     expect(visitorTeamName("leasing team")).toBe("leasing team");

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,6 +40,7 @@ import {
   type SentSms,
   type WiredApp,
 } from "./wiringProof";
+import { filesUnder } from "./files";
 
 const PATH = "/mcp/cleaner-core";
 const ZONE = "America/New_York";
@@ -1855,16 +1856,6 @@ const REHEARSAL_ROUTINE = "https://routine.example/hook";
 const PARKING = "Parking is on the street today.";
 /** The plain door code as its own token, so a random id that happens to hold the digits doesn't count. */
 const PLAIN_CODE = new RegExp(`(?<![0-9A-Za-z])${DOOR_CODE}(?![0-9A-Za-z])`);
-
-function filesUnder(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...filesUnder(path));
-    else if (entry.isFile()) found.push(path);
-  }
-  return found;
-}
 
 describe("Cleaner Core full diagram", () => {
   it("diagram rehearsal", async () => {

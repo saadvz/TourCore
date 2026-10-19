@@ -1,8 +1,9 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderPlaybook } from "../src/playbooks/compose";
+import { repoFilesUnder } from "./files";
 
 /**
  * A degraded or error step must not tell Grok to create a routine or ask for
@@ -58,7 +59,7 @@ function paragraphs(text: string): string[] {
 }
 
 /** Unnegated create-a-routine or ask-for-address/key sentences in paragraphs that name a degraded or error step. */
-export function pairingViolations(text: string, options: { all?: boolean } = {}): string[] {
+function pairingViolations(text: string, options: { all?: boolean } = {}): string[] {
   const found: string[] = [];
   for (const paragraph of paragraphs(text)) {
     if (!options.all && !MARKERS.some((marker) => paragraph.includes(marker))) continue;
@@ -68,16 +69,6 @@ export function pairingViolations(text: string, options: { all?: boolean } = {})
     }
   }
   return found;
-}
-
-function filesUnder(rel: string): string[] {
-  const abs = join(ROOT, rel);
-  if (!statSync(abs).isDirectory()) return rel.endsWith("SETUP_PROMPT.md") ? [] : [rel];
-  return readdirSync(abs).flatMap((name) => {
-    if (name === "SETUP_PROMPT.md") return [];
-    const child = join(rel, name);
-    return statSync(join(ROOT, child)).isDirectory() ? filesUnder(child) : [child];
-  });
 }
 
 const ROOTS = [".grok/skills", "grok-template", "src/playbooks", "src/install/tools.ts", "src/install/status.ts", "src/install/stateView.ts"];
@@ -97,7 +88,7 @@ describe("degraded and error steps do not create a routine", () => {
 
   it("keeps Grok-facing files and the degraded and error playbooks clear of a new routine", () => {
     const hits: string[] = [];
-    for (const rel of ROOTS.flatMap(filesUnder)) {
+    for (const rel of ROOTS.flatMap((rel) => repoFilesUnder(rel, ["SETUP_PROMPT.md"]))) {
       for (const sentence of pairingViolations(readFileSync(join(ROOT, rel), "utf8"))) hits.push(`${rel}: ${sentence}`);
     }
     const clients = [undefined, { name: "Grok" }, { name: "Claude" }, { name: "ChatGPT" }] as const;

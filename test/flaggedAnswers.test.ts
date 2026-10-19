@@ -4,8 +4,8 @@ import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { liveApp, PHONE } from "./liveApp";
 
 /**
- * Decision 10 checks against today's engine. A fair-housing question is flagged
- * with no draft. An ordinary unanswered question still offers a draft.
+ * A fair-housing question is flagged with no draft. An ordinary unanswered
+ * question still offers a draft.
  */
 
 const cleanups: Array<() => void> = [];
@@ -14,7 +14,7 @@ const app = () => liveApp({ cleanups });
 const OTHER = "+15550102001";
 const COMPOSED = "There's a gym on the roof. Let me know if you have any other questions.";
 
-describe("decision 10 flagged answers", () => {
+describe("flagged answers", () => {
   it("sends nothing until yes, then the composed reply rather than the bare fact", async () => {
     const a = await app();
     await a.optInSms();
