@@ -119,6 +119,19 @@ describe("Cleaner Core template manifest", () => {
     expect(instructions).toMatch(/clone[\s\S]{0,40}only to read/);
     expect(instructions).toMatch(/never start a tunnel/i);
     expect(m.suggestedPrompts[0]).toBe("Set up Cleaner Core");
+    // A shared template is a frozen copy, so the repository's address wins if it ever changes.
+    expect(instructions).toContain("If `cleaner-template/template.json` in the repository names a\n  different address, use that one.");
+    expect(instructions).toMatch(/Don't clone it when a routine wakes you/);
+    // The safety rules the guide holds, kept where a template bot reads them every turn.
+    expect(instructions).toMatch(/Only the host's answer says the guests have left\. Never decide it from the\s+calendar/);
+    for (const tool of ["mark_guests_left", "hold_job", "resume_job", "reset_property", "retry_send", "send_message"]) {
+      expect(instructions, tool).toContain(`\`${tool}\``);
+    }
+    expect(instructions).toMatch(/Never pause on your\s+own/);
+    expect(instructions).toMatch(/quote it, and ask whether to pause/);
+    // Setup lets the host skip the group, so the description doesn't promise one.
+    expect(profile).toMatch(/to the cleaner, or to a group if you want one/);
+    expect(profile).not.toMatch(/in one group with you and the cleaner/);
     // The build guide keeps the template bot from claiming the hosted service or carrying memories.
     const readme = read(join(TEMPLATE, m.readme));
     expect(readme).toContain("## Build the team template");
