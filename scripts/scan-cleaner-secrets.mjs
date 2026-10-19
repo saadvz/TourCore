@@ -17,7 +17,6 @@ const allow = new Set([
   ".cursor/skills/verify-cleanercore/features/no-pin.md",
   ".cursor/skills/verify-cleanercore/features/tenant-isolation.md",
   ".cursor/skills/verify-cleanercore/scripts/assert-report.mjs",
-  ".cursor/skills/verify-cleanercore/scripts/assert-step-c.mjs",
   ".cursor/skills/verify-cleanercore/scripts/assert-step-d.mjs",
   ".cursor/skills/verify-cleanercore/scripts/assert-step-e.mjs",
   ".cursor/skills/verify-cleanercore/scripts/assert-step-f.mjs",

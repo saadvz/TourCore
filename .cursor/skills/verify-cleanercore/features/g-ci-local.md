@@ -64,6 +64,6 @@ Preconditions:
 ## Gotchas
 
 - Node 20 cannot open the SQLite backup store. CI uses Node 22.
-- The secret scan allowlists the historical tenant store and the step C through F proofs. A new file that contains a configured scratch code fails the scan.
+- The secret scan allowlists the historical tenant store and the step D through F proofs. A new file that contains a configured scratch code fails the scan.
 - `prove-step-g.sh` runs this gate after the step D, E, and F proofs.
 - A related-test failure exits before typecheck. A typecheck failure exits before the flag-off smoke.
