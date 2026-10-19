@@ -740,7 +740,7 @@ async function rpc(method: string): Promise<Record<string, unknown>> {
 }
 
 const ROUTINE_NEXT =
-  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Only the host can see the Alerts routine's webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field in the routine panel, with one secure card for each, the address first. Keep it to three short steps: open the link, copy the value, paste it in the card. Then call save_alert_routine with no arguments to get a one-time upload link, and send both values to that link from your own computer. Never put them in chat.";
+  "Create the Cleaner Core Check and Cleaner Core Alerts routines. Only the host can see the Alerts routine's webhook address and key. Right after you create it, without waiting to be asked, send the host a link that opens the Alerts routine's Webhook URL field directly and one that opens its Webhook key field directly, with one secure card for each, the address first. Never send a link to the Routines page, and never tell the host to open Routines and pick the routine: opening the routine from there doesn't show its Webhook URL. Keep it to three short steps: open the link, copy the value, paste it in the card. Then call save_alert_routine with no arguments to get a one-time upload link, and send both values to that link from your own computer. Never put them in chat.";
 const TIMES_NEXT = "Tell me the checkout time and the next check-in time before I text the cleaner.";
 
 describe("Cleaner Core Grok demo: Grok guidance", () => {

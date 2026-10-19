@@ -106,6 +106,19 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     expect(review?.next).toBe("Summarize this setup for the host in your own words, then ask them to reply Activate.");
   });
 
+  it("asks how far ahead the cleaner is offered each cleaning, with 1 day before checkout first", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { choice: "cleaners" });
+    await call(wired, "save_property", PROPERTY);
+    await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
+    const ask = askOf((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" })).structured);
+    expect(ask.step).toBe("schedule");
+    expect(fields(ask)).toEqual(["firstText", "firstTextDays", "timing"]);
+    const first = ask.questions[0];
+    expect(first?.default).toBe("1");
+    expect(first?.options?.map((option) => option.value)).toEqual(["1", "3", "7", "custom", "when-confirmed"]);
+  });
+
   it("offers who is in the texts as options, with the group of the host and the cleaner first", async () => {
     const wired = await app();
     await call(wired, "get_state", { choice: "cleaners" });
@@ -218,7 +231,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 });
 
 /** A group setup with the two test stays, activated, with the alert routine saved. */
-async function activatedGroup(options: { uploadCode?: boolean; hostName?: string } = {}) {
+async function activatedGroup(options: { uploadCode?: boolean; hostName?: string; schedule?: Parameters<ReturnType<typeof liveDeskFor>["saveSchedule"]>[0]; now?: () => Date } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-setup-ask-"));
   roots.push(root);
   const sms = fakeSms();
@@ -237,12 +250,12 @@ async function activatedGroup(options: { uploadCode?: boolean; hostName?: string
     CLEANER_CORE_ROUTINE_URL: "https://routine.example/hook",
     PUBLIC_BASE_URL: "https://cleaner.example",
   };
-  const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+  const desk = liveDeskFor(root, () => env, options.now ?? (() => new Date(FROZEN)));
   ok(await desk.getState("cleaners"));
   ok(await desk.saveProperty(PROPERTY));
   ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host", ...(options.hostName ? { hostName: options.hostName } : {}) }));
-  ok(await desk.saveSchedule({}));
+  ok(await desk.saveSchedule(options.schedule ?? { firstText: "when-confirmed" }));
   if (options.uploadCode) {
     const link = String(ok(await desk.saveDoorCode({}, PIN_KEY)).uploadUrl);
     const posted = await desk.uploadDoorCode(link.slice(link.lastIndexOf("/") + 1), { code: DOOR_CODE });
@@ -292,6 +305,28 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     await desk.checkNow({});
     expect(offers()).toHaveLength(2);
     expect(offers()[0]?.body).not.toBe(offers()[1]?.body);
+  });
+
+  it("with days-before-checkout, holds each later offer until its own day, even after the first is taken", async () => {
+    let at = new Date(FROZEN);
+    const { desk, groups } = await activatedGroup({ schedule: { firstText: "days-before-checkout", firstTextDays: 2 }, now: () => at });
+    ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
+    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    const offers = () => groups.posts.filter((post) => post.body.startsWith("Turnover at"));
+    expect(offers()).toHaveLength(0);
+    // Checkouts are Oct 18 and Oct 22. Two days before, at 9:00 AM New York time.
+    at = new Date("2026-10-16T13:00:00.000Z");
+    await desk.checkNow({});
+    expect(offers()).toHaveLength(1);
+    await desk.inbound({ id: "take-1", from: CLEANER, text: "YES", channel: "group" });
+    await desk.checkNow({});
+    expect(offers()).toHaveLength(1);
+    at = new Date("2026-10-20T12:59:00.000Z");
+    await desk.checkNow({});
+    expect(offers()).toHaveLength(1);
+    at = new Date("2026-10-20T13:00:00.000Z");
+    await desk.checkNow({});
+    expect(offers()).toHaveLength(2);
   });
 
   it("keeps a time the host already set and times only the rest", async () => {

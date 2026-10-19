@@ -268,7 +268,10 @@ export interface ReminderTrigger {
  * When a job's first offer may go to the cleaner. It only ever holds the offer: the offer still
  * waits for the host's confirmed times, the opt-in, and every other gate.
  */
-export type OfferTrigger = { kind: "when-confirmed" } | { kind: "days-after-check-in"; days: number; localTime: string };
+export type OfferTrigger =
+  | { kind: "when-confirmed" }
+  | { kind: "days-after-check-in"; days: number; localTime: string }
+  | { kind: "days-before-checkout"; days: number; localTime: string };
 
 export interface CleanerCoreOptions {
   enabled: boolean;
@@ -3038,14 +3041,16 @@ class Engine implements CleanerCore {
 
   /**
    * True when the offer trigger lets a job's first offer go now. A timed offer goes on the trigger
-   * day, but no later than the day before checkout. A job with no known check-in is not held.
+   * day, but no later than the day before checkout. With days-after-check-in, a job with no known
+   * check-in is not held.
    */
   private offerDue(job: Job): boolean {
     const trigger = this.options.offerTrigger;
     if (!trigger) return true;
     if (this.inQuietHours()) return false;
-    if (trigger.kind === "when-confirmed" || !job.checkInDate) return true;
-    const wanted = addCalendarDays(job.checkInDate, trigger.days);
+    if (trigger.kind === "when-confirmed") return true;
+    if (trigger.kind === "days-after-check-in" && !job.checkInDate) return true;
+    const wanted = trigger.kind === "days-before-checkout" ? addCalendarDays(job.checkoutDate, -trigger.days) : addCalendarDays(job.checkInDate!, trigger.days);
     const latest = addCalendarDays(job.checkoutDate, -1);
     const day = wanted < latest ? wanted : latest;
     return this.now().getTime() >= Date.parse(zonedInstant(day, trigger.localTime, this.options.property.timeZone));

@@ -152,15 +152,30 @@ export const SCHEDULE_STEP: SetupAsk = {
   tool: "save_schedule",
   questions: [
     {
+      field: "firstText",
+      ask: "how far ahead the cleaner is offered each cleaning",
+      required: true,
+      default: "1",
+      options: [
+        { value: "1", label: "1 day before checkout" },
+        { value: "3", label: "3 days before checkout" },
+        { value: "7", label: "A week before checkout" },
+        { value: "custom", label: "Another number of days before checkout" },
+        { value: "when-confirmed", label: "As soon as I confirm the times" },
+      ],
+      how: "For a number of days, pass firstText days-before-checkout with firstTextDays set to it. Each offer goes at 9:00 AM that day. For as soon as the times are confirmed, pass firstText when-confirmed, and tell the host that with many bookings ahead the cleaner is offered them one after another, however far out.",
+    },
+    { field: "firstTextDays", ask: "how many days before checkout, 1 to 14", required: true, when: "firstText is custom" },
+    {
       field: "timing",
-      ask: "when the cleaner gets texts",
+      ask: "when the reminder goes, and any quiet hours",
       required: true,
       default: "defaults",
       options: [
         { value: "defaults", label: "Keep the defaults" },
-        { value: "custom", label: "Set the timing myself" },
+        { value: "custom", label: "Set them myself" },
       ],
-      how: "The defaults: the first text goes when the host confirms the times, a reminder at 8:00 AM on checkout morning, no quiet hours, and problems go to the host. Keep them with save_schedule {}.",
+      how: "The defaults: a reminder at 8:00 AM on checkout morning, no quiet hours, and problems go to the host. Save them with only the first-text fields.",
     },
   ],
 };

@@ -11,10 +11,12 @@ address and a sender (bearer) key. Those two values are installation secrets:
 
 - They don't travel with this template. Each installation creates its own.
 - Only the host can see them, in the routine panel. Right after creating the
-  routine, without waiting to be asked, Grok sends the host a direct link to
-  the Webhook URL field and one to the Webhook key field, with one secure card
-  for each, the address first. The host opens each link, copies the value, and
-  pastes it in its card.
+  routine, without waiting to be asked, Grok sends the host a link that opens
+  the Webhook URL field directly and one that opens the Webhook key field
+  directly, with one secure card for each, the address first. The host opens
+  each link, copies the value, and pastes it in its card. Grok never links the
+  Routines page or tells the host to open Routines and pick the routine:
+  opening the routine from there doesn't show its Webhook URL.
 - Grok sends them to Cleaner Core through a one-time upload link, from Grok's
   own cloud computer. They are never in chat, in a tool argument, or in a file
   in this repository. Rotate the key first if it was ever shown anywhere else.
