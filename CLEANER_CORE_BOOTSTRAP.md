@@ -1,7 +1,7 @@
 # CLEANER_CORE_BOOTSTRAP.md
 
 The entry point for a Grok Bot setting up Cleaner Core from this repository.
-No attachments are needed.
+No attachments are needed. A bot added from the Cleaner Core team template already knows this file and the hosted address.
 
 ## What Cleaner Core is
 
