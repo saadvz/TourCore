@@ -94,7 +94,13 @@ const UPLOAD_REFUSED = "Send the routine's https webhook address as url and its 
 const UPLOAD_GONE = "This upload link isn't valid anymore. Call save_alert_routine with no arguments for a new one.";
 const GOOGLE_UNREAD = "I couldn't read those Google Calendar events. Read Google Calendar again and pass its events.";
 const NO_OPEN_CLEANING = "There's no open cleaning to save an arrival time for.";
-const ARRIVAL_NEEDED = "Send the arrival time like 11:30 AM, with AM or PM.";
+const TIMES_NEEDED = "Send the checkout time and the next check-in time the host stated, as 24-hour HH:MM, like 10:30 and 15:00.";
+const DEPARTURE_NEEDED = "Ask the host whether the guests have left. Call again with confirmed true only after the host says yes. I won't guess from the calendar.";
+const NO_DEPARTURE_JOB = "There's no confirmed cleaning waiting for the door code right now.";
+const RETRY_NEEDED = "Ask the host whether to send it again. Call again with confirmed true only after the host says yes.";
+const RETRY_SENT = "Sent it to the cleaner once more.";
+const RETRY_NOTHING = "Nothing is waiting to be sent again.";
+const ARRIVAL_NEEDED = "Send the arrival time as 24-hour HH:MM, like 11:30 or 14:00.";
 const ARRIVAL_SAVED = "Saved the cleaner's arrival time.";
 const NO_PHOTO_JOB = "There's no cleaning with that day to get photos for.";
 const PHOTO_LINKS_OFF = "I can't make photo links until the server's public address is saved.";
@@ -405,15 +411,6 @@ export function resetLiveDesks(): void {
   desks.clear();
 }
 
-function choiceOf(said: string): "tours" | "cleaners" | undefined {
-  const text = said.trim().toLowerCase();
-  if (text === "1" || text.startsWith("1)") || text.startsWith("1 ")) return "tours";
-  if (text === "2" || text.startsWith("2)") || text.startsWith("2 ")) return "cleaners";
-  if (/letting renters tour|tour a unit on their own/.test(text)) return "tours";
-  if (/scheduling cleaners|cleaners between guest stays/.test(text)) return "cleaners";
-  return undefined;
-}
-
 function statedClock(text: string): boolean {
   return Boolean(spokenTimes(normalize(text))[0]?.meridiem);
 }
@@ -485,13 +482,16 @@ function fromLink(source: BookingSource, origin: string): BookingSource {
   return { kind: source.kind, read: async () => ({ ...(await source.read()), origin }) };
 }
 
-/** A stated clock time with AM or PM, like "10:30 AM", as "HH:MM". Anything else is undefined. */
-function usualTime(text: string): string | undefined {
-  const times = spokenTimes(normalize(text));
-  const time = times[0];
-  if (times.length !== 1 || !time?.meridiem) return undefined;
-  const hour = (time.hour % 12) + (time.meridiem === "PM" ? 12 : 0);
-  return `${String(hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}`;
+/** A 24-hour "HH:MM" from a tool argument, or undefined. Grok turns the host's words into this; nothing here reads words. */
+function hourMinute(text: string | undefined): string | undefined {
+  const value = text?.trim() ?? "";
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : undefined;
+}
+
+/** "HH:MM" as minutes after midnight. */
+function minutesOfDay(hm: string): number {
+  const [hour = 0, minute = 0] = hm.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
 /** "HH:MM" as "10:30 AM". */
@@ -778,15 +778,15 @@ export class LiveDesk {
     return /\bdoor code\b/i.test(text) && /\b\d{4,8}\b/.test(text);
   }
 
-  getState(said?: string): Promise<ToolReply> {
-    return this.serial(async () => this.getStateNow(said));
+  getState(choice?: "tours" | "cleaners"): Promise<ToolReply> {
+    return this.serial(async () => this.getStateNow(choice));
   }
 
-  private getStateNow(said: string | undefined): ToolReply {
+  private getStateNow(choice: "tours" | "cleaners" | undefined): ToolReply {
     if (this.file.choice === "cleaners") this.resume();
     const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
     if (!this.file.choice) {
-      const pick = said ? choiceOf(said) : undefined;
+      const pick = choice === "tours" || choice === "cleaners" ? choice : undefined;
       if (!pick) return this.reply({ done: [], next: FIRST_QUESTION, ask: START_ASK });
       this.file.choice = pick;
       this.persist();
@@ -818,10 +818,10 @@ export class LiveDesk {
     if ([business, nickname, propertyType].some((text) => text && this.carriesCode(text))) return this.fail(DOOR_CODE_IN_CHAT);
     const checkoutText = input.checkoutTime?.trim() ?? "";
     const checkInText = input.checkInTime?.trim() ?? "";
-    const checkoutTime = checkoutText ? usualTime(checkoutText) : undefined;
-    const checkInTime = checkInText ? usualTime(checkInText) : undefined;
+    const checkoutTime = checkoutText ? hourMinute(checkoutText) : undefined;
+    const checkInTime = checkInText ? hourMinute(checkInText) : undefined;
     if ((checkoutText && !checkoutTime) || (checkInText && !checkInTime)) {
-      return this.fail("Send the usual checkout and check-in times like 11:00 AM and 3:00 PM.");
+      return this.fail("Send the usual checkout and check-in times as 24-hour HH:MM, like 11:00 and 15:00.");
     }
     this.file.business = business;
     this.file.address = address;
@@ -928,16 +928,16 @@ export class LiveDesk {
     const reminderDays = reminder === "days-before-checkout" ? days(input.reminderDays ?? saved.reminderDays) : undefined;
     if (reminder === "days-before-checkout" && reminderDays === undefined) return this.fail(`Say how many days before checkout the reminder goes, ${dayRange}.`);
     const reminderText = input.reminderTime?.trim();
-    const reminderTime = reminderText === undefined ? saved.reminderTime : usualTime(reminderText);
-    if (!reminderTime) return this.fail("Send the reminder time like 8:00 AM.");
+    const reminderTime = reminderText === undefined ? saved.reminderTime : hourMinute(reminderText);
+    if (!reminderTime) return this.fail("Send the reminder time as 24-hour HH:MM, like 08:00.");
     let quiet = saved.quietFrom && saved.quietUntil ? { from: saved.quietFrom, until: saved.quietUntil } : undefined;
     if (input.quietFrom !== undefined || input.quietUntil !== undefined) {
       const fromText = input.quietFrom?.trim() ?? "";
       const untilText = input.quietUntil?.trim() ?? "";
-      const from = fromText ? usualTime(fromText) : undefined;
-      const until = untilText ? usualTime(untilText) : undefined;
+      const from = fromText ? hourMinute(fromText) : undefined;
+      const until = untilText ? hourMinute(untilText) : undefined;
       if (!fromText && !untilText) quiet = undefined;
-      else if (!from || !until || from === until) return this.fail("Send both quiet-hours times, like 9:00 PM and 8:00 AM.");
+      else if (!from || !until || from === until) return this.fail("Send both quiet-hours times as 24-hour HH:MM, like 21:00 and 08:00.");
       else quiet = { from, until };
     }
     const escalateTo = input.escalateTo === undefined ? saved.escalateTo : input.escalateTo.trim() || undefined;
@@ -1529,12 +1529,10 @@ export class LiveDesk {
   }
 
   private saveArrivalNow(input: { time?: string }): ToolReply {
-    const time = input.time?.trim() ?? "";
-    const hm = statedClock(time) ? usualTime(time) : undefined;
+    const hm = hourMinute(input.time);
     if (!hm) return this.fail(ARRIVAL_NEEDED);
     this.resume();
-    const [hour = 0, minute = 0] = hm.split(":").map(Number);
-    if (!this.file.checked || !this.engine?.saveArrival(hour * 60 + minute)) return this.fail(NO_OPEN_CLEANING);
+    if (!this.file.checked || !this.engine?.saveArrival(minutesOfDay(hm))) return this.fail(NO_OPEN_CLEANING);
     return this.reply({ next: ARRIVAL_SAVED, turns: this.turns() });
   }
 
@@ -1545,31 +1543,18 @@ export class LiveDesk {
   private async confirmTimesNow(input: { checkout?: string; checkIn?: string; all?: boolean }): Promise<ToolReply> {
     this.resume();
     if (!this.file.checked || !this.engine || !this.file.host) return this.fail("Run the checks first.");
-    const checkout = input.checkout?.trim() ?? "";
-    const checkIn = input.checkIn?.trim() ?? "";
-    if (!statedClock(checkout) || !statedClock(checkIn)) {
-      return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
-    }
+    const checkout = hourMinute(input.checkout);
+    const checkIn = hourMinute(input.checkIn);
+    if (!checkout || !checkIn) return this.fail(TIMES_NEEDED);
     const engine = this.engine;
-    if (input.all === true) return this.confirmAllTimes(engine, checkout, checkIn);
+    const times = { checkout: minutesOfDay(checkout), checkIn: minutesOfDay(checkIn) };
+    if (input.all === true) return this.confirmAllTimes(engine, times);
     const target = timesTarget(engine);
     const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
-    if (this.groupOn()) {
-      await engine.confirmHostTimes({ checkout, checkIn });
-    } else {
-      await engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
-      // The engine reads a lone time as the checkout while the job is still open. A stay with no
-      // next stay has no check-in to ask about, and when the next check-in is already stored (a
-      // moved stay keeps it), a second text would overwrite the checkout.
-      const after = engine.jobs().find((item) => item.id === target?.id);
-      if (after?.nextCheckInDate && !after.nextCheckInTime) {
-        await engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
-      }
-    }
+    // A check-in the host already set stays, as the tool description says.
+    await engine.setHostTimes({ ...times, keepCheckIn: true });
     const job = engine.jobs().find((item) => item.id === target?.id);
-    if (!job || !hasTimes(job)) {
-      return this.fail("I only save a time you stated. Say the checkout and the next check-in, like 10:30 AM and 3:00 PM.");
-    }
+    if (!job || !hasTimes(job)) return this.fail(TIMES_NEEDED);
     this.file.released = true;
     this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
     this.persist();
@@ -1593,9 +1578,9 @@ export class LiveDesk {
    * Times every open turnover the host hasn't timed with the same checkout and check-in. Only a group
    * setup does this. The cleaner still gets one offer at a time, and replies YES to each.
    */
-  private async confirmAllTimes(engine: CleanerCore, checkout: string, checkIn: string): Promise<ToolReply> {
+  private async confirmAllTimes(engine: CleanerCore, times: { checkout: number; checkIn: number }): Promise<ToolReply> {
     if (!this.groupOn()) return this.fail("I can only time one turnover at a time here. Tell me the first turnover's times.");
-    const { timed } = await engine.confirmOpenTimes({ checkout, checkIn });
+    const { timed } = await engine.setOpenTimes(times);
     if (timed === 0) return this.fail("Every upcoming turnover already has times.");
     this.file.released = true;
     this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
@@ -1607,15 +1592,13 @@ export class LiveDesk {
     });
   }
 
-  markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+  markGuestsLeft(input: { confirmed?: boolean }, pinKey: Buffer | undefined): Promise<ToolReply> {
     return this.serial(() => this.markGuestsLeftNow(input, pinKey));
   }
 
-  private async markGuestsLeftNow(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+  private async markGuestsLeftNow(input: { confirmed?: boolean }, pinKey: Buffer | undefined): Promise<ToolReply> {
     if (!this.file.host || !this.file.checked) return this.fail("Run the checks first.");
-    const said = input.said?.trim() ?? "";
-    const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
-    if (!DEPARTURES.has(phrase)) return this.fail("Say that the guests have left. I won't guess from the calendar.");
+    if (input.confirmed !== true) return this.fail(DEPARTURE_NEEDED);
     const key = this.keyFor(pinKey);
     if (!key) return this.fail(PIN_KEY_MISSING);
     if (this.unlock(key) !== "ready") return this.fail(PIN_REENTER);
@@ -1629,8 +1612,8 @@ export class LiveDesk {
       return this.reply({ next: line });
     }
     if (this.engine.pinAccepted()) return this.reply({ next: PIN_REPEAT });
-    const result = await this.engine.receive({ id: `left-${randomUUID()}`, from: this.file.host, text: said });
-    if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
+    const result = await this.engine.hostDeparture(`left-${randomUUID()}`);
+    if (result.reason !== "departure") return this.fail(NO_DEPARTURE_JOB);
     const heldLine = result.sent.find((text) => text.kind === "pin-held")?.body;
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
@@ -1648,6 +1631,19 @@ export class LiveDesk {
     if (sentNow) return this.reply({ next: privateNow ? PIN_SENT : PIN_SENT_GROUP });
     if (failed) return this.reply({ next: PIN_FAILED });
     return this.reply({ next: PIN_FAILED });
+  }
+
+  /** Sends an offer or reminder that may not have gone out once more, after the host said to. */
+  retrySend(input: { confirmed?: boolean }): Promise<ToolReply> {
+    return this.serial(() => this.retrySendNow(input));
+  }
+
+  private async retrySendNow(input: { confirmed?: boolean }): Promise<ToolReply> {
+    if (input.confirmed !== true) return this.fail(RETRY_NEEDED);
+    this.resume();
+    if (!this.file.host || !this.engine) return this.fail("Run the checks first.");
+    const result = await this.engine.hostRetry(`retry-${randomUUID()}`);
+    return this.reply({ next: result.sent.length > 0 ? RETRY_SENT : RETRY_NOTHING, turns: this.turns() });
   }
 
   resumeCleaning(): Promise<ToolReply> {

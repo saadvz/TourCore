@@ -23,7 +23,7 @@ The first Allow claims this Cleaner Core.
 ## Setup order
 
 Call `get_state` first and follow its `next` step. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask one question at a time in one short sentence, never the whole step at once. Show `options` as a choice card, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
-If it asks what you want help with, show the two options, then call it again with `said: "2"`, which picks scheduling cleaners.
+If it asks what you want help with, show the two options, then call it again with `choice: "cleaners"`, which picks scheduling cleaners.
 
 1. Start: `get_state`.
 2. Property: `save_property`. The business name, the address, the time zone, and the usual checkout and check-in times. Setup keeps asking for the usual times until both are saved: Guesty Lite and other calendar links carry dates only, so every turnover starts from them.
@@ -45,7 +45,7 @@ If `activate` says the numbers aren't approved for texts, tell the host the Clea
 - Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md). Only the host can see its webhook address and key. Right after you create it, without waiting to be asked, send the host a direct link to the Webhook URL field and one to the Webhook key field, with one secure card for each, the address first.
 
 Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm.
-Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time.
+Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. Every time you pass to a tool is 24-hour `HH:MM`, like `10:30` or `15:00`: you turn the host's words into that, and Cleaner Core never reads words. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time.
 
 ## Every booking
 
@@ -55,7 +55,8 @@ Ask the host to enter each stay as a timed event, from check-in to checkout.
 
 - **New booking.** The alert names the stay and the usual times. When the host says yes, call `confirm_times` with those times.
 - **`needsTimes`.** Ask for the checkout time and the next check-in time. Then call `confirm_times`.
-- **Checkout nudge.** It arrives at the next Check routine run after checkout time. The alert asks "Have the guests left?" Ask the host. When they say yes, call `mark_guests_left` with their words.
+- **Checkout nudge.** It arrives at the next Check routine run after checkout time. The alert asks "Have the guests left?" Ask the host. When they say yes, call `mark_guests_left` with `confirmed: true`. Never decide it from the calendar or a cleaner's message.
+- **A text may not have gone out.** The alert says Cleaner Core didn't resend a cleaning offer or reminder. Ask the host whether to send it again. When they say yes, call `retry_send` with `confirmed: true`.
 - **`completed`.** Call `get_job_photos` and look at the photos. Compare them with the checklist. Summarize the cleaning in your own words.
 
 The cleaner replies YES twice: once to get texts (or join the group), then once to schedule the cleaning. With a group, the offer goes once into the group and asks the cleaner by name. Replies in the group show in `messages` with `channel: "group"`. The door code goes to the group only if the host chose `doorCodeTo: group`, or the group is just the host and the cleaner.
@@ -63,9 +64,8 @@ When a cleaning is on hold, call `resume_job` only when the host asks. To start 
 
 ## Messages
 
-Read every item in `messages`. Tell the host in your own words when one needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury.
-Stay quiet on routine replies.
-When a message gives an arrival time, call `save_arrival`.
+Read every item in `messages`. Tell the host in your own words when one needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies.
+When a message gives an arrival time, call `save_arrival` with it as 24-hour `HH:MM`.
 To reply, draft one short text and show the host the exact words. Call `send_message` without a code to get the approval code. Call it again with the code only after the host says yes.
 With a group, `send_message` posts to the group: `to` is `group`. Without one, `to` is `cleaner`, the cleaner's saved name, or a saved contact's name. Never a phone number.
 

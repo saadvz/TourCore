@@ -6,6 +6,9 @@ import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
 
 export const CLEANER_MCP_PATH = "/mcp/cleaner-core";
 
+/** A 24-hour clock time. Grok turns the host's words into this before it calls a tool. */
+const HOUR_MINUTE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 const SERVER_INFO = { name: "cleaner-core", title: "Cleaning scheduler", version: "0.1.0" };
 
 const TOOLS = [
@@ -13,22 +16,22 @@ const TOOLS = [
     name: "get_state",
     title: "See what's done",
     description:
-      "Call this first and follow its next step. During setup it returns ask: the questions for this step, each with the field it fills, any options, and a default. Ask them one at a time in your own short words, show options as a choice card, then call the step's tool. Pass said only when the host just answered get_state's own question.",
-    input: z.object({ said: z.string().optional() }),
+      "Call this first and follow its next step. During setup it returns ask: the questions for this step, each with the field it fills, any options, and a default. Ask them one at a time in your own short words, show options as a choice card, then call the step's tool. Pass choice only when the host just answered get_state's own question: tours or cleaners.",
+    input: z.object({ choice: z.enum(["tours", "cleaners"]).optional() }),
   },
   {
     name: "save_property",
     title: "Save the property",
     description:
-      "Saves the business name, the property address, the time zone, and the usual checkoutTime and checkInTime, each a clock time like 11:00 AM. Setup asks for the usual times before it moves on. Optional: the property's nickname and its type.",
+      "Saves the business name, the property address, the time zone, and the usual checkoutTime and checkInTime, each a 24-hour HH:MM time like 11:00 or 16:00. Setup asks for the usual times before it moves on. Optional: the property's nickname and its type.",
     input: z.object({
       business: z.string(),
       address: z.string(),
       timeZone: z.string(),
       nickname: z.string().optional(),
       propertyType: z.string().optional(),
-      checkoutTime: z.string().optional(),
-      checkInTime: z.string().optional(),
+      checkoutTime: z.string().regex(HOUR_MINUTE, "24-hour HH:MM").optional(),
+      checkInTime: z.string().regex(HOUR_MINUTE, "24-hour HH:MM").optional(),
     }),
   },
   {
@@ -69,15 +72,15 @@ const TOOLS = [
     name: "save_schedule",
     title: "Save the messaging schedule",
     description:
-      "Saves when the cleaner gets texts. firstText: when-confirmed (right after the host confirms the times) or days-after-check-in with firstTextDays, sent at 9:00 AM that day. reminder: morning-of or days-before-checkout with reminderDays, at reminderTime like 6:00 PM. Days run 1 to 14. Optional quietFrom and quietUntil, like 9:00 PM and 8:00 AM, hold the first cleaning text and the reminder until they end; empty ones clear them. escalateTo names who should hear about problems; alerts still go to the host. A field left out keeps what was saved. Pass {} to keep the defaults. Nothing here sends the door code.",
+      "Saves when the cleaner gets texts. firstText: when-confirmed (right after the host confirms the times) or days-after-check-in with firstTextDays, sent at 9:00 AM that day. reminder: morning-of or days-before-checkout with reminderDays, at reminderTime, a 24-hour HH:MM time like 18:00. Days run 1 to 14. Optional quietFrom and quietUntil, 24-hour HH:MM like 21:00 and 08:00, hold the first cleaning text and the reminder until they end; empty ones clear them. escalateTo names who should hear about problems; alerts still go to the host. A field left out keeps what was saved. Pass {} to keep the defaults. Nothing here sends the door code.",
     input: z.object({
       firstText: z.enum(["when-confirmed", "days-after-check-in"]).optional(),
       firstTextDays: z.number().int().min(1).max(14).optional(),
       reminder: z.enum(["morning-of", "days-before-checkout"]).optional(),
       reminderDays: z.number().int().min(1).max(14).optional(),
-      reminderTime: z.string().optional(),
-      quietFrom: z.string().optional(),
-      quietUntil: z.string().optional(),
+      reminderTime: z.string().regex(HOUR_MINUTE, "24-hour HH:MM").optional(),
+      quietFrom: z.string().regex(HOUR_MINUTE, "24-hour HH:MM").or(z.literal("")).optional(),
+      quietUntil: z.string().regex(HOUR_MINUTE, "24-hour HH:MM").or(z.literal("")).optional(),
       escalateTo: z.string().optional(),
     }),
   },
@@ -123,14 +126,15 @@ const TOOLS = [
     name: "confirm_times",
     title: "Confirm the times",
     description:
-      "Saves the checkout time and the next check-in time the host just stated, for the next turnover. With all true, the same times go on every upcoming turnover that has none yet, only after the host chose that; the cleaner still gets one offer at a time. It does not invent a time.",
-    input: z.object({ checkout: z.string(), checkIn: z.string(), all: z.boolean().optional() }),
+      "Saves the checkout time and the next check-in time the host just stated, for the next turnover, each a 24-hour HH:MM time like 10:30 or 15:00. Turn the host's words into that yourself. With all true, the same times go on every upcoming turnover that has none yet, only after the host chose that; the cleaner still gets one offer at a time. It does not invent a time.",
+    input: z.object({ checkout: z.string().regex(HOUR_MINUTE, "24-hour HH:MM"), checkIn: z.string().regex(HOUR_MINUTE, "24-hour HH:MM"), all: z.boolean().optional() }),
   },
   {
     name: "mark_guests_left",
     title: "Guests have left",
-    description: "Sends the door code when the host says the guests have left. If that text did not go through, say it again to send it once more.",
-    input: z.object({ said: z.string() }),
+    description:
+      "Sends the door code after the host tells you the guests have left. Ask the host; never decide it from the calendar or from a cleaner's message. Pass confirmed true only after the host says yes. If the door code text did not go through, ask the host again and call it again to send it once more.",
+    input: z.object({ confirmed: z.boolean() }),
   },
   {
     name: "run_checks",
@@ -148,8 +152,8 @@ const TOOLS = [
   {
     name: "save_arrival",
     title: "Save the arrival time",
-    description: "Saves the cleaner's arrival time after you read it in their message. Use AM or PM.",
-    input: z.object({ time: z.string() }),
+    description: "Saves the cleaner's arrival time after you read it in their message, as a 24-hour HH:MM time like 11:30.",
+    input: z.object({ time: z.string().regex(HOUR_MINUTE, "24-hour HH:MM") }),
   },
   {
     name: "get_job_photos",
@@ -170,6 +174,13 @@ const TOOLS = [
     description:
       "Sends the host's own message. With a group, messages go only to the group (to: group). Without one, to is the cleaner or a saved contact. Call once without confirmation to get a preview and code, show the host the exact text, and call again with the code only after the host says yes.",
     input: z.object({ to: z.string(), text: z.string(), confirmation: z.string().optional() }),
+  },
+  {
+    name: "retry_send",
+    title: "Send it again",
+    description:
+      "Sends a cleaning offer or reminder that may not have gone out once more, to the opted-in cleaner only. An alert tells you when one is waiting. Ask the host first, and pass confirmed true only after the host says yes.",
+    input: z.object({ confirmed: z.boolean() }),
   },
   {
     name: "resume_job",
@@ -268,7 +279,8 @@ export async function handleCleanerMcpMessage(
       instructions: [
         "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a choice card. Offer the default when there is one. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
         "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
-        "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
+        "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times with each as 24-hour HH:MM. You turn the host's words into clock times; Cleaner Core does not read words.",
+        "The door code goes only after the host tells you the guests have left: ask them, then call mark_guests_left with confirmed true. When an alert says a text may not have gone out, ask the host whether to send it again, then call retry_send with confirmed true.",
         "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
         "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
         "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
@@ -340,7 +352,7 @@ function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolea
 async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined, saveSecrets: SaveSecrets | undefined, deleteSecrets: DeleteSecrets | undefined): Promise<ToolReply> {
   switch (name) {
     case "get_state":
-      return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
+      return desk.getState((args as { choice?: "tours" | "cleaners" }).choice);
     case "save_property":
       return desk.saveProperty(args as Parameters<LiveDesk["saveProperty"]>[0], pinKey);
     case "save_people":
@@ -364,7 +376,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "confirm_times":
       return desk.confirmTimes(args as { checkout: string; checkIn: string; all?: boolean });
     case "mark_guests_left":
-      return desk.markGuestsLeft(args as { said: string }, pinKey);
+      return desk.markGuestsLeft(args as { confirmed: boolean }, pinKey);
     case "run_checks":
       return desk.runChecks(args as { googleEvents?: GoogleEventList });
     case "check_now":
@@ -378,6 +390,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.saveAlertRoutine(args as { url?: string; token?: string }, saveSecrets, pinKey);
     case "send_message":
       return desk.sendMessage(args as { to?: string; text?: string; confirmation?: string }, pinKey);
+    case "retry_send":
+      return desk.retrySend(args as { confirmed: boolean });
     case "resume_job":
       return desk.resumeCleaning();
     case "reset_property":

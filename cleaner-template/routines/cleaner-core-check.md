@@ -31,11 +31,14 @@ webhook address, no key, and no secret.
    - "Have the guests left?" is the checkout nudge. Ask the host. Only the
      host's yes in chat sends the door code, with `mark_guests_left`. The nudge
      arrives at the next Check routine run after checkout time.
+   - When an alert says a cleaning offer or reminder may not have gone out,
+     ask the host whether to send it again. Only the host's yes in chat
+     resends it, with `retry_send`.
 5. Read every item in `messages`. Tell the host in your own words when one
    needs them: running late, a question, a problem, supplies, an arrival
    time, a decline, STOP, or an injury. Stay quiet on routine replies.
-6. When a message gives an arrival time, call `save_arrival` with it, like
-   11:30 AM.
+6. When a message gives an arrival time, call `save_arrival` with it as 24-hour
+   HH:MM, like 11:30.
 7. If a message needs a reply, draft one and offer it to the host. Don't send
    it from the routine. It goes out with `send_message` only after the host's
    yes in chat.
@@ -45,7 +48,7 @@ webhook address, no key, and no secret.
 9. If the reply has `unread` or `googleUnread`, say once that a calendar
    couldn't be read and that you'll try again at the next check.
 10. If the reply has `needsTimes`, ask the host for the checkout time and the
-    next check-in time, then call `confirm_times`.
+    next check-in time, then call `confirm_times` with each as 24-hour HH:MM.
 11. Never show a door code, an id, or a phone number.
 
 ## How the host enters a stay

@@ -102,7 +102,7 @@ async function saveScratch(
     seen.push(done.text, done.raw);
     return done;
   };
-  await remember(call(wired, "get_state", { said: "2" }));
+  await remember(call(wired, "get_state", { choice: "cleaners" }));
   await remember(call(wired, "save_property", { business, address: property.address, timeZone: "America/New_York" }));
   await remember(call(wired, "save_people", { host: property.host, cleaner: property.cleaner, observer: property.observer, doorCodeTo: "cleaner" }));
   await remember(call(wired, "save_calendar_link", { url: CALENDAR_URL }));
@@ -147,6 +147,7 @@ describe("Scratch test tools", () => {
       "get_job_photos",
       "save_alert_routine",
       "send_message",
+      "retry_send",
       "resume_job",
       "reset_property",
       "reset_scratch",
@@ -162,12 +163,12 @@ describe("Scratch test tools", () => {
     expect(listed.raw).toContain("Sends a test text as the host, the cleaner, or the observer. It follows the same path as a real text. It only works with 555 test numbers on the Scratch test property.");
     expect(listed.raw).toContain("Records that a test text was sent, delivered, failed, or undelivered. It does not text anyone.");
 
-    const confirmed = await remember(call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" }));
+    const confirmed = await remember(call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" }));
     expect(confirmed.isError).toBe(false);
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" })))).toBe(WENT_THROUGH);
     expect(linesOf(await remember(call(wired, "read_outbox")))).toContain("Cleaning offer to the cleaner: sent.");
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" })))).toBe(WENT_THROUGH);
-    const left = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const left = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(left.text).toContain(PIN_SENT);
     expect(nextOf(await remember(call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" })))).toBe(WENT_THROUGH);
     const started = await remember(call(wired, "get_turns"));
@@ -176,17 +177,14 @@ describe("Scratch test tools", () => {
     const finished = await remember(call(wired, "get_turns"));
     expect(finished.text).toContain("\"status\":\"done\"");
 
+    // Times and "guests have left" come from Grok's tools, not texts, so only the cleaner's texts are listed.
     expect(linesOf(await remember(call(wired, "read_inbox")))).toEqual([
-      "Text from the host: 10:30 AM.",
-      "Text from the host: 3:00 PM.",
       "Text from the cleaner: YES.",
       "Text from the cleaner: YES.",
-      "Text from the host: The guests have left.",
       "Text from the cleaner: START.",
       "Text from the cleaner: DONE.",
     ]);
     expect(linesOf(await remember(call(wired, "read_outbox")))).toEqual([
-      "Check-in question to the host: sent.",
       "Opt-in text to the cleaner: sent.",
       "Hold note to the host: sent.",
       "Cleaning offer to the cleaner: sent.",
@@ -198,12 +196,12 @@ describe("Scratch test tools", () => {
       "Done note to the host: sent.",
     ]);
 
-    const again = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const again = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(again.text).toContain(PIN_REPEAT);
     expect(nextOf(await remember(call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "failed" })))).toBe("Door code text to the cleaner: failed.");
     const failed = await remember(call(wired, "get_state"));
     expect(failed.text).toContain(PIN_FAILED);
-    const resent = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const resent = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(resent.text).toContain(PIN_SENT);
     const ambiguous = await remember(call(wired, "report_delivery", { which: "door code", status: "undelivered" }));
     expect(ambiguous.isError).toBe(true);
@@ -211,11 +209,11 @@ describe("Scratch test tools", () => {
     expect(nextOf(await remember(call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "undelivered" })))).toBe("Door code text to the cleaner: undelivered.");
     const undelivered = await remember(call(wired, "get_state"));
     expect(undelivered.text).toContain(PIN_FAILED);
-    const resentAgain = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const resentAgain = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(resentAgain.text).toContain(PIN_SENT);
     expect(nextOf(await remember(call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "delivered" })))).toBe("Door code text to the cleaner: delivered.");
     expect(nextOf(await remember(call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "delivered" })))).toBe("Door code text to the cleaner: delivered.");
-    const repeat = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const repeat = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(repeat.text).toContain(PIN_REPEAT);
     const doorLines = linesOf(await remember(call(wired, "read_outbox"))).filter((line) => line.startsWith("Door code text"));
     expect(doorLines).toEqual(["Door code text to the cleaner: delivered."]);
@@ -274,10 +272,9 @@ describe("Scratch test tools", () => {
 
     const checks = await remember(call(wired, "run_checks"));
     expect(checks.isError).toBe(false);
-    const reconfirmed = await remember(call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" }));
+    const reconfirmed = await remember(call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" }));
     expect(reconfirmed.isError).toBe(false);
     expect(linesOf(await remember(call(wired, "read_outbox")))).toEqual([
-      "Check-in question to the host: sent.",
       "Opt-in text to the cleaner: sent.",
       "Hold note to the host: sent.",
     ]);
@@ -297,10 +294,10 @@ describe("Scratch test tools", () => {
     if (!LANE) throw new Error("missing lane");
     const wired = await scratchApp({ allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
     await saveScratch(wired, { address: LANE.property.address, host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, pin: LANE.pin }, "Scratch");
-    await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
     await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" });
     await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" });
-    const left = await call(wired, "mark_guests_left", { said: "The guests have left" });
+    const left = await call(wired, "mark_guests_left", { confirmed: true });
     expect(left.text).toContain(PIN_SENT);
     await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" });
 
@@ -336,10 +333,10 @@ describe("Scratch test tools", () => {
       return done;
     };
     seen.push(await saveScratch(wired, { address: COURT.property.address, host: COURT.ownerPhone, cleaner: COURT.cleanerPhone, observer: COURT_OBSERVER, pin: COURT.pin }, "Scratch Court"));
-    await remember(call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" }));
+    await remember(call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" }));
     await remember(call(wired, "send_test_text", { from: COURT.cleanerPhone, text: "YES" }));
     await remember(call(wired, "send_test_text", { from: COURT.cleanerPhone, text: "YES" }));
-    const left = await remember(call(wired, "mark_guests_left", { said: "The guests have left" }));
+    const left = await remember(call(wired, "mark_guests_left", { confirmed: true }));
     expect(left.text).toContain(PIN_SENT);
     const outbox = linesOf(await remember(call(wired, "read_outbox")));
     expect(outbox).toContain("Door code text to the cleaner: sent.");
@@ -367,7 +364,7 @@ describe("Scratch test tools", () => {
     expect(twilioCalls).toBe(0);
 
     const mixed = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${REAL_NUMBER},${LANE_OBSERVER}` });
-    await call(mixed, "get_state", { said: "2" });
+    await call(mixed, "get_state", { choice: "cleaners" });
     await call(mixed, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: "America/New_York" });
     await call(mixed, "save_people", { host: LANE.ownerPhone, cleaner: REAL_NUMBER, observer: LANE_OBSERVER, doorCodeTo: "cleaner" });
     await call(mixed, "save_calendar_link", { url: CALENDAR_URL });
@@ -384,7 +381,7 @@ describe("Scratch test tools", () => {
     expect(twilioCalls).toBe(0);
 
     const practice = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
-    await call(practice, "get_state", { said: "2" });
+    await call(practice, "get_state", { choice: "cleaners" });
     await call(practice, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     await call(practice, "save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, doorCodeTo: "cleaner" });
     await call(practice, "save_calendar_link", { url: CALENDAR_URL });

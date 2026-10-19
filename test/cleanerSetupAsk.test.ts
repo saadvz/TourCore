@@ -65,7 +65,7 @@ function fields(ask: SetupAsk): string[] {
   return ask.questions.map((question) => question.field);
 }
 
-const PROPERTY = { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00 AM", checkInTime: "4:00 PM" };
+const PROPERTY = { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00", checkInTime: "16:00" };
 
 describe("Cleaner Core setup asks: one question at a time", () => {
   it("offers the two jobs as options before anything is chosen", async () => {
@@ -73,14 +73,14 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     const ask = askOf((await call(wired, "get_state")).structured);
     expect(ask.step).toBe("start");
     expect(ask.questions[0]?.options).toEqual([
-      { value: "1", label: "Letting renters tour a unit on their own" },
-      { value: "2", label: "Scheduling cleaners between guest stays" },
+      { value: "tours", label: "Letting renters tour a unit on their own" },
+      { value: "cleaners", label: "Scheduling cleaners between guest stays" },
     ]);
   });
 
   it("returns each step's ask in order, with the step's tool, and no ask at the review", async () => {
     const wired = await app();
-    const picked = (await call(wired, "get_state", { said: "2" })).structured;
+    const picked = (await call(wired, "get_state", { choice: "cleaners" })).structured;
     expect(String(picked?.next)).toMatch(/^That's Cleaner Core\. It schedules cleaners between guest stays\. Ask the host the questions in ask/);
     expect(askOf(picked).step).toBe("property");
     expect(fields(askOf(picked))).toEqual(["address", "business", "timeZone", "checkoutTime", "checkInTime"]);
@@ -107,7 +107,7 @@ describe("Cleaner Core setup asks: one question at a time", () => {
 
   it("offers who is in the texts as options, with the group of the host and the cleaner first", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
     const people = askOf((await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] })).structured);
     const group = people.questions.find((question) => question.field === "groupChat");
@@ -122,18 +122,18 @@ describe("Cleaner Core setup asks: one question at a time", () => {
   it("shows the host's name in the review and greets the host by it in the group intro", async () => {
     const { desk, groups } = await activatedGroup({ hostName: "Saad" });
     expect(((ok(await desk.getState()).setup ?? {}) as Record<string, unknown>).people).toBeUndefined();
-    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM" }));
+    ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00" }));
     await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
     expect(groups.posts[0]?.body).toMatch(/^Hi Saad and Maria! .* I'm Saad's cleaning assistant,/);
   });
 
   it("keeps asking for the usual times until both are saved, then moves on", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     const noTimes = await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE });
     expect(askOf(noTimes.structured).step).toBe("property");
     expect(fields(askOf(noTimes.structured))).toEqual(["checkoutTime", "checkInTime"]);
-    const oneTime = await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00 AM" });
+    const oneTime = await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:00" });
     expect(fields(askOf(oneTime.structured))).toEqual(["checkInTime"]);
     expect(askOf((await call(wired, "save_property", PROPERTY)).structured).step).toBe("sources");
   });
@@ -155,7 +155,7 @@ function filesIn(dir: string): string[] {
 describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
   it("refuses a masked link and points Grok to the upload link", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
     for (const url of ["[REDACTED]", "https://app.guesty.com/••••••"]) {
       const masked = await call(wired, "save_sources", { calendars: [{ name: "Guesty Lite", url }] });
@@ -170,7 +170,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 
   it("saves a link posted to a one-time upload link, once, and never repeats or stores the code", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
     const issued = await call(wired, "save_sources", { uploadLink: { name: "Guesty Lite" } });
     expect(issued.isError, issued.text).toBe(false);
@@ -202,7 +202,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 
   it("replaces only the calendar with the same name and keeps the others", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
     await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }, { name: "Guesty Lite", url: "https://app.guesty.com/old" }] });
     const issued = await call(wired, "save_sources", { uploadLink: { name: "guesty lite" } });
@@ -215,7 +215,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
     let at = new Date(FROZEN);
     const started = await startWiredApp({ now: () => at });
     open.push(started);
-    await call(started, "get_state", { said: "2" });
+    await call(started, "get_state", { choice: "cleaners" });
     await call(started, "save_property", PROPERTY);
     const issued = await call(started, "save_sources", { uploadLink: {} });
     at = new Date(at.getTime() + 11 * 60_000);
@@ -244,7 +244,7 @@ async function activatedGroup(options: { uploadCode?: boolean; hostName?: string
     PUBLIC_BASE_URL: "https://cleaner.example",
   };
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
-  ok(await desk.getState("2"));
+  ok(await desk.getState("cleaners"));
   ok(await desk.saveProperty(PROPERTY));
   ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host", ...(options.hostName ? { hostName: options.hostName } : {}) }));
@@ -272,7 +272,7 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     expect(ask.tool).toBe("confirm_times");
     expect(ask.questions[0]?.options?.[0]).toEqual({ value: "all", label: "Use 10:00 AM checkout and 4:00 PM check-in for all 2" });
 
-    const all = ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    const all = ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
     expect(all.next).toBe("Times saved for 2 turnovers. The cleaner gets one cleaning offer at a time, starting with the first.");
     const turns = all.turns as { checkoutTime?: string; nextCheckInDate: string | null; nextCheckInTime?: string }[];
     expect(turns).toHaveLength(2);
@@ -283,12 +283,12 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     // The cleaner gets the group invite only, one text, before any offer.
     expect(sms.sent.filter((item) => item.to === CLEANER)).toHaveLength(1);
     expect(askOf(ok(await desk.getState()))).toBeUndefined();
-    expect((await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true })).ok).toBe(false);
+    expect((await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true })).ok).toBe(false);
   });
 
   it("still sends the cleaner one offer at a time after timing them all", async () => {
     const { desk, groups } = await activatedGroup();
-    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
     await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
     const offers = () => groups.posts.filter((post) => post.body.startsWith("Turnover at"));
     expect(offers()).toHaveLength(1);
@@ -302,8 +302,8 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
 
   it("keeps a time the host already set and times only the rest", async () => {
     const { desk } = await activatedGroup();
-    ok(await desk.confirmTimes({ checkout: "9:00 AM", checkIn: "3:00 PM" }));
-    const all = ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM", all: true }));
+    ok(await desk.confirmTimes({ checkout: "09:00", checkIn: "15:00" }));
+    const all = ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
     expect(all.next).toBe("Times saved for 1 turnover. The cleaner gets one cleaning offer at a time, starting with the first.");
     const turns = all.turns as { checkoutTime?: string }[];
     expect(turns.map((turn) => turn.checkoutTime?.replace(/[  ]/g, " "))).toEqual(["9:00 AM", "10:00 AM"]);
@@ -314,7 +314,7 @@ const DOOR_PREFIX = `${PUBLIC}/cleaner-core/door-code/`;
 
 describe("Cleaner Core setup: the door code from Grok's secure card", () => {
   async function atDoor(wired: WiredApp) {
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
     await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
     await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" });
@@ -377,10 +377,10 @@ describe("Cleaner Core setup: the door code from Grok's secure card", () => {
 
   it("sends the uploaded code to the cleaner after the guests leave", async () => {
     const { desk, groups } = await activatedGroup({ uploadCode: true });
-    ok(await desk.confirmTimes({ checkout: "10:00 AM", checkIn: "4:00 PM" }));
+    ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00" }));
     await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "take", from: CLEANER, text: "YES", channel: "group" });
-    ok(await desk.markGuestsLeft({ said: "The guests have left" }, PIN_KEY));
+    ok(await desk.markGuestsLeft({ confirmed: true }, PIN_KEY));
     expect(groups.posts.filter((post) => post.body.includes(DOOR_CODE))).toHaveLength(1);
   });
 });

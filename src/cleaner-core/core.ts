@@ -407,6 +407,17 @@ export interface CleanerCore {
   photoJobFor(input: { id: string; from: string }): string | undefined;
   confirmHostTimes(input: { checkout: string; checkIn: string }): Promise<CleanerText[]>;
   /**
+   * The host's checkout and next check-in, in minutes after midnight, on the first open turnover.
+   * Grok passes them from chat. The cleaner's next text goes out as it would after a host text.
+   */
+  setHostTimes(input: { checkout: number; checkIn: number; keepCheckIn?: boolean }): Promise<CleanerText[]>;
+  /** confirmOpenTimes with minutes after midnight. Group setups only. */
+  setOpenTimes(input: { checkout: number; checkIn: number }): Promise<{ timed: number; sent: CleanerText[] }>;
+  /** The host told Grok the guests have left. The door code goes out under the same rules as before. */
+  hostDeparture(id: string): Promise<ReceiveResult>;
+  /** The host told Grok to send an uncertain offer or reminder once more. */
+  hostRetry(id: string): Promise<ReceiveResult>;
+  /**
    * Times every open turnover the host hasn't timed yet with the same checkout and check-in, in a
    * group setup. Turnovers that already have a host time keep it. Offers still go one at a time.
    */
@@ -901,6 +912,28 @@ class Engine implements CleanerCore {
     }
   }
 
+  async hostDeparture(id: string): Promise<ReceiveResult> {
+    return this.hostAction(id, "guests have left", () => (this.pin ? this.clearDeparture(id) : Promise.resolve(this.markIgnored(id))));
+  }
+
+  async hostRetry(id: string): Promise<ReceiveResult> {
+    return this.hostAction(id, "retry", () => this.retryUncertain(id));
+  }
+
+  /** A host decision Grok passes on from chat. It is recorded in the transcript but never read as a text. */
+  private async hostAction(id: string, what: string, act: () => Promise<ReceiveResult>): Promise<ReceiveResult> {
+    if (!this.enabled) return { handled: false, reason: "disabled", sent: [] };
+    if (!this.owner) return { handled: true, reason: "ignored", sent: [] };
+    if (this.inboundIds.includes(id) || this.inflight.has(id)) return { handled: true, reason: "duplicate", sent: [] };
+    this.inflight.add(id);
+    try {
+      this.transcriptState.push(`${this.owner} (via Grok): ${what}`);
+      return await act();
+    } finally {
+      this.inflight.delete(id);
+    }
+  }
+
   photoJobFor(input: { id: string; from: string }): string | undefined {
     const from = parsePhone(input.from);
     if (!this.enabled || !from || from !== this.cleanerPhone || this.cleanerConsent !== "in") return undefined;
@@ -1221,10 +1254,15 @@ class Engine implements CleanerCore {
     const checkout = clockMinutes(input.checkout);
     const checkIn = clockMinutes(input.checkIn);
     if (checkout === undefined || checkIn === undefined) return [];
+    return this.setHostTimes({ checkout, checkIn });
+  }
+
+  async setHostTimes(input: { checkout: number; checkIn: number; keepCheckIn?: boolean }): Promise<CleanerText[]> {
+    if (!this.enabled || !this.everConsented) return [];
     const job = this.ordered().find((item) => !item.canceled && !item.declined && !item.done && !item.started);
     if (!job) return [];
-    this.addFact(job.id, "checkout", checkout);
-    if (job.nextCheckInDate) this.addFact(job.id, "checkin", checkIn);
+    this.addFact(job.id, "checkout", input.checkout);
+    if (job.nextCheckInDate && !(input.keepCheckIn && this.latestFact(job.id, "checkin"))) this.addFact(job.id, "checkin", input.checkIn);
     const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
     this.save();
     return sent;
@@ -1235,6 +1273,12 @@ class Engine implements CleanerCore {
     const checkout = clockMinutes(input.checkout);
     const checkIn = clockMinutes(input.checkIn);
     if (checkout === undefined || checkIn === undefined) return { timed: 0, sent: [] };
+    return this.setOpenTimes({ checkout, checkIn });
+  }
+
+  async setOpenTimes(input: { checkout: number; checkIn: number }): Promise<{ timed: number; sent: CleanerText[] }> {
+    if (!this.groupChat) return { timed: 0, sent: [] };
+    const { checkout, checkIn } = input;
     let timed = 0;
     for (const job of this.ordered()) {
       if (job.canceled || job.declined || job.done || job.started || this.latestFact(job.id, "checkout")) continue;

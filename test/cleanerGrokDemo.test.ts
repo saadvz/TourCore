@@ -70,7 +70,7 @@ function call(wired: WiredApp, name: string, args: Record<string, unknown> = {})
 }
 
 async function setUpTo(wired: WiredApp, observer = false) {
-  await call(wired, "get_state", { said: "2" });
+  await call(wired, "get_state", { choice: "cleaners" });
   expect((await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" })).isError).toBe(false);
   expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, ...(observer ? { observer: OBSERVER, doorCodeTo: "cleaner" } : {}) })).isError).toBe(false);
 }
@@ -187,7 +187,7 @@ function withNext(stay: { id: string; start: string; end: string }): GoogleEvent
 async function confirmedJob(wired: WiredApp, stay: { id: string; start: string; end: string }) {
   await setUpGoogle(wired);
   expect((await call(wired, "run_checks", { googleEvents: withNext(stay) })).isError).toBe(false);
-  expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+  expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
   await yes(wired, "SM-demo-yes-1");
   await yes(wired, "SM-demo-yes-2");
 }
@@ -245,7 +245,7 @@ describe("Cleaner Core Grok demo: check_now", () => {
     // and tells the cleaner nothing until the host confirms the new day.
     expect(alertsOf(moved).some((line) => line.startsWith(HOST_CHECKOUT) && line.includes("Oct 16"))).toBe(true);
     expect(kindsSince(wired, before)).toEqual([]);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     const got = wired.cleanerSent.slice(before);
     expect(got.map(textKind)).toEqual(["corrected"]);
     expect(got[0]?.body).toContain("Friday, Oct 16 at 10:30 AM");
@@ -404,7 +404,7 @@ function resultOf(reply: ToolReply): Record<string, unknown> {
 async function openDesk(root: string, env: NodeJS.ProcessEnv): Promise<LiveDesk> {
   const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
   const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
-  expect((await desk.getState("2")).ok).toBe(true);
+  expect((await desk.getState("cleaners")).ok).toBe(true);
   expect((await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE })).ok).toBe(true);
   expect((await desk.savePeople({ host: HOST, cleaner: CLEANER })).ok).toBe(true);
   expect((await desk.saveCalendarLink({ google: true })).ok).toBe(true);
@@ -472,7 +472,7 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     const lane = SCRATCH_TENANTS[0];
     if (!lane) throw new Error("missing tenant");
     const wired = await app({ scratchTools: true, allowlist: `${lane.ownerPhone},${lane.cleanerPhone}` });
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", { business: "Scratch", address: lane.property.address, timeZone: ZONE });
     await call(wired, "save_people", { host: lane.ownerPhone, cleaner: lane.cleanerPhone });
     await call(wired, "save_calendar_link", { google: true });
@@ -516,7 +516,7 @@ describe("Cleaner Core Grok demo: check_now follow-ups", () => {
     expect((moved.structured?.turns as { checkoutTime: string | null }[])[0]?.checkoutTime).toBeNull();
     expect(wired.cleanerSent).toHaveLength(sms);
     expect(stub.posts).toHaveLength(posts);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     // The corrected text goes once into the group, naming the cleaner, and nothing goes one-to-one.
     expect(wired.cleanerSent).toHaveLength(sms);
     const got = stub.posts.slice(posts);
@@ -582,14 +582,14 @@ const WAKE_STAY = { id: "g1", start: "2026-10-10", end: "2026-10-15" };
 async function readyForYes(wired: WiredApp) {
   await setUpGoogle(wired);
   expect((await call(wired, "run_checks", { googleEvents: withNext(WAKE_STAY) })).isError).toBe(false);
-  expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+  expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
 }
 
 describe("Cleaner Core Grok demo: instant alerts", () => {
   it("save_alert_routine stores without echoing", async () => {
     const wired = await app();
     const posts = alertStub(() => 200);
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     const saved = await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY });
     expect(saved.isError).toBe(false);
     expect(saved.structured?.next).toBe(CONNECTED);
@@ -767,7 +767,8 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
     expect(text.startsWith("Call get_state first and follow its next step.")).toBe(true);
     for (const line of [
       "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
-      "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times.",
+      "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times with each as 24-hour HH:MM. You turn the host's words into clock times; Cleaner Core does not read words.",
+      "The door code goes only after the host tells you the guests have left: ask them, then call mark_guests_left with confirmed true. When an alert says a text may not have gone out, ask the host whether to send it again, then call retry_send with confirmed true.",
       "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
     ]) {
       expect(text).toContain(line);
@@ -776,8 +777,8 @@ describe("Cleaner Core Grok demo: Grok guidance", () => {
 
   it("asks where bookings come from at the calendar step, with Guesty Lite, Google Calendar, and other links as options", async () => {
     const wired = await app();
-    await call(wired, "get_state", { said: "2" });
-    await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00 AM", checkInTime: "4:00 PM" });
+    await call(wired, "get_state", { choice: "cleaners" });
+    await call(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" });
     const people = await call(wired, "save_people", { host: HOST, cleaner: CLEANER });
     const ask = people.structured?.ask as { step: string; tool: string; questions: { field: string; options?: { value: string }[]; example?: string }[] };
     expect(ask.step).toBe("sources");
@@ -824,7 +825,7 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(fresh.isError).toBe(false);
     const beforeConfirm = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
     expect(beforeConfirm.structured?.needsTimes).toBeUndefined();
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     await yes(wired, "SM-needs-yes-1");
     await yes(wired, "SM-needs-yes-2");
     const steady = await call(wired, "check_now", { googleEvents: withNext(WAKE_STAY) });
@@ -835,7 +836,7 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(moved.isError).toBe(false);
     expect((moved.structured?.turns as { checkoutTime: string | null }[])[0]?.checkoutTime).toBeNull();
     expect(moved.structured?.needsTimes).toBe(true);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     const settled = await call(wired, "check_now", { googleEvents: withNext({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
     expect(settled.structured?.needsTimes).toBeUndefined();
   });
@@ -851,7 +852,7 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     const list = (first: { id: string; start: string; end: string }) => googleList([first, ...stays.slice(1)]);
     await setUpGoogle(wired);
     expect((await call(wired, "run_checks", { googleEvents: list(stays[0]!) })).isError).toBe(false);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     await yes(wired, "SM-three-yes-1");
     await yes(wired, "SM-three-yes-2");
     const steady = await call(wired, "check_now", { googleEvents: list(stays[0]!) });
@@ -863,7 +864,7 @@ describe("Cleaner Core Grok demo: needsTimes", () => {
     expect(again.structured?.needsTimes).toBeUndefined();
     const moved = await call(wired, "check_now", { googleEvents: list({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
     expect(moved.structured?.needsTimes).toBe(true);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     const settled = await call(wired, "check_now", { googleEvents: list({ id: "g1", start: "2026-10-10", end: "2026-10-16" }) });
     expect(settled.structured?.needsTimes).toBeUndefined();
   });
@@ -926,7 +927,7 @@ function turnOn(reply: { structured: Record<string, unknown> | undefined }, chec
 /** Google-only setup, the first job confirmed, the code sent, and the cleaner's DONE. */
 async function finishedJob(wired: WiredApp) {
   await confirmedJob(wired, TODAY_STAY);
-  expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+  expect((await call(wired, "mark_guests_left", { confirmed: true })).isError).toBe(false);
   await cleanerSays(wired, "DONE", "SM-first-done");
   expect(turnOn(await call(wired, "get_turns"), "2026-10-14")?.status).toBe("done");
 }
@@ -958,7 +959,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
   it("a stay checking out today whose code was sent stays active when it leaves the read", async () => {
     const wired = await app();
     await confirmedJob(wired, TODAY_STAY);
-    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    expect((await call(wired, "mark_guests_left", { confirmed: true })).isError).toBe(false);
     const before = wired.cleanerSent.length;
     const missing = await call(wired, "check_now", { googleEvents: googleList([NEXT_STAY]) });
     expect(missing.isError).toBe(false);
@@ -999,7 +1000,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
       const checked = await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY, NEXT_STAY, LATER_STAY]) });
       expect(checked.isError).toBe(false);
       expect(alertsOf(checked).some((line) => line.includes("Saturday, Oct 24"))).toBe(true);
-      const times = await call(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+      const times = await call(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
       expect(times.isError).toBe(false);
       expect(times.structured?.next).not.toContain("asking them to reply YES");
       const got = toTheCleaner(wired, before);
@@ -1026,7 +1027,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
       const wired = await app({ groupChat });
       await setUpGoogle(wired);
       expect((await call(wired, "run_checks", { googleEvents: googleList([TODAY_STAY]) })).isError).toBe(false);
-      const times = await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+      const times = await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" });
       expect(times.isError, times.text).toBe(false);
       const turns = await call(wired, "get_turns");
       expect(turnOn(turns, "2026-10-14")).toMatchObject({ checkoutTime: "10:30 AM", nextCheckInTime: null });
@@ -1042,10 +1043,10 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     const wired = await app();
     await setUpGoogle(wired);
     expect((await call(wired, "run_checks", { googleEvents: googleList([TODAY_STAY]) })).isError).toBe(false);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     await yes(wired, "SM-lone-yes-1");
     await yes(wired, "SM-lone-yes-2");
-    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    expect((await call(wired, "mark_guests_left", { confirmed: true })).isError).toBe(false);
     await cleanerSays(wired, "DONE", "SM-lone-done");
     const before = wired.cleanerSent.length;
     const added = await call(wired, "check_now", { googleEvents: googleList([TODAY_STAY, NEXT_STAY]) });
@@ -1137,7 +1138,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
         return slow.sendSms(input);
       },
     });
-    const left = call(wired, "mark_guests_left", { said: "guests have left" });
+    const left = call(wired, "mark_guests_left", { confirmed: true });
     // The check starts while the door-code text is still on its way.
     await started;
     const checked = call(wired, "check_now", { googleEvents: withNext(TODAY_STAY) });
@@ -1159,7 +1160,7 @@ describe("Cleaner Core Grok demo: final review fixes", () => {
     await yes(wired, "SM-backlog-yes-1");
     await yes(wired, "SM-backlog-yes-2");
     expect(cleaningUpdates(wired).map((record) => record.status)).toEqual(["pending"]);
-    expect((await call(wired, "mark_guests_left", { said: "guests have left" })).isError).toBe(false);
+    expect((await call(wired, "mark_guests_left", { confirmed: true })).isError).toBe(false);
     await cleanerSays(wired, "DONE", "SM-backlog-done");
     expect(cleaningUpdates(wired).map((record) => record.status)).toEqual(["pending"]);
     expect((await call(wired, "save_alert_routine", { url: ROUTINE_URL, token: ROUTINE_KEY })).isError).toBe(false);
@@ -1407,7 +1408,7 @@ describe("Cleaner Core Grok demo: editing calendars never silently cancels a cle
     serveCalendars({ airbnb: AIRBNB_ICS, vrbo: VRBO_ICS });
     await setUpSources(wired, false);
     expect((await call(wired, "run_checks")).isError).toBe(false);
-    expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+    expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
     await yes(wired, "SM-dup-yes-1");
     await yes(wired, "SM-dup-yes-2");
     const job = engineOf(wired).jobs().find((item) => item.checkoutDate === "2026-10-18");
@@ -1572,7 +1573,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     };
 
     // 1. Setup with Google, then the routines.
-    await say("get_state", { said: "2" });
+    await say("get_state", { choice: "cleaners" });
     await say("save_property", { business: "Scratch", address, timeZone: ZONE });
     await say("save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone });
     await say("save_calendar_link", { google: true });
@@ -1595,7 +1596,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await safe("2 new booking");
 
     // 3. The host's times. With no next stay, only the checkout time is saved.
-    await say("confirm_times", { checkout: "10:00 AM", checkIn: "3:00 PM" });
+    await say("confirm_times", { checkout: "10:00", checkIn: "15:00" });
     const optIn = await labelled("Opt-in text to the cleaner");
     expect(optIn).toHaveLength(1);
     // With group chat on, the opt-in is the invitation to the cleaning group.
@@ -1627,7 +1628,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await safe("5 reminder");
 
     // 6. The guests leave. The code goes into the group of the host and the cleaner, shown redacted.
-    expect((await say("mark_guests_left", { said: "guests have left" })).text).toContain(PIN_SENT_GROUP);
+    expect((await say("mark_guests_left", { confirmed: true })).text).toContain(PIN_SENT_GROUP);
     const door = await labelled("Door code text to the group");
     expect(door).toHaveLength(1);
     expect(door[0]?.body).toContain("Door code: [redacted].");
@@ -1663,7 +1664,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     await safe("8 second booking");
 
     // 9. The host's times. The cleaner already joined, so the offer goes out at once with no second invite.
-    const secondTimes = await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    const secondTimes = await say("confirm_times", { checkout: "11:00", checkIn: "16:00" });
     expect(secondTimes.structured?.next).toBe("Times saved. I sent the cleaner the cleaning offer. They reply YES to take it.");
     expect(await labelled("Opt-in text to the cleaner")).toHaveLength(1);
     const secondOffers = (await labelled("Cleaning offer to the group")).filter((item) => item.body.includes("Oct 24"));
@@ -1679,7 +1680,7 @@ describe("Cleaner Core Grok demo: Scratch rehearsal", () => {
     const movedCheck = await say("check_now", { googleEvents: googleList([today, moved]) });
     expect(movedCheck.structured?.needsTimes).toBe(true);
     expect(await labelled("Time correction to the group")).toEqual([]);
-    await say("confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await say("confirm_times", { checkout: "11:00", checkIn: "16:00" });
     const corrected = await labelled("Time correction to the group");
     expect(corrected).toHaveLength(1);
     expect(corrected[0]?.body).toContain("Oct 25 at 11:00 AM");
@@ -1759,7 +1760,7 @@ describe("Cleaner Core Grok demo: alert upload link", () => {
   it("issues a link on the app origin and saves nothing yet", async () => {
     const wired = await app();
     const posts = alertStub(() => 200);
-    await call(wired, "get_state", { said: "2" });
+    await call(wired, "get_state", { choice: "cleaners" });
     const { code } = await issueLink(wired);
     expect(wired.env().CLEANER_CORE_ROUTINE_URL).toBeUndefined();
     expect(wired.env().CLEANER_CORE_ROUTINE_KEY).toBeUndefined();
@@ -1937,7 +1938,7 @@ describe("Cleaner Core Grok demo: alert upload link", () => {
     const asBase64Url = pinKey.toString("base64url");
     expect(asBase64Url).not.toBe(asBase64);
     const withKey = (name: string, args: Record<string, unknown> = {}) => wired.tool(PATH, CLEANER_TOKEN, name, args, { pinKey: asBase64 });
-    await withKey("get_state", { said: "2" });
+    await withKey("get_state", { choice: "cleaners" });
     expect((await withKey("save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE })).isError).toBe(false);
     expect((await withKey("save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
     expect((await withKey("save_calendar_link", { google: true })).isError).toBe(false);

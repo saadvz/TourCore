@@ -80,7 +80,7 @@ async function call(wired: WiredApp, name: string, args?: Record<string, unknown
 
 async function savePeople(wired: WiredApp): Promise<void> {
   if (!LANE) throw new Error("missing lane");
-  expect((await call(wired, "get_state", { said: "2" })).isError).toBe(false);
+  expect((await call(wired, "get_state", { choice: "cleaners" })).isError).toBe(false);
   expect((await call(wired, "save_property", { business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).isError).toBe(false);
   expect((await call(wired, "save_people", { host: HOST, cleaner: LANE.cleanerPhone, observer: OBSERVER })).isError).toBe(false);
 }
@@ -96,7 +96,7 @@ async function saveLane(wired: WiredApp): Promise<void> {
 
 async function confirmJob(wired: WiredApp): Promise<void> {
   if (!LANE) throw new Error("missing lane");
-  expect((await call(wired, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" })).isError).toBe(false);
+  expect((await call(wired, "confirm_times", { checkout: "10:30", checkIn: "15:00" })).isError).toBe(false);
   expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" }))).toBe("The test text went through.");
   expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "YES" }))).toBe("The test text went through.");
 }
@@ -128,7 +128,7 @@ describe("host texts after 46105bc", () => {
     };
     setCleanerTwilioClient(sms);
     const desk = liveDeskFor(root, () => env, () => new Date("2026-10-14T15:00:00.000Z"));
-    expect((await desk.getState("2")).ok).toBe(true);
+    expect((await desk.getState("cleaners")).ok).toBe(true);
     expect((await desk.saveProperty({ business: "Scratch", address: ADDRESS, timeZone: "America/New_York" })).ok).toBe(true);
     expect((await desk.savePeople({ host: HOST, cleaner: LANE.cleanerPhone, observer: OBSERVER })).ok).toBe(true);
     await desk.inbound({ id: "early-stop", from: HOST, text: "STOP" });
@@ -156,7 +156,7 @@ describe("host texts after 46105bc", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "START" }))).toBe("The test text went through.");
     expect(hostBodies(wired.cleanerSent.slice(startAt), LANE.pin)).toEqual([HOST_START_HELD]);
     expect((await call(wired, "get_turns")).text).toContain("\"held\":true");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).not.toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).not.toBe(PIN_SENT);
     expect((await call(wired, "resume_job")).isError).toBe(false);
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");
     const cleanerHeld = wired.cleanerSent.length;
@@ -182,12 +182,12 @@ describe("host texts after 46105bc", () => {
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
     const afterStop = wired.cleanerSent.length;
     expect((await call(wired, "resume_job")).isError).toBe(false);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).not.toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).not.toBe(PIN_SENT);
     const after = redact(wired.cleanerSent.slice(afterStop), LANE.pin);
     expect(after.filter((item) => item.to === HOST)).toEqual([{ to: HOST, body: HOST_DONE }]);
     expect(after.filter((item) => item.body.includes("Door code:"))).toEqual([
@@ -211,7 +211,7 @@ describe("host texts after 46105bc", () => {
     const wired = await scratchApp();
     await saveLane(wired);
     await confirmJob(wired);
-    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     const beforeDone = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "DONE" }))).toBe("The test text went through.");

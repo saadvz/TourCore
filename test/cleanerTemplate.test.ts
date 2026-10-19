@@ -19,7 +19,7 @@ const ROUTINES = ["Cleaner Core Check", "Cleaner Core Alerts"];
 /** The setup order get_state asks for: the diagram's 8 steps, the checks once numbers are approved, then the routines and the first times. */
 const SETUP_TOOLS = ["get_state", "save_property", "save_sources", "save_people", "save_schedule", "save_door_code", "save_preferences", "activate", "run_checks", "save_alert_routine", "confirm_times"];
 /** Tools that need the host's yes in chat. A routine runs unattended, so it never holds them. */
-const NEEDS_HOST_YES = ["send_message", "mark_guests_left", "save_door_code", "save_sources", "activate", "resume_job", "reset_property"];
+const NEEDS_HOST_YES = ["send_message", "mark_guests_left", "save_door_code", "save_sources", "activate", "retry_send", "resume_job", "reset_property"];
 
 /** LF bytes, so the pin matches on a Windows (CRLF) checkout and on CI. */
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
@@ -165,13 +165,13 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     expect(text).toMatch(/timed event/);
   });
 
-  it("picks cleaning with the said value it names", async () => {
-    const said = /`said: "([^"]+)"`/.exec(read(BOOTSTRAP))?.[1];
-    expect(said).toBeTruthy();
+  it("picks cleaning with the choice value it names", async () => {
+    const choice = /`choice: "([^"]+)"`/.exec(read(BOOTSTRAP))?.[1];
+    expect(choice).toBe("cleaners");
     const root = mkdtempSync(join(tmpdir(), "cleaner-template-"));
     try {
       const desk = liveDeskFor(root, () => ({}), () => new Date());
-      const reply = await desk.getState(said);
+      const reply = await desk.getState(choice as "cleaners");
       expect(reply.ok).toBe(true);
       expect((reply.result as { done: string[] }).done).toContain("You chose cleaning.");
     } finally {

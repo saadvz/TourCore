@@ -804,19 +804,19 @@ describe("group-first: Grok's tools", () => {
     Source: "SMS",
   });
   async function setup(wired: WiredApp, people: Record<string, unknown>) {
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", ...people });
     await must(wired, "save_calendar_link", { url: CALENDAR_URL });
     await must(wired, "save_door_code", { code: DOOR_CODE });
     await must(wired, "set_up_texting");
     await must(wired, "run_checks");
-    await must(wired, "confirm_times", { checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
   }
 
   it("asks the door-code question when contacts are in the group and no choice is saved", async () => {
     const { wired } = await start();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     const contacts = [{ name: "Ana", role: "co-host", phone: ANA }];
     const refused = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, groupChat: "everyone", contacts });
@@ -827,7 +827,7 @@ describe("group-first: Grok's tools", () => {
 
   it("counts the legacy observer as a contact for the question", async () => {
     const { wired } = await start();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     const refused = await call(wired, "save_people", { host: HOST, cleaner: CLEANER, observer: ANA });
     expect(refused.text).toBe(QUESTION);
@@ -836,7 +836,7 @@ describe("group-first: Grok's tools", () => {
 
   it("needs no choice for cleaner-and-host, or for no contacts", async () => {
     const { wired } = await start();
-    await must(wired, "get_state", { said: "2" });
+    await must(wired, "get_state", { choice: "cleaners" });
     await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
     const contacts = [{ name: "Ana", role: "co-host", phone: ANA }];
     expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, groupChat: "cleaner-and-host", contacts })).isError).toBe(false);
@@ -869,7 +869,7 @@ describe("group-first: Grok's tools", () => {
     const sid = fake.created[0] ?? "";
     expect(fake.posts[0]?.body).toBe(groupIntroBody([BUSINESS, "Mike"], BUSINESS, ADDRESS));
     expect(await hook(wired, inGroup(sid, CLEANER, "YES"))).toBe(200);
-    const left = await must(wired, "mark_guests_left", { said: "The guests have left" });
+    const left = await must(wired, "mark_guests_left", { confirmed: true });
     expect(left.next).toBe(PIN_SENT_GROUP);
     const withCode = fake.posts.filter((post) => post.body.includes(DOOR_CODE));
     expect(withCode).toHaveLength(1);
