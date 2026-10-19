@@ -106,6 +106,19 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     expect(review?.next).toBe("Summarize this setup for the host in your own words, then ask them to reply Activate.");
   });
 
+  it("asks how far ahead the cleaner is offered each cleaning, with 1 day before checkout first", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { choice: "cleaners" });
+    await call(wired, "save_property", PROPERTY);
+    await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
+    const ask = askOf((await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" })).structured);
+    expect(ask.step).toBe("schedule");
+    expect(fields(ask)).toEqual(["firstText", "firstTextDays", "timing"]);
+    const first = ask.questions[0];
+    expect(first?.default).toBe("1");
+    expect(first?.options?.map((option) => option.value)).toEqual(["1", "3", "7", "custom", "when-confirmed"]);
+  });
+
   it("offers who is in the texts as options, with the group of the host and the cleaner first", async () => {
     const wired = await app();
     await call(wired, "get_state", { choice: "cleaners" });
@@ -242,7 +255,7 @@ async function activatedGroup(options: { uploadCode?: boolean; hostName?: string
   ok(await desk.saveProperty(PROPERTY));
   ok(await desk.saveSources({ calendars: [{ name: "Guesty Lite", url: CALENDAR_URL }] }));
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Maria", groupChat: "cleaner-and-host", ...(options.hostName ? { hostName: options.hostName } : {}) }));
-  ok(await desk.saveSchedule(options.schedule ?? {}));
+  ok(await desk.saveSchedule(options.schedule ?? { firstText: "when-confirmed" }));
   if (options.uploadCode) {
     const link = String(ok(await desk.saveDoorCode({}, PIN_KEY)).uploadUrl);
     const posted = await desk.uploadDoorCode(link.slice(link.lastIndexOf("/") + 1), { code: DOOR_CODE });

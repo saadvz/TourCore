@@ -232,7 +232,7 @@ describe("Cleaner Core full setup: the diagram order", () => {
     const setup = review.setup as Record<string, unknown>;
     expect(setup.preferences).toEqual({ checklist: [], photosRequired: false, supplyNotes: false });
     expect(setup.access).toEqual({});
-    expect(setup.schedule).toEqual({ firstText: "when-confirmed", reminder: "morning-of", reminderTime: "8:00 AM", escalateTo: "host" });
+    expect(setup.schedule).toEqual({ firstText: "days-before-checkout", firstTextDays: 1, reminder: "morning-of", reminderTime: "8:00 AM", escalateTo: "host" });
     expect((setup.people as Record<string, unknown>).cleaner).toEqual({ phoneLast4: "0131" });
     expect(JSON.stringify(review).includes(DOOR_CODE)).toBe(false);
     expect((await call(wired, "activate")).isError).toBe(false);
@@ -617,7 +617,8 @@ async function withSchedule(schedule: ScheduleInput | undefined, groupChat: "0" 
   ok(await desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" }));
   ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana" }));
-  if (schedule) ok(await desk.saveSchedule(schedule));
+  // These tests time the offer only when they say so. Otherwise it goes once the times are confirmed.
+  if (schedule) ok(await desk.saveSchedule({ firstText: "when-confirmed", ...schedule }));
   ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
   ok(await desk.savePreferences({}));
   ok(await desk.activate());
@@ -695,6 +696,26 @@ describe("Cleaner Core schedule: the first cleaning text", () => {
   it("days-before-checkout already past sends the offer on the next check", async () => {
     const { desk, sms } = await withSchedule({ firstText: "days-before-checkout", firstTextDays: 7 }, "0");
     await optIn(desk, "0");
+    expect(offers(sms.sent)).toHaveLength(1);
+  });
+
+  it("the default holds the offer until 9:00 AM the day before checkout", async () => {
+    const time = testClock(FROZEN);
+    const { desk, sms } = openDesk([HOST, CLEANER], "0", time.now);
+    ok(await desk.getState("cleaners"));
+    ok(await desk.saveProperty({ business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" }));
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana" }));
+    ok(await desk.saveSchedule({}));
+    ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
+    ok(await desk.savePreferences({}));
+    ok(await desk.activate());
+    ok(await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" }));
+    await optIn(desk, "0");
+    expect(offers(sms.sent)).toEqual([]);
+    await alertsAt(desk, time, "2026-10-17T12:59:00.000Z");
+    expect(offers(sms.sent)).toEqual([]);
+    await alertsAt(desk, time, "2026-10-17T13:00:00.000Z");
     expect(offers(sms.sent)).toHaveLength(1);
   });
 
@@ -931,6 +952,20 @@ describe("Cleaner Core schedule: save_schedule", () => {
     expect((await desk.saveSchedule({ firstText: "never" as never })).ok).toBe(false);
     expect(askStep(ok(await desk.getState()))).toBe("schedule");
     expect(askStep(ok(await desk.saveSchedule({ reminder: "days-before-checkout", reminderDays: 14, reminderTime: "07:30" })))).toBe("preferences");
+  });
+
+  it("does not carry the saved days over when the first text changes between after check-in and before checkout", async () => {
+    const { desk } = openDesk([HOST, CLEANER], "0");
+    ok(await desk.getState("cleaners"));
+    ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" }));
+    ok(await desk.saveSources({ calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }));
+    ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
+    ok(await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 5 }));
+    expect((await desk.saveSchedule({ firstText: "days-before-checkout" })).ok).toBe(false);
+    ok(await desk.saveSchedule({ firstText: "days-before-checkout", firstTextDays: 3 }));
+    // The same kind keeps its saved days.
+    ok(await desk.saveSchedule({ reminderTime: "07:00" }));
+    expect((await desk.saveSchedule({ firstText: "days-after-check-in" })).ok).toBe(false);
   });
 });
 
@@ -2189,7 +2224,7 @@ describe("Cleaner Core full diagram", () => {
     await say("save_property", { business: LANE.hostName, address, timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" });
     await say("save_sources", { google: true });
     await say("save_people", { host, cleaner, cleanerName: "Ana", groupChat: "cleaner-only" });
-    await say("save_schedule", {});
+    await say("save_schedule", { firstText: "when-confirmed" });
     expect(String((await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK })).next)).toContain("Saved the door code.");
     expect(askStep((await say("get_state")))).toBe("preferences");
     await say("save_preferences", {});
@@ -2238,7 +2273,7 @@ describe("Cleaner Core door-code write guard: ids that only hold the digits", ()
       ["save_property", { business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30", checkInTime: "15:00" }],
       ["save_sources", { google: true }],
       ["save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }],
-      ["save_schedule", {}],
+      ["save_schedule", { firstText: "when-confirmed" }],
       ["save_door_code", { code: DOOR_CODE, lockLocation: LOCK }],
       ["save_preferences", {}],
       ["activate", { googleEvents: googleList(stays) }],

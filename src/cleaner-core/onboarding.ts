@@ -14,8 +14,9 @@ export const PEOPLE_PROMPT =
   "Who should get texts? Send the cleaner's phone, then each other person's role and phone. Roles are owner, manager, or observer. I won't text anyone until they reply YES.";
 export const PEOPLE_RETRY =
   "Send the cleaner phone, then each other person as a role and a phone. Use owner, manager, or observer. Each phone has to be a Scratch number for this property.";
+// This setup saves only quiet hours and who to escalate to, so it asks for nothing else.
 export const SCHEDULE_PROMPT =
-  "When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.";
+  "Which quiet hours should cleaning texts wait out, and who should I escalate problems to? For example: quiet hours 9:00 PM to 8:00 AM, escalate to the host.";
 export const SCHEDULE_RETRY = "Send quiet hours as a start and an end, and say who to escalate to.";
 export const ACCESS_PROMPT =
   "What is the permanent outdoor code, and where is the lock? I store a sealed reference and never print the digits. This demo cannot rotate, revoke, or control the lock. When you change the code, change it on the lock yourself, then tell me it changed.";

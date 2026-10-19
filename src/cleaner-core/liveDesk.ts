@@ -154,7 +154,7 @@ const REMINDERS = ["morning-of", "days-before-checkout"] as const;
  */
 const SCHEDULED_REMINDER = "scheduled";
 const DEFAULT_REMINDER = "morning-of";
-const DEFAULT_SCHEDULE: Schedule = { firstText: "when-confirmed", reminder: "morning-of", reminderTime: "08:00" };
+const DEFAULT_SCHEDULE: Schedule = { firstText: "days-before-checkout", firstTextDays: 1, reminder: "morning-of", reminderTime: "08:00" };
 const CONTACT_ROLES = ["co-host", "assistant", "observer"] as const;
 const GROUP_CHOICES = ["cleaner-only", "cleaner-and-host", "everyone"] as const;
 
@@ -928,7 +928,8 @@ export class LiveDesk {
     const days = (value: number | undefined) => (value !== undefined && Number.isInteger(value) && value >= MIN_SCHEDULE_DAYS && value <= MAX_SCHEDULE_DAYS ? value : undefined);
     const dayRange = `${MIN_SCHEDULE_DAYS} to ${MAX_SCHEDULE_DAYS} days`;
     const timedFirstText = firstText === "days-after-check-in" || firstText === "days-before-checkout";
-    const firstTextDays = timedFirstText ? days(input.firstTextDays ?? saved.firstTextDays) : undefined;
+    // Saved days carry over only while the kind stays the same.
+    const firstTextDays = timedFirstText ? days(input.firstTextDays ?? (firstText === saved.firstText ? saved.firstTextDays : undefined)) : undefined;
     if (timedFirstText && firstTextDays === undefined) {
       const side = firstText === "days-after-check-in" ? "after check-in" : "before checkout";
       return this.fail(`Say how many days ${side} the first text goes, ${dayRange}.`);
