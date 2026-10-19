@@ -120,6 +120,10 @@ const DOOR_CODE_QUESTION = "You added other people to the group. Should the door
 const TOO_MANY = "That's a lot of messages this hour. Try again later.";
 /** The approval action for a property reset. It is bound to this property's group, so a changed group voids it. */
 const RESET_ACTION = "cleaner-reset-property";
+const HOLD_ACTION = "cleaner-hold";
+const RESUME_ACTION = "cleaner-resume";
+const CLEANING_TARGET = "cleaning";
+const ALREADY_HELD = "The cleaning is already on hold. Resume it with resume_job when the host says so.";
 const RESET_TARGET = "property";
 const RESET_GROUP_KEPT = "I couldn't remove the group text on Twilio, so nothing was reset. Try again in a few minutes.";
 const RESET_NOT_DONE = "I couldn't reset Cleaner Core just now, so nothing else was changed. Try again in a few minutes.";
@@ -1646,13 +1650,57 @@ export class LiveDesk {
     return this.reply({ next: result.sent.length > 0 ? RETRY_SENT : RETRY_NOTHING, turns: this.turns() });
   }
 
-  resumeCleaning(): Promise<ToolReply> {
-    return this.serial(() => this.resumeCleaningNow());
+  /**
+   * Pauses the cleaning, only on the host's yes. Without a confirmation it returns the question to ask
+   * the host and an approval code. With the code, no offer, reminder, or door code goes out until the
+   * host resumes it, and the cleaner gets one hold line.
+   */
+  holdJob(input: { confirmation?: string }): Promise<ToolReply> {
+    return this.serial(() => this.holdJobNow(input));
   }
 
-  private async resumeCleaningNow(): Promise<ToolReply> {
+  private async holdJobNow(input: { confirmation?: string }): Promise<ToolReply> {
     this.resume();
     if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
+    if (this.engine.jobOnHold()) return this.reply({ next: ALREADY_HELD });
+    const address = this.file.address;
+    const fingerprint = createHash("sha256").update(`hold|${address}`).digest("hex");
+    const code = input.confirmation?.trim() ?? "";
+    if (!code) {
+      const next = `Pause the cleaning at ${address}? No cleaning offer, reminder, or door code goes out until you resume it, and the cleaner gets one text saying it's on hold. Reply yes to pause.`;
+      return this.reply({ next, confirmation: this.approvals.issue(HOLD_ACTION, CLEANING_TARGET, fingerprint, next) });
+    }
+    try {
+      this.approvals.redeem(code, HOLD_ACTION, CLEANING_TARGET, fingerprint);
+    } catch {
+      return this.fail(APPROVAL_STALE);
+    }
+    await this.engine.hostHold(`hold-${randomUUID()}`);
+    this.syncHold();
+    this.persist();
+    return this.reply({ next: jobHoldLine(address), turns: this.turns() });
+  }
+
+  /** Resumes a cleaning on hold, only on the host's yes, with the same preview and approval code as hold_job. */
+  resumeCleaning(input: { confirmation?: string } = {}): Promise<ToolReply> {
+    return this.serial(() => this.resumeCleaningNow(input));
+  }
+
+  private async resumeCleaningNow(input: { confirmation?: string }): Promise<ToolReply> {
+    this.resume();
+    if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
+    const address = this.file.address;
+    const fingerprint = createHash("sha256").update(`resume|${address}`).digest("hex");
+    const code = input.confirmation?.trim() ?? "";
+    if (!code) {
+      const next = `Resume the cleaning at ${address}? Cleaning texts and the door code can go out again under the usual rules. Reply yes to resume.`;
+      return this.reply({ next, confirmation: this.approvals.issue(RESUME_ACTION, CLEANING_TARGET, fingerprint, next) });
+    }
+    try {
+      this.approvals.redeem(code, RESUME_ACTION, CLEANING_TARGET, fingerprint);
+    } catch {
+      return this.fail(APPROVAL_STALE);
+    }
     await this.engine.resumeJob();
     this.syncHold();
     this.persist();

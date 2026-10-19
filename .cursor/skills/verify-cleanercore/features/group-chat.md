@@ -9,9 +9,9 @@ Cory is in the cleaning thread from the texting setup step and does not text YES
 - `held` sends no code after the cleaner replies STOP, and the job does not clear.
 - `stop-host` drops Cory from later group texts and leaves Maria on them.
 - `resume` sends one resume line to Cory. Maria's START does not clear the hold.
-- `time` leaves 11:00 AM in place and tells the thread Cory will confirm it.
+- `time` leaves 11:00 AM in place. Cleaner Core sends no time line; Grok reads the message and tells Cory.
 - `injury` sends the one-on-one 911 lines and the injury hold to Cory, and no group text.
-- `problem` sends the hold line to Cory and Maria and nothing to the thread.
+- `problem` holds nothing and opens no review. Grok reads the message, tells Cory, and asks whether to pause; only Cory's yes pauses it, with `hold_job`.
 - `before-yes` sends Maria's invite one-on-one and no group text. Cory is not asked to reply YES.
 - `inert` keeps the old private door code when group chat is off.
 - `done` reaches done from Maria's START and DONE. Cory gets one ready line.
@@ -26,7 +26,7 @@ Cory is in the cleaning thread from the texting setup step and does not text YES
 - Maria gets one text naming the group and replies YES. Cory is already in the thread from the texting setup step.
 - The host confirms 11:00 AM and 4:00 PM through confirm times. Maria replies YES to schedule.
 - The host says the guests have left. The code goes to Maria alone. The thread does not receive it.
-- A time, a STOP, a hurt message, or a problem in the thread follows the rules above. Only the host's resume puts the job back on.
+- A time, a STOP, a hurt message, or a problem in the thread follows the rules above. Only the host pauses a cleaning, and only the host's resume puts the job back on.
 
 ## Driving it with the cleaner doctor/smoke CLI
 

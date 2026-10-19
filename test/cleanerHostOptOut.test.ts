@@ -21,7 +21,7 @@ const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner r
 const OWNER_HOLD = `The cleaning at ${ADDRESS} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
 const HOST_START_HELD = `You'll get cleaning texts for ${ADDRESS} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`;
-const ON_HOLD = "The cleaning is on hold. I'll text you when it can start again.";
+const ON_HOLD = "The cleaning is on hold. I'll send an update when it can start again.";
 
 const HOST_KIND_RULE = {
   "host-checkout": "blocked",
@@ -321,7 +321,7 @@ describe("ordered STOP, reminder, and DONE on the Twilio log", () => {
     await desk.inbound({ id: "done", from: LANE.cleanerPhone, text: "DONE" });
     const after = sms.sent.slice(afterStop).map((item) => ({ to: item.to, body: item.body.split(LANE.pin).join("[redacted]") }));
     expect(after.filter((item) => item.to === HOST)).toEqual([]);
-    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "The cleaning is on hold. I'll text you when it can start again." }]);
+    expect(after).toEqual([{ to: LANE.cleanerPhone, body: "The cleaning is on hold. I'll send an update when it can start again." }]);
     const state = await desk.getState();
     if (!state.ok) throw new Error("missing state");
     expect(state.result.next).toBe(OWNER_HOLD);

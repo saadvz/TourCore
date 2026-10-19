@@ -1,3 +1,4 @@
+import { approvedTool } from "./hostApproval";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -157,7 +158,7 @@ describe("host texts after 46105bc", () => {
     expect(hostBodies(wired.cleanerSent.slice(startAt), LANE.pin)).toEqual([HOST_START_HELD]);
     expect((await call(wired, "get_turns")).text).toContain("\"held\":true");
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).not.toBe(PIN_SENT);
-    expect((await call(wired, "resume_job")).isError).toBe(false);
+    expect((await approvedTool((args) => call(wired, "resume_job", args))).isError).toBe(false);
     expect((await call(wired, "get_turns")).text).not.toContain("\"held\":true");
     const cleanerHeld = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" }))).toBe("The test text went through.");
@@ -181,7 +182,7 @@ describe("host texts after 46105bc", () => {
     await confirmJob(wired);
     expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
     const afterStop = wired.cleanerSent.length;
-    expect((await call(wired, "resume_job")).isError).toBe(false);
+    expect((await approvedTool((args) => call(wired, "resume_job", args))).isError).toBe(false);
     expect(nextOf(await call(wired, "mark_guests_left", { confirmed: true }))).toBe(PIN_SENT);
     expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "START" }))).toBe("The test text went through.");
     expect((await call(wired, "get_turns")).text).toContain("\"status\":\"in_progress\"");

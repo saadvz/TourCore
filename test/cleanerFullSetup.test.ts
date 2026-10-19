@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
-import { cleanerOptOutHold, groupTimeLine, offerForOthers } from "../src/cleaner-core/cleanerTexts";
+import { cleanerOptOutHold, offerForOthers } from "../src/cleaner-core/cleanerTexts";
+import { postToGroup } from "./hostApproval";
 import type { CleanerCore } from "../src/cleaner-core/core";
 import { DOOR_CODE_IN_CHAT, drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
@@ -46,7 +47,8 @@ const PIN_KEY = Buffer.from(TEST_PIN_KEY, "base64");
 const SECOND = "+15555550133";
 const LOCK = "back door lockbox";
 /** LiveDesk names the business when no host name is saved. */
-const TIME = groupTimeLine(BUSINESS);
+/** A host message to the group: the probe for who is in it. */
+const NOTE = "Please bring extra towels.";
 
 /** The setup step get_state is asking about. */
 function askStep(state: Record<string, unknown> | undefined): string | undefined {
@@ -433,8 +435,8 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     await desk.inbound({ id: "yes-sam", from: OBSERVER, text: "YES" });
     await desk.inbound({ id: "yes-lee", from: SECOND, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
-    await desk.inbound({ id: "time", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    expect(groups.posts.find((post) => post.body === TIME)?.to).toEqual([HOST, CLEANER, OBSERVER, SECOND].sort());
+    expect(ok(await postToGroup(desk, NOTE)).next).toBe("Sent to the group.");
+    expect(groups.posts.find((post) => post.body === NOTE)?.to).toEqual([HOST, CLEANER, OBSERVER, SECOND].sort());
 
     ok(await desk.markGuestsLeft({ confirmed: true }, PIN_KEY));
     expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
@@ -470,8 +472,8 @@ describe("Cleaner Core full setup: who gets the texts", () => {
     await desk.inbound({ id: "yes-host", from: HOST, text: "YES" });
     await desk.inbound({ id: "yes-cleaner", from: CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: CLEANER, text: "YES" });
-    await desk.inbound({ id: "time", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
-    expect(groups.posts.find((post) => post.body === TIME)?.to).toEqual([HOST, CLEANER].sort());
+    expect(ok(await postToGroup(desk, NOTE)).next).toBe("Sent to the group.");
+    expect(groups.posts.find((post) => post.body === NOTE)?.to).toEqual([HOST, CLEANER].sort());
     expect(sms.sent.some((item) => item.to === OBSERVER)).toBe(false);
     ok(await desk.markGuestsLeft({ confirmed: true }, PIN_KEY));
     // The group holds only the host and the cleaner, so the code goes into it. The contact is never in it.
@@ -1160,6 +1162,55 @@ describe("Cleaner Core tools take Grok's structured answers", () => {
     const nothing = await callTool(desk, "retry_send", { confirmed: true });
     expect(nothing.isError).toBe(false);
     expect(textOf(nothing)).toContain("Nothing is waiting to be sent again.");
+  });
+});
+
+describe("Cleaner Core pauses only on the host's yes", () => {
+  const callTool = (desk: LiveDesk, name: string, args: Record<string, unknown> = {}) => mcp(desk, "tools/call", { name, arguments: args });
+  const structuredOf = (result: Record<string, unknown>) => (result.structuredContent ?? {}) as { next?: string; confirmation?: { code: string; question: string } };
+  const heldNow = async (desk: LiveDesk) => Boolean(ok(await desk.getTurns()).held);
+
+  it("does not pause on a cleaner's problem text, and pauses and resumes only with the host's approval code", async () => {
+    const { desk, sms } = await confirmedCleaner();
+    await desk.inbound({ id: "problem", from: CLEANER, text: "The lock is broken, I can't get in" });
+    await desk.inbound({ id: "no-problem", from: CLEANER, text: "No problem, see you then" });
+    expect(await heldNow(desk)).toBe(false);
+
+    const asked = await callTool(desk, "hold_job");
+    expect(asked.isError).toBe(false);
+    const question = structuredOf(asked);
+    expect(question.next).toMatch(/^Pause the cleaning at .+\? .+ Reply yes to pause\.$/);
+    expect(question.confirmation?.code).toMatch(/^[A-Z2-9]{6}$/);
+    expect(await heldNow(desk)).toBe(false);
+    expect((await callTool(desk, "hold_job", { confirmation: "WRONG1" })).isError).toBe(true);
+    expect(await heldNow(desk)).toBe(false);
+
+    const before = sms.sent.length;
+    const paused = await callTool(desk, "hold_job", { confirmation: question.confirmation?.code });
+    expect(paused.isError).toBe(false);
+    expect(await heldNow(desk)).toBe(true);
+    expect(sms.sent.slice(before).map((text) => text.to)).toEqual([CLEANER]);
+    expect(structuredOf(await callTool(desk, "hold_job")).next).toMatch(/already on hold/);
+    expect(codeRecipients(sms.sent)).toEqual([]);
+    expect(ok(await desk.markGuestsLeft({ confirmed: true }, PIN_KEY)).next).toMatch(/on hold/);
+    expect(codeRecipients(sms.sent)).toEqual([]);
+
+    const resumeAsked = structuredOf(await callTool(desk, "resume_job"));
+    expect(resumeAsked.next).toMatch(/^Resume the cleaning at .+ Reply yes to resume\.$/);
+    expect(await heldNow(desk)).toBe(true);
+    expect((await callTool(desk, "resume_job", { confirmation: question.confirmation?.code })).isError).toBe(true);
+    expect((await callTool(desk, "resume_job", { confirmation: resumeAsked.confirmation?.code })).isError).toBe(false);
+    expect(await heldNow(desk)).toBe(false);
+    expect(ok(await desk.markGuestsLeft({ confirmed: true }, PIN_KEY)).next).toBe("I sent the door code to the cleaner. I'll tell you if it doesn't go through.");
+    expect(codeRecipients(sms.sent)).toEqual([CLEANER]);
+  });
+
+  it("tells Grok to ask the host before it pauses or resumes", async () => {
+    const tools = ((await mcp(openDesk([HOST, CLEANER], "0").desk, "tools/list")).tools as { name: string; description: string }[]) ?? [];
+    expect(tools.find((tool) => tool.name === "hold_job")?.description).toMatch(/Never pause on your own/);
+    expect(tools.find((tool) => tool.name === "resume_job")?.description).toMatch(/only after the host says yes/);
+    const text = String((await mcp(openDesk([HOST, CLEANER], "0").desk, "initialize")).instructions);
+    expect(text).toContain("Cleaner Core never pauses a cleaning because of how a message sounds.");
   });
 });
 

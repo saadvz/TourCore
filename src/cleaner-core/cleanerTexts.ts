@@ -247,7 +247,7 @@ export function cleanerNextStep(step: CleanerStep): string {
     case "needs-yes":
       return "Reply YES to schedule the cleaning, or STOP to opt out.";
     case "waiting-for-guests":
-      return "I'll text you the door code after the guests leave.";
+      return "The door code comes after the guests leave.";
     case "waiting-for-code":
       return "I haven't sent the door code yet. Reply DONE after I do.";
     case "in-progress":
@@ -255,7 +255,7 @@ export function cleanerNextStep(step: CleanerStep): string {
     case "already-done":
       return "This cleaning is already marked done.";
     case "on-hold":
-      return "The cleaning is on hold. I'll text you when it can start again.";
+      return "The cleaning is on hold. I'll send an update when it can start again.";
   }
 }
 
@@ -283,11 +283,8 @@ const GROUP_SEND_TOPICS = new Map<string, string>([
 ]);
 
 export function groupUnconfirmedLine(kind: string): string {
+  if (kind === "host-message") return "I couldn't send your message to the group.";
   const topic = GROUP_SEND_TOPICS.get(kind);
   if (!topic) return "I couldn't send that to the group.";
   return `I couldn't send the ${topic} to the group.`;
-}
-
-export function groupTimeLine(hostName: string): string {
-  return `${hostName} will confirm that time.`;
 }

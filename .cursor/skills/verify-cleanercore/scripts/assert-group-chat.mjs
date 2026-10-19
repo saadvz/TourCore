@@ -24,11 +24,15 @@ const HOST_RESTART = new Set([
   "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.",
 ]);
 const RESUME = `The cleaning at ${ADDRESS} is back on.`;
-const TIME = "Cory will confirm that time.";
+/** The automatic time reply Cleaner Core no longer sends. Grok reads a time and tells Cory. */
+const REMOVED_TIME_REPLY = "Cory will confirm that time.";
 const PRIVATE_LINE = "Maria got the door code privately.";
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you. Reply DONE when the cleaning is finished.`;
 const READY = `The cleaner marked the cleaning at ${ADDRESS} done.`;
-const OFFER_COPY = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.`;
+/** With only Cory and Maria in the group, the offer and the door code go into the group, addressed to Maria. */
+const GROUP_OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Maria, reply YES to schedule it.`;
+const GROUP_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. Maria, reply DONE when the cleaning is finished.`;
+const PAIR = JSON.stringify([OWNER, CLEANER]);
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
 const INJURY_HOLD = `The cleaning at ${ADDRESS} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
@@ -38,6 +42,16 @@ const sent = report.sent ?? [];
 const groups = sent.filter((text) => text.channel === "group");
 const pins = sent.filter((text) => text.kind === "pin");
 const clock = (report.jobs ?? []).find((job) => job.checkoutTime === "11:00 AM");
+
+/** A group post that only Cory and Maria see. */
+function toPair(text) {
+  return text.channel === "group" && JSON.stringify([...(text.audience ?? [])].sort()) === PAIR;
+}
+
+/** The door code may sit only in a group of exactly Cory and Maria. */
+function codeOnlyInPair() {
+  if (groups.some((text) => (text.body.includes("Door code") || text.body.includes("[redacted]")) && !toPair(text))) fail("code in a wider group");
+}
 
 function fail(message) {
   process.stderr.write(`${journey}: ${message}\n`);
@@ -66,9 +80,9 @@ for (const match of JSON.stringify(report).matchAll(/\+1\d{10}/g)) {
 const checks = {
   eligible() {
     if (pins.length !== 1) fail(`pin count ${pins.length}`);
-    if (pins[0].channel || pins[0].to !== CLEANER) fail("pin route");
-    if (pins[0].body !== PRIVATE_PIN) fail("pin body");
-    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+    if (!toPair(pins[0]) || pins[0].to !== CLEANER) fail("pin route");
+    if (pins[0].body !== GROUP_PIN) fail("pin body");
+    codeOnlyInPair();
     if (!clock || clock.status !== "cleared") fail("job");
   },
   private() {
@@ -80,16 +94,19 @@ const checks = {
   },
   held() {
     if (pins.length !== 0) fail("pin sent");
-    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group text");
+    if (!groups.some((text) => text.body === GROUP_OFFER && toPair(text))) fail("group offer");
+    const stop = sent.findIndex((text) => text.kind === "stop");
+    if (stop < 0 || sent.slice(stop + 1).some((text) => text.channel === "group")) fail("group text after STOP");
     if (!sent.some((text) => text.to === OWNER && text.body === STOP_HOLD)) fail("stop hold");
     if (sent.some((text) => text.to === CLEANER && text.body.includes("[redacted]"))) fail("cleaner saw the code");
     if (!clock || clock.status === "cleared" || clock.status === "done") fail("job moved");
   },
   "stop-host"() {
-    const time = groups.filter((text) => text.body === TIME);
-    if (time.length !== 1) fail("time reply");
-    if (JSON.stringify(time[0].audience) !== JSON.stringify([CLEANER])) fail("host still in the audience");
-    if (sent.some((text) => text.to === OWNER && text.body === TIME)) fail("time went to the host");
+    // A time from the cleaner goes to Grok. Cleaner Core sends no time line, and nothing in the group reaches the host after STOP.
+    if (sent.some((text) => text.body === REMOVED_TIME_REPLY)) fail("time reply");
+    const stop = sent.findIndex((text) => text.kind === "stop" && text.to === OWNER);
+    if (stop < 0) fail("host stop");
+    if (sent.slice(stop + 1).some((text) => text.to === OWNER || text.audience?.includes(OWNER))) fail("host still in the audience");
   },
   resume() {
     const notes = sent.filter((text) => text.body === RESUME);
@@ -100,25 +117,23 @@ const checks = {
   },
   time() {
     if (!clock || clock.checkoutTime !== "11:00 AM") fail("clock moved");
-    const copy = groups.filter((text) => text.body === OFFER_COPY);
-    if (copy.length !== 1 || JSON.stringify(copy[0].audience) !== JSON.stringify([OWNER, CLEANER])) fail("offer copy");
-    if (groups.filter((text) => text.body === TIME).length !== 1) fail("time reply");
-    if (groups.some((text) => text.body !== TIME && text.body !== OFFER_COPY)) fail("extra group text");
+    const offers = groups.filter((text) => text.body === GROUP_OFFER);
+    if (offers.length !== 1 || !toPair(offers[0])) fail("group offer");
+    if (sent.some((text) => text.body === REMOVED_TIME_REPLY)) fail("time reply");
   },
   injury() {
     const emergency = sent.filter((text) => text.kind === "emergency");
     if (emergency.length !== 3) fail("911 count");
-    if (emergency[0].to !== OWNER || emergency[0].body !== HOST_HURT || emergency[0].channel) fail("host 911");
+    // Both 911 lines go into the group. The restart note names Grok, so it stays one-to-one with Cory.
+    if (emergency[0].body !== HOST_HURT || !toPair(emergency[0])) fail("host 911");
     if (emergency[1].to !== OWNER || emergency[1].body !== INJURY_HOLD || emergency[1].channel) fail("injury hold");
-    if (emergency[2].to !== CLEANER || emergency[2].body !== HURT || emergency[2].channel) fail("cleaner 911");
-    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group saw 911");
-    if (sent.some((text) => text.body === TIME)) fail("group handling ran first");
+    if (emergency[2].body !== HURT || !toPair(emergency[2])) fail("cleaner 911");
+    if (sent.some((text) => text.body === REMOVED_TIME_REPLY)) fail("group handling ran first");
   },
   problem() {
-    if (groups.length !== 1 || groups[0].body !== OFFER_COPY) fail("group saw the hold");
-    if (!sent.some((text) => text.to === OWNER && text.kind === "review" && text.body === HOLD)) fail("host hold");
-    if (!sent.some((text) => text.to === CLEANER && text.kind === "held" && text.body === HOLD)) fail("cleaner hold");
-    if (pins.length !== 0) fail("pin during hold");
+    // Only the host pauses a cleaning, through Grok. A problem text holds nothing and opens no review.
+    if (sent.some((text) => text.kind === "review" || text.body === HOLD || text.body.includes("is on hold"))) fail("automatic hold");
+    if (pins.length !== 0) fail("pin");
   },
   "before-yes"() {
     if (groups.length !== 0) fail("group text before YES");
@@ -134,28 +149,29 @@ const checks = {
     if (!finished) fail("not done");
     if (sent.some((text) => text.body === "Got it, cleaning started.")) fail("start");
     if (sent.filter((text) => text.to === CLEANER && text.body === "Thanks, cleaning marked done.").length !== 1) fail("done");
-    const ready = sent.filter((text) => text.to === OWNER && text.body === READY);
-    if (ready.length !== 1 || ready[0].channel) fail("ready line");
+    // Cory's ready line is a group post, not a text to Cory.
+    const ready = sent.filter((text) => text.body === READY);
+    if (ready.length !== 1 || !toPair(ready[0])) fail("ready line");
     const again = sent.filter((text) => text.body === "This cleaning is already marked done.");
-    if (again.length !== 1 || again[0].to !== CLEANER || again[0].channel) fail("second done");
-    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+    if (again.length !== 1 || again[0].to !== CLEANER) fail("second done");
+    codeOnlyInPair();
   },
   done() {
     const finished = (report.jobs ?? []).find((job) => job.status === "done");
     if (!finished) fail("not done");
     if (!sent.some((text) => text.to === CLEANER && text.body === "Got it, cleaning started.")) fail("start");
     if (!sent.some((text) => text.to === CLEANER && text.body === "Thanks, cleaning marked done.")) fail("done");
-    const ready = sent.filter((text) => text.to === OWNER && text.body === READY);
-    if (ready.length !== 1 || ready[0].channel) fail("ready line");
-    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+    const ready = sent.filter((text) => text.body === READY);
+    if (ready.length !== 1 || !toPair(ready[0])) fail("ready line");
+    codeOnlyInPair();
   },
   twice() {
-    if (pins.length !== 1 || pins[0].body !== PRIVATE_PIN || pins[0].channel) fail("second pin");
-    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+    if (pins.length !== 1 || pins[0].body !== GROUP_PIN || !toPair(pins[0])) fail("second pin");
+    codeOnlyInPair();
   },
   failed() {
-    if (pins.length !== 1 || pins[0].channel || pins[0].to !== CLEANER || pins[0].body !== PRIVATE_PIN) fail("private retry");
-    if (groups.some((text) => text.body.includes("Door code") || text.body.includes("[redacted]"))) fail("group saw the code");
+    if (pins.length !== 1 || pins[0].to !== CLEANER || pins[0].body !== GROUP_PIN || !toPair(pins[0])) fail("retry");
+    codeOnlyInPair();
   },
 };
 
