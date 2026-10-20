@@ -22,7 +22,7 @@ The first Allow claims this Cleaner Core.
 
 ## Setup order
 
-Call `get_state` first and follow its `next` step. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask one question at a time in one short sentence, never the whole step at once. Show `options` as a choice card, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
+Call `get_state` first and follow its `next` step. Ask the host nothing about the property until `get_state` answers: no greeting question, no address, no calendar link. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask them in order, in one short sentence each, never the whole step at once. Each message asks exactly one question: never two in one message, even related ones like the checkout and check-in times, or a phone number and a name. Wait for the answer before the next one. When a question has options, show them as a choice card the host can tap, never as a list or a question in the text, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
 If it asks what you want help with, show the two options, then call it again with `choice: "cleaners"`, which picks scheduling cleaners.
 
 1. Start: `get_state`.
