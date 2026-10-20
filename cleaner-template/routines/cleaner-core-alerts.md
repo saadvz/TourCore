@@ -78,7 +78,8 @@ routine runs, it wakes once, and `check_now` returns all of them.
 
 ## Connecting it
 
-After Activate and the checks, `get_state` asks for the two routines. Then:
+After the preferences and before the review, `get_state` asks for the two
+routines. Then:
 
 1. Grok creates this routine with an authenticated webhook trigger and the
    instructions above.
@@ -90,7 +91,8 @@ After Activate and the checks, `get_state` asks for the two routines. Then:
    values are never in chat or a tool argument. A 400 reply means a value was
    wrong, and the link still works. A 404 means ask for a new link.
 4. Call `get_state` to confirm. Cleaner Core sends one `installation.test`.
-   Grok posts "Cleaner Core alerts are connected." and the setup is done.
+   Grok posts "Cleaner Core alerts are connected." and `get_state` moves on to
+   the review.
 
 If a value was pasted in chat anyway, Grok doesn't repeat it and asks the host
 to rotate the key.

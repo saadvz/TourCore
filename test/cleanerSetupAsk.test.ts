@@ -103,7 +103,13 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     }
     expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
     expect(askOf((await call(wired, "get_state")).structured).step).toBe("preferences");
-    const review = (await call(wired, "save_preferences", {})).structured;
+    const routines = (await call(wired, "save_preferences", {})).structured;
+    expect(routines?.ask).toBeUndefined();
+    expect(String(routines?.next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
+    setCleanerAlertFetch(async () => ({ status: 200 }));
+    const saved = (await call(wired, "save_alert_routine", { url: "https://routine.example/hook", token: "k-test-routine-key" })).structured;
+    expect(saved?.next).toBe("Alerts are connected. I queued a test alert for the routine. Then call get_state for the review.");
+    const review = (await call(wired, "get_state")).structured;
     expect(review?.ask).toBeUndefined();
     expect(review?.next).toBe("Summarize this setup for the host in your own words, then ask them to reply Activate.");
   });
@@ -268,7 +274,7 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
   });
 });
 
-/** A group setup with the two test stays, activated, with the alert routine saved. */
+/** A group setup with the two test stays, with the alert routine saved, then activated. Without the routine it stops before the review. */
 async function activatedGroup(
   options: { uploadCode?: boolean; hostName?: string; schedule?: Parameters<ReturnType<typeof liveDeskFor>["saveSchedule"]>[0]; now?: () => Date; connectRoutine?: boolean } = {},
 ) {
@@ -302,12 +308,7 @@ async function activatedGroup(
     const posted = await desk.uploadDoorCode(link.slice(link.lastIndexOf("/") + 1), { code: DOOR_CODE });
     expect(posted.status).toBe(200);
   } else ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
-  ok(await desk.savePreferences({}));
-  if (options.hostName) {
-    const review = ok(await desk.getState()).setup as { people: { host: Record<string, unknown> } };
-    expect(review.people.host).toEqual({ name: options.hostName, phoneLast4: HOST.slice(-4) });
-  }
-  ok(await desk.activate());
+  const preferences = ok(await desk.savePreferences({}));
   // The routine counts only once this setup connects it. The env already holds its values.
   const posts: string[] = [];
   setCleanerAlertFetch(async (_url, init) => {
@@ -316,23 +317,46 @@ async function activatedGroup(
   });
   // Stands in for the secret store.
   const save = (values: Record<string, string>) => Object.assign(env, values);
-  if (options.connectRoutine !== false) ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
-  return { desk, sms, groups, posts, save };
+  if (options.connectRoutine === false) return { desk, sms, groups, posts, save, preferences };
+  ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+  if (options.hostName) {
+    const review = ok(await desk.getState()).setup as { people: { host: Record<string, unknown> } };
+    expect(review.people.host).toEqual({ name: options.hostName, phoneLast4: HOST.slice(-4) });
+  }
+  ok(await desk.activate());
+  return { desk, sms, groups, posts, save, preferences };
 }
 
-describe("Cleaner Core routines: an address left by an earlier setup", () => {
-  it("asks for the routines again and wakes nothing until this setup connects one", async () => {
+describe("Cleaner Core routines: asked before the review", () => {
+  it("save_preferences asks for the routines, and activate waits until this setup connects one", async () => {
     // The env holds a routine address from before, as after a new bot reuses the same server.
-    const { desk, posts, save } = await activatedGroup({ connectRoutine: false });
-    expect(String(ok(await desk.getState()).next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
-    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    const { desk, posts, save, preferences } = await activatedGroup({ connectRoutine: false });
+    expect(String(preferences.next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
+    const state = ok(await desk.getState());
+    expect(String(state.next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
+    expect(state.setup).toBeUndefined();
+    const refused = await desk.activate();
+    expect(refused.ok).toBe(false);
+    expect(String(!refused.ok && refused.error)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
     await desk.drainAlerts();
     expect(posts).toEqual([]);
 
-    ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+    const saved = ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+    expect(saved.next).toBe("Alerts are connected. I queued a test alert for the routine. Then call get_state for the review.");
     await desk.drainAlerts();
-    expect(posts.length).toBeGreaterThan(0);
+    expect(posts.map((body) => JSON.parse(body).eventType)).toEqual(["installation.test"]);
+    const review = ok(await desk.getState());
+    expect(review.next).toBe("Summarize this setup for the host in your own words, then ask them to reply Activate.");
+    expect(review.setup).toBeDefined();
+    ok(await desk.activate());
     expect(askOf(ok(await desk.getState())).step).toBe("times");
+  });
+
+  it("the Check routine waking before Activate gets a quiet reply", async () => {
+    const { desk, save } = await activatedGroup({ connectRoutine: false });
+    ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+    const early = ok(await desk.checkNow({}));
+    expect(early).toMatchObject({ alerts: [], messages: [], next: "Cleaner Core isn't active yet. Post nothing." });
   });
 });
 
@@ -450,6 +474,8 @@ describe("Cleaner Core setup: the door code from Grok's secure card", () => {
     expect(state?.done).toContain("Door code saved.");
     expect(askOf(state).step).toBe("preferences");
     await call(wired, "save_preferences", {});
+    setCleanerAlertFetch(async () => ({ status: 200 }));
+    await call(wired, "save_alert_routine", { url: "https://routine.example/hook", token: "k-test-routine-key" });
     expect(JSON.stringify((await call(wired, "get_state")).structured?.setup)).toContain("front door keypad");
     for (const text of [JSON.stringify(state), issued.raw, saved.raw, wired.logs.join("\n")]) expect(text.includes(DOOR_CODE)).toBe(false);
     expect(wired.logs.join("\n").includes(code)).toBe(false);

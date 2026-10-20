@@ -64,6 +64,8 @@ const PIN_REENTER = "Please enter the door code again in the private box. Don't 
 export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
 const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
 const ROUTINE_SAVED = "Alerts are connected. I queued a test alert for the routine.";
+const ROUTINE_SAVED_IN_SETUP = `${ROUTINE_SAVED} Then call get_state for the review.`;
+const NOT_ACTIVE_YET = "Cleaner Core isn't active yet. Post nothing.";
 const ROUTINE_NEEDED =
   "Send the routine's https address and its key. If your secure card can't pass them to a tool, call save_alert_routine with no arguments to get a one-time upload link.";
 /** Where Grok's own computer posts the routine's address and key. The rest of the path is the one-time code. */
@@ -615,7 +617,7 @@ export class LiveDesk {
     if (!url && !token) return this.issueUpload(pinKey);
     if (this.routineRefused(url, token, pinKey)) return this.fail(ROUTINE_NEEDED);
     this.connectRoutine(url, token, save);
-    return this.reply({ next: ROUTINE_SAVED });
+    return this.reply({ next: this.cleaningState().next === REVIEW_ASK ? ROUTINE_SAVED_IN_SETUP : ROUTINE_SAVED });
   }
 
   /**
@@ -1253,6 +1255,8 @@ export class LiveDesk {
   activate(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
     return this.serial(async () => {
       if (!this.file.preferences) return this.fail("Save the cleaning preferences first, or save empty ones if there are none.");
+      // Nothing texts before the alert routine is connected, so no reply from the cleaner goes unheard.
+      if (!this.routineReady()) return this.fail(ROUTINE_ASK);
       // Already inside the serial queue, so the inner steps, never runChecks.
       const texting = this.setUpTextingNow();
       if (!texting.ok) return texting;
@@ -1315,6 +1319,8 @@ export class LiveDesk {
   private async checkNowSerial(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
     this.resume();
     const engine = this.engine;
+    // The routines are created before Activate, so the Check routine can wake first.
+    if (!this.file.checked && !this.file.texting && this.routineReady()) return this.reply({ alerts: [], messages: [], next: NOT_ACTIVE_YET });
     if (!this.file.checked || !engine) return this.fail("Run the checks first.");
     const read = await this.readCalendars(input.googleEvents);
     await engine.runReminders();
@@ -2225,9 +2231,12 @@ export class LiveDesk {
     else if (!this.codeSaved()) ask = DOOR_CODE_STEP;
     else if (!this.file.texting && !preferences) ask = PREFERENCES_STEP;
     if (ask) next = askNext(ask.tool);
+    // The routines come before the review, so the cleaner's first reply already wakes Grok.
+    else if (!this.file.texting && !this.routineReady()) next = ROUTINE_ASK;
     else if (!this.file.texting) next = REVIEW_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
-    else if (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
+    // A setup that went live before the routines were asked at setup still needs them.
+    else if (!this.routineReady()) next = ROUTINE_ASK;
     else {
       const untimed = this.untimedTurns();
       if (untimed >= 2 && this.file.checkoutTime && this.file.checkInTime) {
@@ -2248,6 +2257,11 @@ export class LiveDesk {
       ...(this.file.checked ? { turns: this.turns() } : {}),
       ...(notes.length > 0 ? { notes } : {}),
     };
+  }
+
+  /** True when this setup connected the alert routine and its address is still saved. */
+  private routineReady(): boolean {
+    return Boolean(this.file.routineConnected && this.env().CLEANER_CORE_ROUTINE_URL?.trim());
   }
 
   /** The saved booking sources by name, Google Calendar last. Never a link. */
