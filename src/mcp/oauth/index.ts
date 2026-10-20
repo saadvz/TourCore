@@ -58,6 +58,8 @@ export interface McpOAuthOptions {
   approvalPlace?: () => "computer" | "hosted";
   publicApproval?: (clientId: string, resourcePath: string) => boolean;
   hostedClaimed?: (resourcePath: string) => boolean;
+  /** Which chat Cleaner Core's approval page names. Unset is Grok. */
+  cleanerAssistant?: () => "grok" | "claude";
   /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
   legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
@@ -131,6 +133,7 @@ export class McpOAuth {
       approvalPlace: options.approvalPlace,
       publicApproval: options.publicApproval,
       hostedClaimed: options.hostedClaimed,
+      ...(options.cleanerAssistant ? { cleanerAssistant: options.cleanerAssistant } : {}),
       log: this.log,
     });
     this.local = this.buildLocal();

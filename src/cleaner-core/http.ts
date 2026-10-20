@@ -1,9 +1,11 @@
 import { authorized } from "../mcp/mcpBridge";
+import { cleanerAssistant } from "./assistant";
 import { cleanerCoreEnabled } from "./flag";
 import { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, DOOR_CODE_UPLOAD_PREFIX, liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage, type DeleteSecrets, type SaveSecrets } from "./mcp";
 import { pinKeyFromHeader, serverPinKey } from "./pinSeal";
 import { scratchToolsOn } from "./scratchQa";
+import type { UploadPageKind } from "./uploadPage";
 import { CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
 export { ALERT_UPLOAD_PREFIX, CALENDAR_UPLOAD_PREFIX, DOOR_CODE_UPLOAD_PREFIX, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerGroupWebhook, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
@@ -71,7 +73,7 @@ export async function handleCleanerMcpHttp(input: {
   // The header wins. Without it (a Grok Bot connected by OAuth), the server's own key, made once.
   const pinKey = pinKeyFromHeader(input.pinKeyHeader) ?? serverPinKey(input.env(), input.saveSecrets);
   const desk = liveDeskFor(input.root, input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets, input.deleteSecrets);
+  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets, input.deleteSecrets, cleanerAssistant(env));
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }
@@ -100,6 +102,16 @@ export function doorCodeUploadCode(pathname: string): string | undefined {
   if (!pathname.startsWith(DOOR_CODE_UPLOAD_PREFIX)) return undefined;
   const code = pathname.slice(DOOR_CODE_UPLOAD_PREFIX.length);
   return UPLOAD_CODE.test(code) ? code : undefined;
+}
+
+/** Which upload link a path is, for a Claude deployment's private page. */
+export function uploadPageOf(pathname: string): { kind: UploadPageKind; code: string } | undefined {
+  const door = doorCodeUploadCode(pathname);
+  if (door) return { kind: "door-code", code: door };
+  const calendar = calendarUploadCode(pathname);
+  if (calendar) return { kind: "calendar-link", code: calendar };
+  const alert = alertUploadCode(pathname);
+  return alert ? { kind: "alert-routine", code: alert } : undefined;
 }
 
 /**

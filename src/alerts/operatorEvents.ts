@@ -117,7 +117,7 @@ export class DeliveryError extends Error {
 }
 
 export interface OperatorNotificationSink {
-  readonly kind: "NONE" | "GROK_ROUTINE";
+  readonly kind: "NONE" | "GROK_ROUTINE" | "CLAUDE_ROUTINE";
   /** Whether this sink has what it needs to deliver. */
   configured(): boolean;
   /** Resolves once the receiver accepted the event; throws DeliveryError otherwise. */
@@ -176,5 +176,55 @@ export class GrokRoutineWebhookSink implements OperatorNotificationSink {
     if (status === 401 || status === 403) throw new DeliveryError("The Grok Routine refused the connection details. Re-enter them on the secure setup page.", true);
     if (status === 404) throw new DeliveryError("The Grok Routine address wasn't found. Check it on the secure setup page.", true);
     throw new DeliveryError(`The Grok Routine didn't accept the update (status ${status}).`, status >= 500 || status === 429);
+  }
+}
+
+/** The beta header Claude's routine fire endpoint ships under. */
+export const CLAUDE_ROUTINE_BETA = "experimental-cc-routine-2026-04-01";
+
+/**
+ * Wakes a Claude Code scheduled task through its API trigger: POST { text } to the task's Fire URL
+ * with its bearer token. The text is the same minimal event a Grok Routine gets, as JSON, and the
+ * task reads it only as data. Used only by a Cleaner Core deployment set to Claude.
+ */
+export class ClaudeRoutineFireSink implements OperatorNotificationSink {
+  readonly kind = "CLAUDE_ROUTINE" as const;
+
+  constructor(
+    private readonly settings: { url: () => string | undefined; key: () => string | undefined },
+    private readonly options: { fetch?: Fetch; timeoutMs?: number } = {},
+  ) {}
+
+  configured(): boolean {
+    return !!this.settings.url() && !!this.settings.key();
+  }
+
+  async deliver(event: OperatorEvent): Promise<void> {
+    const url = this.settings.url();
+    const key = this.settings.key();
+    if (!url || !key) throw new DeliveryError("Alerts aren't connected yet.", true);
+    const body = JSON.stringify({ text: JSON.stringify(OperatorEventSchema.parse(event)) });
+    const doFetch: Fetch = this.options.fetch ?? ((u, init) => fetch(u, init));
+    let status: number;
+    try {
+      ({ status } = await doFetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "anthropic-version": "2023-06-01",
+          "anthropic-beta": CLAUDE_ROUTINE_BETA,
+          "User-Agent": "tour-core",
+        },
+        body,
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? 10_000),
+      }));
+    } catch {
+      throw new DeliveryError("Couldn't reach the Claude scheduled task right now.", true);
+    }
+    if (status >= 200 && status < 300) return;
+    if (status === 401 || status === 403) throw new DeliveryError("The Claude scheduled task refused its token. Make a new token and save it again.", true);
+    if (status === 404) throw new DeliveryError("The Claude scheduled task's Fire URL wasn't found. Check it and save it again.", true);
+    throw new DeliveryError(`The Claude scheduled task didn't accept the update (status ${status}).`, status >= 500 || status === 429);
   }
 }

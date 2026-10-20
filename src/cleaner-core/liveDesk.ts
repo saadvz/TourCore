@@ -1,7 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
+import { ClaudeRoutineFireSink, cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
+import { CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, type DeskWording } from "./assistant";
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
 import { FileRuntimeStore } from "../storage/runtimeStore";
@@ -13,7 +14,7 @@ import { formatWhen, zonedInstant } from "./calendar";
 import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
-import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
+import { CLEANER_PHOTO_PREFIX, cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, servePhoto, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { allTimesAsk, askNext, DOOR_CODE_STEP, moreSourcesAsk, peopleAsk, PREFERENCES_STEP, propertyAsk, SCHEDULE_STEP, sourcesAsk, START_ASK, type SetupAsk } from "./setupAsk";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -88,7 +89,20 @@ const MASKED_LINK =
 const UPLOAD_MINUTES = 10;
 const UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
-const UPLOAD_LINK_OFF = "I can't make an upload link until the server's public address is saved.";
+/** A Grok deployment's wording. A Claude deployment uses CLAUDE_DESK_WORDING. */
+const GROK_DESK_WORDING: DeskWording = {
+  helper: GROK_HELPER,
+  pinFailed: PIN_FAILED,
+  directTextReply: DIRECT_TEXT_REPLY,
+  routineAsk: ROUTINE_ASK,
+  routineNeeded: ROUTINE_NEEDED,
+  calendarUploadNext: CALENDAR_UPLOAD_NEXT,
+  doorCodeUploadNext: DOOR_CODE_UPLOAD_NEXT,
+  alertUploadNext: UPLOAD_NEXT,
+  maskedCode: MASKED_CODE,
+  maskedLink: MASKED_LINK,
+};
+const UPLOAD_LINK_OFF ="I can't make an upload link until the server's public address is saved.";
 const UPLOAD_CONNECTED = "Alerts are connected.";
 const UPLOAD_REFUSED = "Send the routine's https webhook address as url and its key as token.";
 const UPLOAD_GONE = "This upload link isn't valid anymore. Call save_alert_routine with no arguments for a new one.";
@@ -578,15 +592,16 @@ export class LiveDesk {
     // The routine's address and key are read from the env on every delivery, never saved here.
     this.alerts = new OperatorEventOutbox(
       new FileRuntimeStore(join(root, "cleaner-alerts")),
-      () =>
-        new GrokRoutineWebhookSink(
-          // Only a routine this setup connected gets wake-ups. Until then they wait.
-          {
-            url: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined : undefined),
-            key: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined : undefined),
-          },
-          alertFetch ? { fetch: alertFetch } : {},
-        ),
+      () => {
+        // Only a routine this setup connected gets wake-ups. Until then they wait.
+        const settings = {
+          url: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined : undefined),
+          key: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined : undefined),
+        };
+        const options = alertFetch ? { fetch: alertFetch } : {};
+        // A Claude deployment's routine is a scheduled task's API trigger, which takes { text }.
+        return this.claude() ? new ClaudeRoutineFireSink(settings, options) : new GrokRoutineWebhookSink(settings, options);
+      },
       { now: () => this.now().getTime() },
     );
   }
@@ -613,7 +628,7 @@ export class LiveDesk {
     const token = typeof input.token === "string" ? input.token.trim() : "";
     // A Grok Bot's secure card can't fill a tool argument, so no values means: make an upload link.
     if (!url && !token) return this.issueUpload(pinKey);
-    if (this.routineRefused(url, token, pinKey)) return this.fail(ROUTINE_NEEDED);
+    if (this.routineRefused(url, token, pinKey)) return this.fail(this.words().routineNeeded);
     this.connectRoutine(url, token, save);
     return this.reply({ next: ROUTINE_SAVED });
   }
@@ -624,6 +639,8 @@ export class LiveDesk {
    */
   private routineRefused(url: string, token: string, pinKey: Buffer | undefined): boolean {
     if (!calendarUrlAllowed(url) || MASK_MARK.test(url)) return true;
+    // A Claude deployment wakes only a scheduled task's Fire URL, the one shape its sink speaks.
+    if (this.claude() && !CLAUDE_FIRE_URL.test(url)) return true;
     if (token.length < 8 || maskedValue(token)) return true;
     if (pinKey && (token === pinKey.toString("base64") || token === pinKey.toString("base64url"))) return true;
     if (this.isServerKey(token) || this.leaks(token)) return true;
@@ -674,7 +691,7 @@ export class LiveDesk {
       this.file.alertUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString() };
       this.uploadKey = pinKey;
       this.persist();
-      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: UPLOAD_NEXT });
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: this.words().alertUploadNext });
     }
     return this.fail("That didn't work. Try again.");
   }
@@ -800,7 +817,7 @@ export class LiveDesk {
 
   private getStateNow(choice: "tours" | "cleaners" | undefined): ToolReply {
     if (this.file.choice === "cleaners") this.resume();
-    const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
+    const failure = this.engine?.pullPinFailure() ? this.words().pinFailed : undefined;
     if (!this.file.choice) {
       const pick = choice === "tours" || choice === "cleaners" ? choice : undefined;
       if (!pick) return this.reply({ done: [], next: FIRST_QUESTION, ask: START_ASK });
@@ -987,7 +1004,7 @@ export class LiveDesk {
     if (!this.file.address) return this.fail("Save the property first.");
     const url = input.url?.trim() ?? "";
     if (!url && !input.google) return this.fail("Send the Guesty Lite link, or say you use Google Calendar.");
-    if (url && maskedLink(url)) return this.fail(MASKED_LINK);
+    if (url && maskedLink(url)) return this.fail(this.words().maskedLink);
     if (url && !url.startsWith("https://")) return this.fail("Send a public https calendar link.");
     this.openSeal(pinKey);
     if (url && this.carriesCode(url)) return this.fail(DOOR_CODE_IN_CHAT);
@@ -1020,7 +1037,7 @@ export class LiveDesk {
       for (const calendar of calendars) {
         if (!calendar.name) return this.fail("Give each calendar link a name, like Airbnb or Vrbo.");
         if (this.carriesCode(calendar.name) || this.carriesCode(calendar.url)) return this.fail(DOOR_CODE_IN_CHAT);
-        if (maskedLink(calendar.url)) return this.fail(MASKED_LINK);
+        if (maskedLink(calendar.url)) return this.fail(this.words().maskedLink);
         if (!calendarUrlAllowed(calendar.url)) {
           return this.fail(`I can't use the ${calendar.name} link. It has to be a public https address, and not a private network.`);
         }
@@ -1064,7 +1081,7 @@ export class LiveDesk {
       if (google === true) this.file.google = true;
       this.calendarUploadKey = pinKey;
       this.persist();
-      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: CALENDAR_UPLOAD_NEXT });
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: this.words().calendarUploadNext });
     }
     return this.fail("That didn't work. Try again.");
   }
@@ -1112,7 +1129,7 @@ export class LiveDesk {
     const code = input.code?.trim() ?? "";
     // A Grok Bot's secure card can't fill a tool argument, so no code means: make an upload link.
     if (!code) return this.issueDoorCodeUpload(input.lockLocation?.trim(), pinKey);
-    if (!/^\d{4,8}$/.test(code)) return this.fail(/\d/.test(code) || code.length > 12 ? "Send the door code as 4 to 8 digits." : MASKED_CODE);
+    if (!/^\d{4,8}$/.test(code)) return this.fail(/\d/.test(code) || code.length > 12 ? "Send the door code as 4 to 8 digits." : this.words().maskedCode);
     const lockLocation = input.lockLocation?.trim();
     this.openSeal(pinKey);
     // No run of 4 or more digits, even split like "80 88", and never the saved code or the one being saved.
@@ -1168,7 +1185,7 @@ export class LiveDesk {
       };
       this.doorCodeUploadKey = pinKey;
       this.persist();
-      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: DOOR_CODE_UPLOAD_NEXT });
+      return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: this.words().doorCodeUploadNext });
     }
     return this.fail("That didn't work. Try again.");
   }
@@ -1651,8 +1668,8 @@ export class LiveDesk {
     }
     if (heldLine) return this.reply({ next: heldLine });
     if (sentNow) return this.reply({ next: privateNow ? PIN_SENT : PIN_SENT_GROUP });
-    if (failed) return this.reply({ next: PIN_FAILED });
-    return this.reply({ next: PIN_FAILED });
+    if (failed) return this.reply({ next: this.words().pinFailed });
+    return this.reply({ next: this.words().pinFailed });
   }
 
   /** Sends an offer or reminder that may not have gone out once more, after the host said to. */
@@ -2171,7 +2188,7 @@ export class LiveDesk {
     const body = host
       ? keyword === "stop"
         ? hostStopReply(address, this.held)
-        : hostStartReply(address, this.held)
+        : hostStartReply(address, this.held, this.words().helper)
       : keyword === "stop"
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -2227,7 +2244,7 @@ export class LiveDesk {
     if (ask) next = askNext(ask.tool);
     else if (!this.file.texting) next = REVIEW_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
-    else if (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
+    else if (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = this.words().routineAsk;
     else {
       const untimed = this.untimedTurns();
       if (untimed >= 2 && this.file.checkoutTime && this.file.checkInTime) {
@@ -2238,12 +2255,15 @@ export class LiveDesk {
     const review = next === REVIEW_ASK;
     if (this.held) next = this.holdLine();
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
-    if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
+    if (!this.held && this.privateCodeWaiting()) next = this.words().pinFailed;
     const asking = ask && next === askNext(ask.tool);
+    const claude = this.claude();
+    if (ask && asking && claude) next = claudeAskNext(ask.tool);
     return {
       done,
       next,
-      ...(asking ? { ask } : {}),
+      ...(ask && asking ? { ask: claude ? claudeAsk(ask) : ask } : {}),
+      ...(claude && next === CLAUDE_DESK_WORDING.routineAsk ? { routine: CLAUDE_TASK } : {}),
       ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
       ...(this.file.checked ? { turns: this.turns() } : {}),
       ...(notes.length > 0 ? { notes } : {}),
@@ -2460,6 +2480,7 @@ export class LiveDesk {
       ...this.scheduleOptions(),
       reminderAsksArrival: true,
       grokReadsMessages: true,
+      ...(this.claude() ? { helperName: this.words().helper } : {}),
       ...this.preferenceOptions(),
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
@@ -2479,7 +2500,7 @@ export class LiveDesk {
       tenantId: file.propertyId,
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
-      pinFailedBody: PIN_FAILED,
+      pinFailedBody: this.words().pinFailed,
       ...(this.groupOn()
         ? {
             groupChat: {
@@ -2501,7 +2522,7 @@ export class LiveDesk {
             return;
           }
           const address = file.address;
-          const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "");
+          const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "", this.words().helper);
           const readySms = text.kind === "done";
           const inviteSms = text.kind === "opt-in";
           if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms && !readySms && !inviteSms) return;
@@ -2597,6 +2618,53 @@ export class LiveDesk {
     this.persist();
   }
 
+  /** True on a Claude deployment (CLEANER_CORE_ASSISTANT=claude). Only wording and delivery format change. */
+  claude(): boolean {
+    return cleanerAssistant(this.env()) === "claude";
+  }
+
+  /** The replies that name the chat or its tools, for this deployment. */
+  private words(): DeskWording {
+    return this.claude() ? CLAUDE_DESK_WORDING : GROK_DESK_WORDING;
+  }
+
+  /**
+   * True while an upload link of `kind` with this one-time code is waiting and not expired. Reads
+   * only; opening the private page never uses the link up.
+   */
+  uploadLinkOpen(kind: "door-code" | "calendar-link" | "alert-routine", code: string): Promise<{ open: boolean; name?: string }> {
+    return this.serial(async () => {
+      const pending = kind === "door-code" ? this.file.doorCodeUpload : kind === "calendar-link" ? this.file.calendarUpload : this.file.alertUpload;
+      if (!pending || !sameHash(uploadHash(code), pending.hash)) return { open: false };
+      if (this.now().getTime() >= Date.parse(pending.expiresAt)) return { open: false };
+      const name = kind === "calendar-link" ? this.file.calendarUpload?.name : undefined;
+      return { open: true, ...(name ? { name } : {}) };
+    });
+  }
+
+  /**
+   * The photos behind get_job_photos' signed links, as MCP image content for a chat that can't open
+   * a link. Only types Claude reads, at most CLAUDE_MAX_IMAGES and CLAUDE_MAX_IMAGE_BYTES in all.
+   */
+  photoImages(links: readonly { url: string }[]): { type: "image"; data: string; mimeType: string }[] {
+    const key = photoKey(this.env());
+    if (!key) return [];
+    const images: { type: "image"; data: string; mimeType: string }[] = [];
+    let total = 0;
+    for (const link of links) {
+      if (images.length >= CLAUDE_MAX_IMAGES) break;
+      const at = link.url.indexOf(CLEANER_PHOTO_PREFIX);
+      if (at < 0) continue;
+      const photo = servePhoto(this.root, link.url.slice(at + CLEANER_PHOTO_PREFIX.length), key, this.now());
+      if (photo.status !== 200) continue;
+      const mimeType = photo.headers["Content-Type"] ?? "";
+      if (!CLAUDE_IMAGE_TYPES.has(mimeType) || total + photo.body.length > CLAUDE_MAX_IMAGE_BYTES) continue;
+      total += photo.body.length;
+      images.push({ type: "image", data: photo.body.toString("base64"), mimeType });
+    }
+    return images;
+  }
+
   private reply(result: Record<string, unknown>): ToolReply {
     const json = JSON.stringify(result);
     if (this.leaks(json)) return { ok: false, error: "That didn't work. Try again." };
@@ -2672,7 +2740,7 @@ export class LiveDesk {
 
   private holdLine(): string {
     const address = this.file.address ?? "the property";
-    return this.engine?.holdNotice() ?? (this.engine?.cleanerHasOptedOut() || this.file.cleanerOut ? cleanerOptOutHold(address) : jobHoldLine(address));
+    return this.engine?.holdNotice() ?? (this.engine?.cleanerHasOptedOut() || this.file.cleanerOut ? cleanerOptOutHold(address, this.words().helper) : jobHoldLine(address));
   }
 
   private heldDepartureLine(): string {
@@ -2729,7 +2797,7 @@ export class LiveDesk {
       return { sent: result.sent, ...this.handledBy(result) };
     }
     this.resume();
-    this.engine?.keepHostNote("host:direct-left", DIRECT_TEXT_REPLY);
+    this.engine?.keepHostNote("host:direct-left", this.words().directTextReply);
     if (this.scratchCapture()) this.noteLocal(from, "held");
     return { sent: [], handled: "none" };
   }

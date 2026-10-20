@@ -27,6 +27,7 @@ import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRe
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
 import { waitingForYesNote, withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupUnconfirmedLine, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, jobHoldLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, type GroupSeat } from "./groupThread";
+import { GROK_HELPER } from "./assistant";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
@@ -362,6 +363,8 @@ export interface CleanerCoreOptions {
    * Unset keeps the guide reply for the Scratch CLI and the smoke runs.
    */
   grokReadsMessages?: boolean;
+  /** Who a host text tells them to talk to. Unset is "your Grok Bot"; a Claude deployment passes "Claude". */
+  helperName?: string;
   /** The host's checklist, sent to the cleaner once per job right after the private code. */
   checklist?: { name: string; items: string[] };
   /** DONE waits until the cleaner has sent a photo. */
@@ -1306,10 +1309,10 @@ class Engine implements CleanerCore {
 
   holdNotice(): string | undefined {
     const address = this.options.property.address;
-    if (this.holdCause === "cleaner") return cleanerOptOutHold(address);
-    if (this.holdCause === "owner") return ownerOptOutHoldNote(address);
-    if (this.holdCause === "injury") return injuryHoldLine(address);
-    if (this.cleanerConsent === "out") return cleanerOptOutHold(address);
+    if (this.holdCause === "cleaner") return cleanerOptOutHold(address, this.helper());
+    if (this.holdCause === "owner") return ownerOptOutHoldNote(address, this.helper());
+    if (this.holdCause === "injury") return injuryHoldLine(address, this.helper());
+    if (this.cleanerConsent === "out") return cleanerOptOutHold(address, this.helper());
     return undefined;
   }
 
@@ -2655,7 +2658,7 @@ class Engine implements CleanerCore {
           ...(jobId ? { jobId } : {}),
           to: this.owner,
           kind: "emergency",
-          body: injuryHoldLine(this.options.property.address),
+          body: injuryHoldLine(this.options.property.address, this.helper()),
         })
       : null;
     const hostReached = !reporterIsHost && this.delivery(hostId) === "sent";
@@ -2701,7 +2704,7 @@ class Engine implements CleanerCore {
         id: `stop-host:${inboundId}`,
         to: this.owner,
         kind: "held",
-        body: cleanerOptOutHold(this.options.property.address),
+        body: cleanerOptOutHold(this.options.property.address, this.helper()),
       });
       if (held) note.push(held);
     }
@@ -2852,7 +2855,7 @@ class Engine implements CleanerCore {
 
   private rememberOwnerHold(): void {
     if (this.holdCause !== "cleaner") this.holdCause = "owner";
-    this.keepHostNote(`owner-hold:${this.options.property.id}`, ownerOptOutHoldNote(this.options.property.address));
+    this.keepHostNote(`owner-hold:${this.options.property.id}`, ownerOptOutHoldNote(this.options.property.address, this.helper()));
   }
 
   private async hostStopNote(from: string, inboundId: string): Promise<CleanerText[]> {
@@ -2861,7 +2864,7 @@ class Engine implements CleanerCore {
       id: `stop-host:${inboundId}`,
       to: this.owner,
       kind: "held",
-      body: cleanerOptOutHold(this.options.property.address),
+      body: cleanerOptOutHold(this.options.property.address, this.helper()),
     });
     return text ? [text] : [];
   }
@@ -2874,7 +2877,7 @@ class Engine implements CleanerCore {
       this.ownerOptedOut = false;
       if (!this.pin) this.optedOut = false;
       if (this.groupChat && this.hostGroup === "out") this.hostGroup = "in";
-      const result = await this.reply(from, hostStartReply(this.options.property.address, this.problemHold), "start", "start", inboundId);
+      const result = await this.reply(from, hostStartReply(this.options.property.address, this.problemHold, this.helper()), "start", "start", inboundId);
       return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
     }
     if (this.problemHold && this.pin && from === this.cleanerPhone) {
@@ -3607,6 +3610,11 @@ class Engine implements CleanerCore {
     return { handled: true, reason: "retry", sent: text ? [text] : [] };
   }
 
+  /** Who a host text tells them to talk to. */
+  private helper(): string {
+    return this.options.helperName ?? GROK_HELPER;
+  }
+
   private reviewDetail(kind: ReviewKind, subject: string): ReviewDetail {
     if (kind !== "uncertain-sms" && kind !== "missed-reminder") return {};
     const item = this.outboxState.find((row) => row.id === subject);
@@ -3633,7 +3641,7 @@ class Engine implements CleanerCore {
       id,
       to: this.owner,
       kind: "review",
-      body: reviewAlert(kind, this.options.property.address, this.reviewDetail(kind, subject)),
+      body: reviewAlert(kind, this.options.property.address, this.reviewDetail(kind, subject), this.helper()),
     });
   }
 

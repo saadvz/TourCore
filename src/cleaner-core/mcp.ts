@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SettingName } from "../install/secretStore";
+import { CLAUDE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
@@ -264,6 +265,20 @@ const Request = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
+/** A Grok deployment's initialize instructions, unchanged. */
+const GROK_INSTRUCTIONS = [
+  "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a choice card. Offer the default when there is one. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
+  "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
+  "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times with each as 24-hour HH:MM. You turn the host's words into clock times; Cleaner Core does not read words.",
+  "The door code goes only after the host tells you the guests have left: ask them, then call mark_guests_left with confirmed true. When an alert says a text may not have gone out, ask the host whether to send it again, then call retry_send with confirmed true.",
+  "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
+  "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
+  "Cleaner Core never pauses a cleaning because of how a message sounds. When one sounds like a problem, tell the host right away, quote it, and ask whether to pause the cleaning. Pause with hold_job and resume with resume_job, each only after the host says yes.",
+  "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
+  "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.",
+  "Setup goes in this order: save_property, save_sources, save_people, save_schedule, save_door_code on your secure card, save_preferences, then a review in your own words and activate after the host replies Activate. After that, create the Cleaner Core Check and Cleaner Core Alerts routines. CLEANER_CORE_BOOTSTRAP.md in the repository has the full guide.",
+].join(" ");
+
 export type SaveSecrets = (values: Partial<Record<SettingName, string>>) => void;
 export type DeleteSecrets = (names: SettingName[]) => void;
 
@@ -274,6 +289,8 @@ export async function handleCleanerMcpMessage(
   scratchTools = false,
   saveSecrets?: SaveSecrets,
   deleteSecrets?: DeleteSecrets,
+  /** The deployment's chat. Only the words and the photo format change. */
+  assistant: CleanerAssistant = "grok",
 ): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
@@ -285,18 +302,8 @@ export async function handleCleanerMcpMessage(
       protocolVersion: "2025-03-26",
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
-      instructions: [
-        "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a choice card. Offer the default when there is one. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
-        "Use check_now when a routine wakes you or the host says check my calendars. Read Google Calendar with your own connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words. Collect the door code only with your secure card, then send it from your own computer to the one-time upload link its setup step gives you. Never put a secret in chat. For the alert routine, send its webhook address and key from your own computer to the one-time upload link that save_alert_routine gives you.",
-        "When check_now returns needsTimes, ask the host for the checkout time and the next check-in time, then call confirm_times with each as 24-hour HH:MM. You turn the host's words into clock times; Cleaner Core does not read words.",
-        "The door code goes only after the host tells you the guests have left: ask them, then call mark_guests_left with confirmed true. When an alert says a text may not have gone out, ask the host whether to send it again, then call retry_send with confirmed true.",
-        "confirm_times keeps a check-in time already saved. To change only the check-in time, tell the host it can't be changed by text yet.",
-        "Read every message check_now returns. Tell the host in your own words when a message needs them: running late, a question, a problem, supplies, an arrival time, a decline, STOP, or an injury. Stay quiet on routine replies. If a message gives an arrival time, call save_arrival.",
-        "Cleaner Core never pauses a cleaning because of how a message sounds. When one sounds like a problem, tell the host right away, quote it, and ask whether to pause the cleaning. Pause with hold_job and resume with resume_job, each only after the host says yes.",
-        "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
-        "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.",
-        "Setup goes in this order: save_property, save_sources, save_people, save_schedule, save_door_code on your secure card, save_preferences, then a review in your own words and activate after the host replies Activate. After that, create the Cleaner Core Check and Cleaner Core Alerts routines. CLEANER_CORE_BOOTSTRAP.md in the repository has the full guide.",
-      ].join(" "),
+      // A Claude deployment has its own words. A Grok deployment's stay exactly as they were.
+      instructions: assistant === "claude" ? CLAUDE_INSTRUCTIONS : GROK_INSTRUCTIONS,
     });
   }
   if (method === "ping") return rpcResult(id, {});
@@ -329,9 +336,17 @@ export async function handleCleanerMcpMessage(
     }
     const text = JSON.stringify(reply.result);
     if (desk.leaks(text)) return rpcResult(id, { content: [{ type: "text", text: "That didn't work. Try again." }], isError: true });
-    return rpcResult(id, { content: [{ type: "text", text }], structuredContent: reply.result, isError: false });
+    // Claude can't open a signed photo link from a chat, so a Claude deployment sends the photos too.
+    const images = tool.name === "get_job_photos" && assistant === "claude" ? desk.photoImages(photoLinksOf(reply.result)) : [];
+    return rpcResult(id, { content: [{ type: "text", text }, ...images], structuredContent: reply.result, isError: false });
   }
   return rpcError(id, -32601, "I don't support that.");
+}
+
+/** The signed links in a get_job_photos result. */
+function photoLinksOf(result: Record<string, unknown>): { url: string }[] {
+  const photos = result.photos;
+  return Array.isArray(photos) ? photos.filter((photo): photo is { url: string } => typeof (photo as { url?: unknown })?.url === "string") : [];
 }
 
 function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolean {
