@@ -43,7 +43,10 @@ the same build as the Grok one.
    and a STOP to the number blocks both. Group chats are not affected: each
    group conversation sends replies to the service that made it.
 3. Put its https address in `hostedCleanerCoreUrl` in
-   [`template.json`](template.json) and share it with hosts.
+   [`template.json`](template.json) and share it with hosts. The Claude
+   service is `https://tourcore-production-1056.up.railway.app`.
+4. Set the Twilio number's incoming-message webhook to
+   `<hostedCleanerCoreUrl>/webhooks/twilio/cleaner-core`.
 
 `CLEANER_CORE_ASSISTANT=claude` changes only words and formats: the connector
 instructions, the setup `how` lines, the texts to the host, the approval page,
@@ -58,7 +61,9 @@ The next Allow becomes the owner.
 ## How a host starts
 
 1. In claude.ai, open **Settings → Connectors → Add custom connector**. Name
-   it **Cleaner Core** and enter `<hostedCleanerCoreUrl>/mcp/cleaner-core`.
+   it **Cleaner Core** and enter
+   `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (the
+   `hostedCleanerCoreUrl` in [`template.json`](template.json)).
 2. Click **Connect**, then **Allow** on the Cleaner Core page.
 3. Connect Claude's **Google Calendar** connector too, if the bookings are in
    Google Calendar.

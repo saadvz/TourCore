@@ -332,6 +332,11 @@ describe("Claude template", () => {
     }
     const manifest = JSON.parse(read("claude-template/template.json")) as { hostedCleanerCoreUrl: string; deployment: { env: Record<string, string> } };
     expect(manifest.deployment.env.CLEANER_CORE_ASSISTANT).toBe("claude");
+    // Its own service: a hosted Cleaner Core has one owner, and the Grok one is already claimed.
+    const grok = (JSON.parse(read("cleaner-template/template.json")) as { hostedCleanerCoreUrl: string }).hostedCleanerCoreUrl;
+    expect(manifest.hostedCleanerCoreUrl).toMatch(/^https:\/\/[a-z0-9.-]+$/);
+    expect(manifest.hostedCleanerCoreUrl).not.toBe(grok);
+    expect(read("claude-template/plugin/skills/cleaner-core/SKILL.md")).toContain(`${manifest.hostedCleanerCoreUrl}/mcp/cleaner-core`);
   });
 
   it("holds no secret, no real-looking phone number, and no door code", () => {

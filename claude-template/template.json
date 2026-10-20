@@ -4,8 +4,8 @@
   "readme": "README.md",
   "skill": "plugin/skills/cleaner-core/SKILL.md",
   "plugin": "plugin",
-  "hostedCleanerCoreUrl": "",
-  "hostedCleanerCoreUrlNote": "The Claude deployment's https address, once it exists. It is a separate service from the Grok one in cleaner-template/template.json, because a hosted Cleaner Core has one owner.",
+  "hostedCleanerCoreUrl": "https://tourcore-production-1056.up.railway.app",
+  "hostedCleanerCoreUrlNote": "The Claude deployment's https address. It is a separate service from the Grok one in cleaner-template/template.json, because a hosted Cleaner Core has one owner.",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "note": "Claude never clones or runs Cleaner Core. The skill and the connector's own instructions carry the guide."
