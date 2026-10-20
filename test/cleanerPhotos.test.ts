@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { setCleanerAlertFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, startWiredApp, type WiredApp } from "./wiringProof";
 
@@ -34,6 +35,7 @@ const open: WiredApp[] = [];
 
 afterEach(async () => {
   setCleanerPhotoFetch(undefined);
+  setCleanerAlertFetch(undefined);
   while (open.length > 0) await open.pop()?.close();
 });
 
@@ -68,6 +70,9 @@ async function cleaning(clock = testClock()): Promise<WiredApp> {
   await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" });
   await call(wired, "save_door_code", { code: DOOR_CODE, lockLocation: "back door lockbox" });
   await call(wired, "save_preferences", { checklist: ["Strip the beds"], photosRequired: true });
+  // The alert routine comes before Activate. Its wake-ups go to a stub.
+  setCleanerAlertFetch(async () => ({ status: 200 }));
+  await call(wired, "save_alert_routine", { url: "https://routine.example/hook", token: "k-test-routine-key" });
   await call(wired, "activate");
   await call(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
   await wired.postTwilio(HOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-opt-in", token: CLEANER_AUTH });

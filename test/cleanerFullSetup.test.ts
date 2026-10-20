@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NoopOperatorNotificationSink } from "../src/alerts/operatorEvents";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { cleanerOptOutHold, offerForOthers } from "../src/cleaner-core/cleanerTexts";
@@ -60,6 +60,10 @@ const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code for the ${LOCK}: ${D
 
 const open: WiredApp[] = [];
 const roots: string[] = [];
+/** The alert routine every setup connects before the review. Its wake-ups go to a stub. */
+const ROUTINE = { url: "https://routine.example/hook", token: "k-test-routine-key" };
+
+beforeEach(() => setCleanerAlertFetch(async () => ({ status: 200 })));
 
 afterEach(async () => {
   setCleanerTwilioClient(undefined);
@@ -175,7 +179,11 @@ describe("Cleaner Core full setup: the diagram order", () => {
 
     const preferences = await call(wired, "save_preferences", PREFERENCES);
     expect(preferences.isError).toBe(false);
-    expect(preferences.structured?.next).toBe(REVIEW_NEXT);
+    // The routines come before the review, and activate waits for them.
+    expect(String(preferences.structured?.next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
+    expect((await state(wired)).setup).toBeUndefined();
+    expect((await call(wired, "activate")).isError).toBe(true);
+    expect((await call(wired, "save_alert_routine", ROUTINE)).isError).toBe(false);
     const review = await state(wired);
     expect(review.next).toBe(REVIEW_NEXT);
     expect(review.done).toContain("Preferences saved.");
@@ -231,6 +239,7 @@ describe("Cleaner Core full setup: the diagram order", () => {
     expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
     expect(askStep((await state(wired)))).toBe("preferences");
     expect((await call(wired, "save_preferences", {})).isError).toBe(false);
+    expect((await call(wired, "save_alert_routine", ROUTINE)).isError).toBe(false);
     const review = await state(wired);
     expect(review.next).toBe(REVIEW_NEXT);
     const setup = review.setup as Record<string, unknown>;
@@ -328,6 +337,7 @@ describe("Cleaner Core full setup: usual times", () => {
     expect((await call(wired, "save_people", { host: HOST, cleaner: CLEANER })).isError).toBe(false);
     expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
     expect((await call(wired, "save_preferences", {})).isError).toBe(false);
+    expect((await call(wired, "save_alert_routine", ROUTINE)).isError).toBe(false);
     expect((await call(wired, "activate", { googleEvents: googleList([]) })).isError).toBe(false);
     const checked = await call(wired, "check_now", { googleEvents: googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-15" }]) });
     const alerts = (checked.structured?.alerts as string[] | undefined) ?? [];
@@ -380,6 +390,8 @@ function openDesk(phones: string[], groupChat: "0" | "1", now: () => Date = () =
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     PUBLIC_BASE_URL: PHOTO_BASE,
+    CLEANER_CORE_ROUTINE_URL: ROUTINE.url,
+    CLEANER_CORE_ROUTINE_KEY: ROUTINE.token,
     ...extraEnv,
   };
   const desk = liveDeskFor(root, () => env, now);
@@ -393,6 +405,11 @@ function ok(reply: ToolReply): Record<string, unknown> {
 
 type PeopleInput = Parameters<LiveDesk["savePeople"]>[0];
 
+/** Connects the alert routine, as Grok does before the review. openDesk's env already holds its values. */
+async function connectRoutine(desk: LiveDesk) {
+  ok(await desk.saveAlertRoutine(ROUTINE, () => undefined));
+}
+
 async function setUp(desk: LiveDesk, people: Partial<PeopleInput>) {
   ok(await desk.getState("cleaners"));
   ok(await desk.saveProperty({ business: BUSINESS, address: ADDRESS, timeZone: ZONE, checkoutTime: "10:30", checkInTime: "15:00" }));
@@ -400,6 +417,7 @@ async function setUp(desk: LiveDesk, people: Partial<PeopleInput>) {
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", ...people }));
   ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
   ok(await desk.savePreferences({}));
+  await connectRoutine(desk);
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" }));
 }
@@ -625,6 +643,7 @@ async function withSchedule(schedule: ScheduleInput | undefined, groupChat: "0" 
   if (schedule) ok(await desk.saveSchedule({ firstText: "when-confirmed", ...schedule }));
   ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
   ok(await desk.savePreferences({}));
+  await connectRoutine(desk);
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" }));
   return { ...opened, time };
@@ -713,6 +732,7 @@ describe("Cleaner Core schedule: the first cleaning text", () => {
     ok(await desk.saveSchedule({}));
     ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
     ok(await desk.savePreferences({}));
+    await connectRoutine(desk);
     ok(await desk.activate());
     ok(await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" }));
     await optIn(desk, "0");
@@ -739,6 +759,7 @@ describe("Cleaner Core schedule: the first cleaning text", () => {
     ok(await desk.saveSchedule({ firstText: "days-after-check-in", firstTextDays: 1 }));
     ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
     ok(await desk.savePreferences({}));
+    await connectRoutine(desk);
     ok(await desk.activate());
     await alertsAt(desk, time, "2026-10-16T13:00:00.000Z");
     expect(sms.sent.filter((item) => item.to === CLEANER)).toEqual([]);
@@ -896,6 +917,7 @@ describe("Cleaner Core schedule: the new-booking alert", () => {
     ok(await desk.saveSchedule({}));
     ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
     ok(await desk.savePreferences({}));
+    await connectRoutine(desk);
     ok(await desk.activate({ googleEvents: googleList([]) }));
     const checked = ok(await desk.checkNow({ googleEvents: googleList([{ id: "g1", start: "2026-10-14", end: "2026-10-18" }]) }));
     return ((checked.alerts as string[] | undefined) ?? []).map(plain);
@@ -1174,6 +1196,7 @@ describe("Cleaner Core messages: save_arrival", () => {
     ok(await desk.savePeople({ host: HOST, cleaner: CLEANER }));
     ok(await desk.saveDoorCode({ code: DOOR_CODE }, PIN_KEY));
     ok(await desk.savePreferences({}));
+    await connectRoutine(desk);
     ok(await desk.activate({ googleEvents: googleList([]) }));
     expect(await desk.saveArrival({ time: "11:30" })).toEqual({ ok: false, error: "There's no open cleaning to save an arrival time for." });
   });
@@ -1627,6 +1650,7 @@ async function takenWith(preferences: PreferencesInput, extraEnv: NodeJS.Process
   ok(await desk.savePeople({ host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" }));
   ok(await desk.saveDoorCode({ code: DOOR_CODE, lockLocation: LOCK }, PIN_KEY));
   ok(await desk.savePreferences(preferences));
+  await connectRoutine(desk);
   ok(await desk.activate());
   ok(await desk.confirmTimes({ checkout: "11:00", checkIn: "16:00" }));
   await desk.inbound({ id: "yes-opt-in", from: CLEANER, text: "YES" });
@@ -2035,7 +2059,7 @@ describe("Cleaner Core full diagram", () => {
     };
     await safe("1 connect");
 
-    // 2. Setup steps 2 to 8 through the new tools, then activate.
+    // 2. Setup steps 2 to 8 through the new tools.
     await say("get_state", { choice: "cleaners" });
     await say("save_property", { business: LANE.hostName, nickname: "Scratch Lane", address, propertyType: "House", timeZone: ZONE, checkoutTime: "11:00", checkInTime: "16:00" });
     await say("save_sources", { google: true });
@@ -2043,15 +2067,10 @@ describe("Cleaner Core full diagram", () => {
     await say("save_schedule", { firstText: "days-after-check-in", firstTextDays: 1, reminder: "days-before-checkout", reminderDays: 1, reminderTime: "18:00" });
     await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK });
     await say("save_preferences", PREFERENCES);
-    expect((await say("get_state")).next).toBe(REVIEW_NEXT);
-    await say("activate", { googleEvents: googleList([]) });
-    expect((await say("get_state")).done).toContain("Checks finished.");
-    expect(sms.sent).toEqual([]);
-    expect(Buffer.from(hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
     await safe("2 setup");
 
-    // 3. The alert routine, with a stubbed webhook. A Grok Bot's secure card can't fill a tool argument,
-    // so Grok gets a one-time link and posts the address and key to it from its own computer.
+    // 3. The alert routine, before the review, with a stubbed webhook. A Grok Bot's secure card can't
+    // fill a tool argument, so Grok gets a one-time link and posts the address and key to it from its own computer.
     const issued = await say("save_alert_routine");
     const uploadLink = new URL(String(issued.uploadUrl));
     expect(uploadLink.origin).toBe(BASE);
@@ -2068,6 +2087,14 @@ describe("Cleaner Core full diagram", () => {
     expect((await say("get_state")).next).not.toMatch(/upload link/);
     await safe("3 alert routine");
     expect(routine.length).toBeGreaterThan(0);
+
+    // Then the review and Activate.
+    expect((await say("get_state")).next).toBe(REVIEW_NEXT);
+    await say("activate", { googleEvents: googleList([]) });
+    expect((await say("get_state")).done).toContain("Checks finished.");
+    expect(sms.sent).toEqual([]);
+    expect(Buffer.from(hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
+    await safe("3 activate");
 
     // 4. A booking appears in Google. The alert names the usual times, and the host says yes.
     const booked = await checkAt("2026-10-14T14:05:00.000Z");
@@ -2233,6 +2260,7 @@ describe("Cleaner Core full diagram", () => {
     expect(String((await say("save_door_code", { code: DOOR_CODE, lockLocation: LOCK })).next)).toContain("Saved the door code.");
     expect(askStep((await say("get_state")))).toBe("preferences");
     await say("save_preferences", {});
+    await say("save_alert_routine", ROUTINE);
     await say("activate", { googleEvents: googleList([{ id: "g-oauth", start: "2026-10-14", end: "2026-10-17" }]) });
     await say("confirm_times", { checkout: "11:00", checkIn: "16:00" });
     await fromCleaner("YES");
@@ -2281,6 +2309,7 @@ describe("Cleaner Core door-code write guard: ids that only hold the digits", ()
       ["save_schedule", { firstText: "when-confirmed" }],
       ["save_door_code", { code: DOOR_CODE, lockLocation: LOCK }],
       ["save_preferences", {}],
+      ["save_alert_routine", ROUTINE],
       ["activate", { googleEvents: googleList(stays) }],
     ];
     for (const [name, args] of steps) {
