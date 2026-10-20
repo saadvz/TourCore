@@ -64,7 +64,10 @@ The next Allow becomes the owner.
    it **Cleaner Core** and enter
    `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (the
    `hostedCleanerCoreUrl` in [`template.json`](template.json)).
-2. Click **Connect**, then **Allow** on the Cleaner Core page.
+2. Keep **Sign in now**. For the OAuth client, Claude should detect
+   **Register automatically**: this deployment doesn't take Claude's shared
+   published identity, because one client ID for every Claude user can't
+   name one owner. Click **Add**, then **Allow** on the Cleaner Core page.
 3. Connect Claude's **Google Calendar** connector too, if the bookings are in
    Google Calendar.
 4. Optional, for the fullest guide: add the `cleaner-core` skill (below).

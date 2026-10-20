@@ -365,6 +365,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           },
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
           cleanerAssistant: () => cleanerAssistant(installation.env()),
+          // A Claude deployment has Claude register its own client, so its owner is that one connection.
+          metadataDocuments: () => cleanerAssistant(installation.env()) !== "claude",
           publicApproval: (clientId, resourcePath) => {
             if (!hostedMode()) return false;
             const state = installation.files.state();

@@ -149,6 +149,8 @@ export interface ProviderOptions {
   hostedClaimed?: (resourcePath: string) => boolean;
   /** Which chat Cleaner Core's approval page names. Unset is Grok. */
   cleanerAssistant?: () => "grok" | "claude";
+  /** Whether a URL client_id (a Client ID Metadata Document) is accepted. Unset is yes. */
+  metadataDocuments?: () => boolean;
   log?: (line: string) => void;
 }
 
@@ -225,7 +227,13 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
 
   private async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
     if (typeof clientId !== "string" || !clientId || clientId.length > 2000) return undefined;
-    if (isMetadataDocumentClientId(clientId)) return this.metadataDocumentClient(clientId);
+    if (isMetadataDocumentClientId(clientId)) {
+      if (this.options.metadataDocuments?.() === false) {
+        this.log(`Refused a URL client_id from ${hostOf(clientId)}: this server takes registered clients only.`);
+        return undefined;
+      }
+      return this.metadataDocumentClient(clientId);
+    }
     const ep = this.defaultEndpoints();
     const stored = this.options.store.getClient(clientId);
     // Registrations belong to one authorization server: a new tunnel address means registering again.

@@ -32,8 +32,8 @@ You need the **Cleaner Core** connector. If its tools aren't available, ask the
 host to add it once, in claude.ai **Settings → Connectors → Add custom
 connector**, with the address
 `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (or the one
-the operator gives), then click **Connect** and **Allow** on the Cleaner Core
-page. You can't approve it yourself. The first Allow claims this Cleaner Core.
+the operator gives), with **Sign in now** and **Register automatically**, then
+click **Add** and **Allow** on the Cleaner Core page. You can't approve it yourself. The first Allow claims this Cleaner Core.
 
 That one connector works in every Claude app and in the scheduled task. Never
 add Cleaner Core a second way (for example `claude mcp add` in Claude Code): a
