@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { liveDeskFor, resetLiveDesks, type LiveDesk } from "../src/cleaner-core/liveDesk";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
+import { askNext } from "../src/cleaner-core/setupAsk";
 import { DOOR_CODE } from "./wiringProof";
 import { filesUnder } from "./files";
 
@@ -263,6 +264,34 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
     expect(text).toMatch(/door code goes only on your secure card/);
     expect(text).toMatch(/after the host says the guests have left/);
     expect(text).toMatch(/only after the host's yes/);
+  });
+});
+
+describe("Cleaner Core setup: one question per message", () => {
+  /** Every place Grok reads how to ask: each step's next line, the guide, the bot profile, and the initialize instructions. */
+  async function sources(): Promise<[string, string][]> {
+    return [
+      ["askNext", askNext("save_property")],
+      ["bootstrap", read(BOOTSTRAP)],
+      ["bot profile", read(join(TEMPLATE, "bot-profile.md"))],
+      ["initialize", String((await rpc("initialize")).instructions)],
+    ];
+  }
+
+  it("asks exactly one question per message, never two joined, and shows options as a tappable choice card", async () => {
+    for (const [name, text] of await sources()) {
+      const flat = text.replace(/\s+/g, " ");
+      expect(flat, name).toMatch(/exactly one question/);
+      expect(flat, name).toMatch(/the checkout and check-in times/);
+      expect(flat, name).toMatch(/choice card the host can tap/);
+    }
+  });
+
+  it("asks nothing about the property before get_state answers", async () => {
+    for (const [name, text] of await sources()) {
+      if (name === "askNext") continue;
+      expect(text.replace(/\s+/g, " "), name).toMatch(/Ask the host nothing about the property until `?get_state`? answers/);
+    }
   });
 });
 

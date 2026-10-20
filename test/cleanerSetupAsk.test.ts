@@ -99,7 +99,7 @@ describe("Cleaner Core setup asks: one question at a time", () => {
       expect(saved.isError, saved.text).toBe(false);
       expect(askOf(saved.structured).step).toBe(step);
       expect(askOf(saved.structured).tool).toBe(next);
-      expect(saved.structured?.next).toBe(`Ask the host the questions in ask, one at a time, in your own short words. Show any options as a choice card. Skip a question the host already answered. Then call ${next}.`);
+      expect(saved.structured?.next).toBe(`Ask the host the questions in ask, in order, in your own short words. Each message asks exactly one question: never two in one message, even related ones like the checkout and check-in times, or a phone number and a name. Wait for the answer before the next one. When a question has options, show them as a choice card the host can tap, never as a list or a question in the text. Skip a question the host already answered. Then call ${next}.`);
     }
     expect((await call(wired, "save_door_code", { code: DOOR_CODE })).isError).toBe(false);
     expect(askOf((await call(wired, "get_state")).structured).step).toBe("preferences");
