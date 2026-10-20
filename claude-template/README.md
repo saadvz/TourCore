@@ -37,7 +37,11 @@ the same build as the Grok one.
    never `static`).
 2. Set the same Cleaner Core variables as the Grok service, plus one:
    `CLEANER_CORE_ASSISTANT=claude`. Give it its own Twilio number for the
-   cleaner texts, or the two services will both answer the same replies.
+   cleaner texts, with that number's incoming-message webhook set to this
+   service's `/webhooks/twilio/cleaner-core`. A number has one webhook, so on
+   a shared number one service never hears the cleaner's YES, DONE, or STOP,
+   and a STOP to the number blocks both. Group chats are not affected: each
+   group conversation sends replies to the service that made it.
 3. Put its https address in `hostedCleanerCoreUrl` in
    [`template.json`](template.json) and share it with hosts.
 
