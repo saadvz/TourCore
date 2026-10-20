@@ -140,7 +140,11 @@ describe("Cleaner Core full setup: the diagram order", () => {
 
     const sources = await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
     expect(sources.isError).toBe(false);
-    expect(askStep(sources.structured)).toBe("people");
+    // One calendar saved: the host is asked for any other place bookings come from.
+    expect(askStep(sources.structured)).toBe("sources");
+    const finished = await call(wired, "save_sources", { done: true });
+    expect(finished.isError).toBe(false);
+    expect(askStep(finished.structured)).toBe("people");
     expect(askStep((await state(wired)))).toBe("people");
 
     const people = await call(wired, "save_people", {
@@ -1126,6 +1130,7 @@ describe("Cleaner Core messages: Grok reads every message", () => {
       return { status };
     });
     const { desk, root } = await confirmedCleaner({ CLEANER_CORE_ROUTINE_URL: "https://routine.example/hook", CLEANER_CORE_ROUTINE_KEY: "k-test-routine-key" });
+    ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, () => undefined));
     await desk.drainAlerts();
     const started = posts.length;
     await desk.inbound({ id: "m1", from: CLEANER, text: "On my way" });

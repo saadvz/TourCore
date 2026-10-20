@@ -107,6 +107,26 @@ export function sourcesAsk(property: string): SetupAsk {
   };
 }
 
+/** After the first calendar is saved: asks for every other place bookings come from, one at a time. */
+export function moreSourcesAsk(saved: string[], property: string): SetupAsk {
+  return {
+    step: "sources",
+    tool: "save_sources",
+    questions: [
+      {
+        field: "more",
+        ask: `whether ${property}'s bookings come from anywhere besides ${saved.join(", ")}`,
+        required: true,
+        options: [
+          { value: "add", label: "Add another booking calendar" },
+          { value: "done", label: `That's all, just ${saved.join(" and ")}` },
+        ],
+        how: "For each other calendar (Airbnb, Vrbo, Booking.com, a direct-booking calendar, or Google Calendar), save it the same way as the first, one at a time; every saved calendar stays. Guesty Lite already includes the Airbnb and Vrbo stays it manages, so add those only when they are booked outside Guesty. Ask again until the host says that's all, then call save_sources with done: true.",
+      },
+    ],
+  };
+}
+
 export function peopleAsk(business: string): SetupAsk {
   return {
     step: "people",
@@ -185,12 +205,18 @@ export const DOOR_CODE_STEP: SetupAsk = {
   tool: "save_door_code",
   questions: [
     {
+      field: "lockLocation",
+      ask: "how many locks the cleaner goes through and where each one is",
+      required: true,
+      example: "front door keypad and back gate lockbox",
+      how: "Always ask this, before the code. Save every lock in lockLocation, under 80 characters and with no numbers. Cleaner Core keeps one door code, sent with this text, so when the locks use different codes, tell the host that only one code can be saved for now.",
+    },
+    {
       field: "code",
       ask: "the door code",
       required: true,
-      how: 'Only on your secure card. Never in chat. Call save_door_code with no code (lockLocation is fine) to get a one-time upload link, then post {"code": "<door code>"} to it from your own computer.',
+      how: 'Only on your secure card. Never in chat. Call save_door_code with no code and with lockLocation to get a one-time upload link, then post {"code": "<door code>"} to it from your own computer.',
     },
-    { field: "lockLocation", ask: "where the lock is", required: false, example: "front door keypad" },
   ],
 };
 

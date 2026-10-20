@@ -15,7 +15,7 @@ import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { allTimesAsk, askNext, DOOR_CODE_STEP, peopleAsk, PREFERENCES_STEP, propertyAsk, SCHEDULE_STEP, sourcesAsk, START_ASK, type SetupAsk } from "./setupAsk";
+import { allTimesAsk, askNext, DOOR_CODE_STEP, moreSourcesAsk, peopleAsk, PREFERENCES_STEP, propertyAsk, SCHEDULE_STEP, sourcesAsk, START_ASK, type SetupAsk } from "./setupAsk";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
@@ -256,6 +256,8 @@ interface SourcesInput {
   dropJobs?: boolean;
   /** Makes a one-time upload link for a calendar link that is on Grok's secure card. */
   uploadLink?: { name?: string };
+  /** The host has no more booking calendars to add. */
+  done?: boolean;
 }
 
 interface ScheduleInput {
@@ -317,6 +319,13 @@ interface LiveFile {
   /** Saved calendar links in dedupe order, after the legacy link. Each one is the source `ical:<slug>`. */
   calendars?: { name: string; url: string }[];
   google?: boolean;
+  /** Set when the host said there are no more booking calendars to add. */
+  sourcesDone?: boolean;
+  /**
+   * Set when this setup connected the alert routine. An address left in the secret store or the
+   * environment by an earlier setup doesn't count, so the routine step is asked again.
+   */
+  routineConnected?: boolean;
   /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
   alertUpload?: { hash: string; expiresAt: string };
   /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
@@ -571,7 +580,11 @@ export class LiveDesk {
       new FileRuntimeStore(join(root, "cleaner-alerts")),
       () =>
         new GrokRoutineWebhookSink(
-          { url: () => this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined, key: () => this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined },
+          // Only a routine this setup connected gets wake-ups. Until then they wait.
+          {
+            url: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_URL?.trim() || undefined : undefined),
+            key: () => (this.file.routineConnected ? this.env().CLEANER_CORE_ROUTINE_KEY?.trim() || undefined : undefined),
+          },
           alertFetch ? { fetch: alertFetch } : {},
         ),
       { now: () => this.now().getTime() },
@@ -638,10 +651,9 @@ export class LiveDesk {
   private connectRoutine(url: string, token: string, save: (values: { CLEANER_CORE_ROUTINE_URL: string; CLEANER_CORE_ROUTINE_KEY: string }) => void): void {
     save({ CLEANER_CORE_ROUTINE_URL: url, CLEANER_CORE_ROUTINE_KEY: token });
     this.uploadKey = undefined;
-    if (this.file.alertUpload) {
-      delete this.file.alertUpload;
-      this.persist();
-    }
+    delete this.file.alertUpload;
+    this.file.routineConnected = true;
+    this.persist();
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
   }
@@ -1019,6 +1031,7 @@ export class LiveDesk {
     }
     if (input.google === true) next.google = true;
     if (input.google === false) delete next.google;
+    if (input.done === true) next.sourcesDone = true;
     if (!hasSources(next)) return this.fail("Send at least one calendar link, or say you use Google Calendar.");
     if (input.dropJobs !== true) {
       this.resume();
@@ -2204,6 +2217,8 @@ export class LiveDesk {
     if (!this.file.address || timesMissing) {
       ask = propertyAsk({ address: Boolean(this.file.address), checkoutTime: Boolean(this.file.checkoutTime), checkInTime: Boolean(this.file.checkInTime) });
     } else if (!hasSources(this.file)) ask = sourcesAsk(this.file.nickname ?? this.file.business ?? "the property");
+    // A setup that already saved the cleaner was past this step, so it isn't asked again.
+    else if (!this.file.sourcesDone && !this.file.cleaner) ask = moreSourcesAsk(this.sourceNames(), this.file.nickname ?? this.file.business ?? "the property");
     else if (!this.file.cleaner) ask = peopleAsk(this.file.business ?? "the host");
     // Setups that saved texting before the schedule step existed skip it.
     else if (!this.file.schedule && !this.file.texting) ask = SCHEDULE_STEP;
@@ -2212,7 +2227,7 @@ export class LiveDesk {
     if (ask) next = askNext(ask.tool);
     else if (!this.file.texting) next = REVIEW_ASK;
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
-    else if (!this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
+    else if (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim()) next = ROUTINE_ASK;
     else {
       const untimed = this.untimedTurns();
       if (untimed >= 2 && this.file.checkoutTime && this.file.checkInTime) {
@@ -2233,6 +2248,11 @@ export class LiveDesk {
       ...(this.file.checked ? { turns: this.turns() } : {}),
       ...(notes.length > 0 ? { notes } : {}),
     };
+  }
+
+  /** The saved booking sources by name, Google Calendar last. Never a link. */
+  private sourceNames(): string[] {
+    return [...calendarsOf(this.file).map((calendar) => calendar.name), ...(this.file.google ? ["Google Calendar"] : [])];
   }
 
   /** The next setup step with its ask, for a save tool's reply. */

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import type { SetupAsk } from "../src/cleaner-core/setupAsk";
 import { fakeConversations } from "./fakeConversations";
@@ -35,6 +35,7 @@ const open: WiredApp[] = [];
 const roots: string[] = [];
 
 afterEach(async () => {
+  setCleanerAlertFetch(undefined);
   setCleanerTwilioClient(undefined);
   setCleanerGroupFetch(undefined);
   setCleanerCalendarFetch(undefined);
@@ -88,7 +89,8 @@ describe("Cleaner Core setup asks: one question at a time", () => {
 
     const steps: [string, Record<string, unknown>, string, string][] = [
       ["save_property", PROPERTY, "sources", "save_sources"],
-      ["save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }, "people", "save_people"],
+      ["save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] }, "sources", "save_sources"],
+      ["save_sources", { done: true }, "people", "save_people"],
       ["save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" }, "schedule", "save_schedule"],
       ["save_schedule", {}, "door-code", "save_door_code"],
     ];
@@ -119,11 +121,23 @@ describe("Cleaner Core setup asks: one question at a time", () => {
     expect(first?.options?.map((option) => option.value)).toEqual(["1", "3", "7", "custom", "when-confirmed"]);
   });
 
+  it("always asks how many locks there are and where, before the door code", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { choice: "cleaners" });
+    await call(wired, "save_property", PROPERTY);
+    await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }], done: true });
+    await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-and-host" });
+    const ask = askOf((await call(wired, "save_schedule", {})).structured);
+    expect(ask.step).toBe("door-code");
+    expect(fields(ask)).toEqual(["lockLocation", "code"]);
+    expect(ask.questions[0]?.required).toBe(true);
+  });
+
   it("offers who is in the texts as options, with the group of the host and the cleaner first", async () => {
     const wired = await app();
     await call(wired, "get_state", { choice: "cleaners" });
     await call(wired, "save_property", PROPERTY);
-    const people = askOf((await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] })).structured);
+    const people = askOf((await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }], done: true })).structured);
     const group = people.questions.find((question) => question.field === "groupChat");
     expect(group?.default).toBe("cleaner-and-host");
     // The group greets the host by name, so the name is asked and the business name is never the default.
@@ -175,6 +189,29 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
     expect(legacy.text).toContain("That link came through masked");
   });
 
+  it("keeps asking for more booking calendars, keeps each one, and moves on only after done", async () => {
+    const wired = await app();
+    await call(wired, "get_state", { choice: "cleaners" });
+    await call(wired, "save_property", PROPERTY);
+    const first = String((await call(wired, "save_sources", { uploadLink: { name: "Guesty Lite" } })).structured?.uploadUrl);
+    expect((await upload(wired, first, JSON.stringify({ url: GUESTY_LINK }))).status).toBe(200);
+    const more = askOf((await call(wired, "get_state")).structured);
+    expect(more.step).toBe("sources");
+    expect(more.questions[0]?.options?.map((option) => option.value)).toEqual(["add", "done"]);
+    expect(more.questions[0]?.ask).toContain("Guesty Lite");
+
+    const second = String((await call(wired, "save_sources", { uploadLink: { name: "Vrbo direct" } })).structured?.uploadUrl);
+    expect((await upload(wired, second, JSON.stringify({ url: CALENDAR_URL }))).status).toBe(200);
+    const both = (await call(wired, "get_state")).structured;
+    expect(both?.done).toContain("2 calendar links saved.");
+    expect(askOf(both).questions[0]?.ask).toContain("Guesty Lite, Vrbo direct");
+
+    const done = await call(wired, "save_sources", { done: true });
+    expect(done.isError, done.text).toBe(false);
+    expect(askOf(done.structured).step).toBe("people");
+    expect((await call(wired, "get_state")).structured?.done).toContain("2 calendar links saved.");
+  });
+
   it("saves a link posted to a one-time upload link, once, and never repeats or stores the code", async () => {
     const wired = await app();
     await call(wired, "get_state", { choice: "cleaners" });
@@ -199,7 +236,8 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 
     const state = (await call(wired, "get_state")).structured;
     expect(state?.done).toContain("Calendar link saved.");
-    expect(askOf(state).step).toBe("people");
+    expect(askOf(state).step).toBe("sources");
+    expect(fields(askOf(state))).toEqual(["more"]);
     const replies = JSON.stringify(state) + issued.raw + saved.raw;
     expect(replies.includes(GUESTY_LINK)).toBe(false);
     expect(wired.logs.join("\n").includes(GUESTY_LINK)).toBe(false);
@@ -231,7 +269,9 @@ describe("Cleaner Core setup: a calendar link from Grok's secure card", () => {
 });
 
 /** A group setup with the two test stays, activated, with the alert routine saved. */
-async function activatedGroup(options: { uploadCode?: boolean; hostName?: string; schedule?: Parameters<ReturnType<typeof liveDeskFor>["saveSchedule"]>[0]; now?: () => Date } = {}) {
+async function activatedGroup(
+  options: { uploadCode?: boolean; hostName?: string; schedule?: Parameters<ReturnType<typeof liveDeskFor>["saveSchedule"]>[0]; now?: () => Date; connectRoutine?: boolean } = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "cleaner-setup-ask-"));
   roots.push(root);
   const sms = fakeSms();
@@ -248,6 +288,7 @@ async function activatedGroup(options: { uploadCode?: boolean; hostName?: string
     CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
     CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     CLEANER_CORE_ROUTINE_URL: "https://routine.example/hook",
+    CLEANER_CORE_ROUTINE_KEY: "k-left-from-before",
     PUBLIC_BASE_URL: "https://cleaner.example",
   };
   const desk = liveDeskFor(root, () => env, options.now ?? (() => new Date(FROZEN)));
@@ -267,8 +308,33 @@ async function activatedGroup(options: { uploadCode?: boolean; hostName?: string
     expect(review.people.host).toEqual({ name: options.hostName, phoneLast4: HOST.slice(-4) });
   }
   ok(await desk.activate());
-  return { desk, sms, groups };
+  // The routine counts only once this setup connects it. The env already holds its values.
+  const posts: string[] = [];
+  setCleanerAlertFetch(async (_url, init) => {
+    posts.push(init.body);
+    return { status: 200 };
+  });
+  // Stands in for the secret store.
+  const save = (values: Record<string, string>) => Object.assign(env, values);
+  if (options.connectRoutine !== false) ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+  return { desk, sms, groups, posts, save };
 }
+
+describe("Cleaner Core routines: an address left by an earlier setup", () => {
+  it("asks for the routines again and wakes nothing until this setup connects one", async () => {
+    // The env holds a routine address from before, as after a new bot reuses the same server.
+    const { desk, posts, save } = await activatedGroup({ connectRoutine: false });
+    expect(String(ok(await desk.getState()).next)).toMatch(/^Create the Cleaner Core Check and Cleaner Core Alerts routines\./);
+    await desk.inbound({ id: "join", from: CLEANER, text: "YES" });
+    await desk.drainAlerts();
+    expect(posts).toEqual([]);
+
+    ok(await desk.saveAlertRoutine({ url: "https://routine.example/hook", token: "k-test-routine-key" }, save));
+    await desk.drainAlerts();
+    expect(posts.length).toBeGreaterThan(0);
+    expect(askOf(ok(await desk.getState())).step).toBe("times");
+  });
+});
 
 describe("Cleaner Core times: the usual times for every turnover", () => {
   it("offers the usual times for all untimed turnovers, then times them in one call", async () => {
