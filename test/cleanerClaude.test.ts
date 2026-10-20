@@ -268,7 +268,11 @@ describe("Cleaner Core for Claude, live", () => {
     await call(wired, "save_calendar_link", { url: CALENDAR_URL });
     await call(wired, "save_door_code", { code: DOOR_CODE });
     await call(wired, "set_up_texting");
-    expect((await call(wired, "run_checks")).isError).toBe(false);
+    const checks = await call(wired, "run_checks");
+    expect(checks.isError).toBe(false);
+    // The checks' own reply hands over the scheduled task, as get_state does.
+    expect(checks.structured?.next).toBe(CLAUDE_DESK_WORDING.routineAsk);
+    expect(checks.structured?.routine).toEqual(JSON.parse(JSON.stringify(CLAUDE_TASK)));
     const state = (await call(wired, "get_state")).structured ?? {};
     expect(state.next).toBe(CLAUDE_DESK_WORDING.routineAsk);
     expect(state.routine).toEqual(JSON.parse(JSON.stringify(CLAUDE_TASK)));

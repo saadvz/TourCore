@@ -1398,6 +1398,10 @@ export class LiveDesk {
     this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
+    // Claude follows this reply, not get_state, so on Claude the scheduled task comes first, as in get_state.
+    if (this.claude() && (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim())) {
+      return this.reply({ next: CLAUDE_DESK_WORDING.routineAsk, routine: CLAUDE_TASK, turns });
+    }
     return this.reply({
       next:
         turns.length === 0
