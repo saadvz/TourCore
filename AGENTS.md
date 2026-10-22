@@ -6,7 +6,7 @@ Tour Core setup and the operator skills stay in [GROK_BOOTSTRAP.md](GROK_BOOTSTR
 
 ## Safety rules
 
-A live text to a real person waits for Saad's okay.
+An agent sends no live text to a real person without Saad's okay. That holds even when `CLEANER_CORE_SMS_ALLOWLIST` is `*` and Cleaner Core itself may text any number.
 
 Tests and Scratch runs use only 555 numbers. Saad's own phones and the Twilio number are never test targets.
 

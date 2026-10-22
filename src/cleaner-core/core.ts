@@ -335,8 +335,8 @@ export interface CleanerCoreOptions {
   halt?: "after-accept" | "before-pin";
   /** When set, a poll older than one Guesty Lite interval writes a scheduled snapshot here. */
   backupDir?: string;
-  /** Live texts go only to these numbers. Scratch fixtures leave this unset and keep the 555 lock. */
-  allowlist?: readonly string[];
+  /** Live texts go only to these numbers, or to the numbers this check passes. Scratch fixtures leave this unset and keep the 555 lock. */
+  allowlist?: readonly string[] | ((phone: string) => boolean);
   /** When this returns true, the sink is not called and nothing is recorded as sent. */
   holdSends?: () => boolean;
   /** Hold the cleaner opt-in and the offer until the host has confirmed both times. */
@@ -3121,7 +3121,9 @@ class Engine implements CleanerCore {
 
   private numberAllowed(phone: string): boolean {
     const parsed = parsePhone(phone) ?? phone;
-    if (this.options.allowlist) return this.options.allowlist.some((item) => (parsePhone(item) ?? item) === parsed);
+    const allowlist = this.options.allowlist;
+    if (typeof allowlist === "function") return allowlist(parsed);
+    if (allowlist) return allowlist.some((item) => (parsePhone(item) ?? item) === parsed);
     return isScratchTestNumber(parsed);
   }
 

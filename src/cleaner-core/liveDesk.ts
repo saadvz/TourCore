@@ -20,7 +20,7 @@ import { allTimesAsk, askNext, DOOR_CODE_STEP, moreSourcesAsk, peopleAsk, PREFER
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
 import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
-import { cleanerPinStatusUrl, deleteLiveGroup, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
+import { cleanerPinStatusUrl, deleteLiveGroup, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms } from "./liveSms";
 import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
 import { containsCodeToken } from "./redact";
 import { isScratchTestNumber } from "./scratch";
@@ -2506,7 +2506,7 @@ export class LiveDesk {
       ...(file.lockLocation ? { lockLocation: file.lockLocation } : {}),
       hostName: file.business,
       consented: file.texting === true,
-      allowlist: smsAllowlist(env()),
+      allowlist: (phone: string) => isAllowlisted(env(), phone),
       holdSends: () => this.checking || (!liveSmsOn(env()) && !this.scratchCapture()),
       deferCleanerTexts: this.file.released !== true,
       ...(this.file.cleanerOut ? { cleanerConsent: "out" as const } : {}),

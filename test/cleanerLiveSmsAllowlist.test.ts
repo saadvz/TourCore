@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
-import { sendLiveSms, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
+import { isAllowlisted, sendLiveGroup, sendLiveSms, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import {
   CALENDAR_ICS,
   CALENDAR_URL,
@@ -19,6 +20,8 @@ import {
 const ADDRESS = "12 Practice Lane, Teaneck, NJ 07666";
 const BUSINESS = "Harbor";
 const DOOR = "8088";
+const STRANGER = "+15555550199";
+const TOUR_NUMBER = "+15555550123";
 const BLANK_LISTS: Array<string | undefined> = [undefined, "", "   ", ",", " , , "];
 
 afterEach(() => {
@@ -117,6 +120,45 @@ describe("live texts with a blank or incomplete allowlist", () => {
       expect(client.sent.map((item) => ({ to: item.to, body: item.body }))).toEqual([
         { to: HOST, body: "checkout question" },
       ]);
+    } finally {
+      close();
+    }
+  });
+});
+
+describe("live texts when the allowlist is *", () => {
+  it("allows any number except this service's own lines", () => {
+    const env = { ...envFor("*"), TOURCORE_TWILIO_PHONE_NUMBER: TOUR_NUMBER };
+    expect(isAllowlisted(env, HOST)).toBe(true);
+    expect(isAllowlisted(env, STRANGER)).toBe(true);
+    expect(isAllowlisted(env, CLEANER_LINE)).toBe(false);
+    expect(isAllowlisted(env, TOUR_NUMBER)).toBe(false);
+    expect(isAllowlisted(env, "not a phone")).toBe(false);
+    expect(isAllowlisted(envFor(` ${HOST} , * `), STRANGER)).toBe(true);
+  });
+
+  it("texts a number nobody listed, but never the cleaning line", async () => {
+    const client = fakeSms();
+    setCleanerTwilioClient(client);
+    const env = envFor("*");
+    expect(await sendLiveSms(env, { to: STRANGER, body: "opt in" })).toBeTruthy();
+    expect(await sendLiveSms(env, { to: CLEANER_LINE, body: "loop" })).toBeUndefined();
+    expect(client.sent.map((item) => item.to)).toEqual([STRANGER]);
+    await expect(sendLiveGroup(env, { audience: [STRANGER, CLEANER_LINE], body: "hello" })).rejects.toBeInstanceOf(GroupNotConfirmed);
+    expect(await sendLiveGroup(env, { audience: [STRANGER], body: "hello" })).toEqual({ sid: "SM2" });
+    expect(client.sent.map((item) => item.to)).toEqual([STRANGER, STRANGER]);
+  });
+
+  it("runs checks for unlisted host and cleaner, and a stranger's YES gets nothing", async () => {
+    const client = fakeSms();
+    setCleanerTwilioClient(client);
+    calendar();
+    const { desk, close } = await readyDesk(envFor("*"));
+    try {
+      expect((await desk.runChecks()).ok).toBe(true);
+      await desk.inbound({ id: "stranger-yes", from: STRANGER, text: "YES" });
+      expect(client.sent.filter((item) => item.to === STRANGER)).toEqual([]);
+      expect(client.sent.some((item) => item.body.includes(DOOR))).toBe(false);
     } finally {
       close();
     }
