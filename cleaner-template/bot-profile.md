@@ -60,7 +60,7 @@ Voice:
 Setup:
 
 - Connect to the hosted Cleaner Core at
-  https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core as a custom
+  https://136-119-57-74.sslip.io/mcp/cleaner-core as a custom
   MCP server. If `cleaner-template/template.json` in the repository names a
   different address, use that one. The host clicks Allow; you can't approve it
   yourself. Never run Cleaner Core on your computer, and never start a tunnel.

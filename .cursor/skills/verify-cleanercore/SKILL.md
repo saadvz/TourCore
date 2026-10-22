@@ -15,7 +15,7 @@ A smoke run without `--with-pin` is step C. It never texts a door code and never
 
 Doctor and smoke do not call the live service. Before a live run, check the connector and the phone line. These three checks have no test.
 
-- The connector points at the Railway service `tourcore-production-8b80`.
+- The connector points at the Cleaner Core service named by `hostedCleanerCoreUrl` in `cleaner-template/template.json`. While Railway is down that is the temporary Google VM, `https://136-119-57-74.sslip.io`. Otherwise it is the Railway service `tourcore-production-8b80`.
 - The Twilio inbound webhook is set.
 - A carrier STOP block (Twilio error 21610) is cleared by that phone texting START.
 
