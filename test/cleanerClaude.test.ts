@@ -23,7 +23,7 @@ const ZONE = "America/New_York";
 const FIRE_URL = "https://api.anthropic.com/v1/claude_code/routines/trig_01MADEUPTESTTRIGGER/fire";
 const FIRE_TOKEN = "made-up-claude-routine-token-for-tests";
 /** The Grok deployment's initialize instructions, byte for byte, as they were before Claude. */
-const GROK_INSTRUCTIONS_SHA256 = "7fa9e6fb397b1384efe392cfe77254b4a6477b3e83611c7df96495fe4d0ee373";
+const GROK_INSTRUCTIONS_SHA256 = "658e58d77bd1df15f8b02bb8c9b4b94bf4493a278dd33c7ea0f370e2dfa7fa09";
 
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
@@ -289,6 +289,23 @@ describe("Cleaner Core for Claude, live", () => {
   });
 });
 
+describe("Claude's scheduled task comes before Activate", () => {
+  it("asks for the task after the preferences, and Activate hands it over until it is connected", async () => {
+    const wired = await app(true);
+    await toDoorCode(wired);
+    await call(wired, "save_door_code", { code: DOOR_CODE, lockLocation: "front door keypad" });
+    await call(wired, "save_preferences", {});
+    const state = (await call(wired, "get_state")).structured ?? {};
+    expect(state.next).toBe(CLAUDE_DESK_WORDING.routineAsk);
+    expect(state.routine).toEqual(JSON.parse(JSON.stringify(CLAUDE_TASK)));
+    const refused = await call(wired, "activate");
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toBe(CLAUDE_DESK_WORDING.routineAsk);
+    expect(refused.structured?.routine).toEqual(JSON.parse(JSON.stringify(CLAUDE_TASK)));
+    expect(wired.cleanerSent).toEqual([]);
+  });
+});
+
 describe("Claude's scheduled task", () => {
   it("is described in get_state with the prompt the template ships", () => {
     expect(CLAUDE_TASK.prompt).toBe(CLAUDE_TASK_PROMPT);
@@ -366,7 +383,7 @@ describe("Claude template", () => {
   const files = filesUnder("claude-template").filter((file) => /\.(md|json)$/.test(file));
 
   it("ships the guide, the task, and the plugin", () => {
-    for (const file of ["claude-template/README.md", "claude-template/template.json", "claude-template/routines/cleaner-core-task.md", "claude-template/plugin/.claude-plugin/plugin.json", "claude-template/plugin/skills/cleaner-core/SKILL.md", ".claude-plugin/marketplace.json"]) {
+    for (const file of ["claude-template/README.md", "claude-template/SETUP_GUIDE.md", "claude-template/images/how-it-connects.png", "claude-template/images/setup-path.png", "claude-template/template.json", "claude-template/routines/cleaner-core-task.md", "claude-template/plugin/.claude-plugin/plugin.json", "claude-template/plugin/skills/cleaner-core/SKILL.md", ".claude-plugin/marketplace.json"]) {
       expect(() => read(file), file).not.toThrow();
     }
     const manifest = JSON.parse(read("claude-template/template.json")) as { hostedCleanerCoreUrl: string; deployment: { env: Record<string, string> } };

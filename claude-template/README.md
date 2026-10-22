@@ -60,6 +60,8 @@ The next Allow becomes the owner.
 
 ## How a host starts
 
+The illustrated, step-by-step version is [`SETUP_GUIDE.md`](SETUP_GUIDE.md).
+
 1. In claude.ai, open **Settings → Connectors → Add custom connector**. Name
    it **Cleaner Core** and enter
    `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (the
@@ -114,6 +116,7 @@ phone number outside the 555 test range, or a door code shows up here.
 
 | File | What it is |
 | --- | --- |
+| [`SETUP_GUIDE.md`](SETUP_GUIDE.md) | The host's setup guide, with diagrams in [`images/`](images/) |
 | [`template.json`](template.json) | Manifest: the deployment, the connectors, the task, and what's never included |
 | [`routines/cleaner-core-task.md`](routines/cleaner-core-task.md) | The scheduled task: how to make it, its prompt, and what Cleaner Core sends it |
 | [`plugin/`](plugin/) | The Claude plugin, listed by [`/.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json) |

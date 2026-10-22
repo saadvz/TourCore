@@ -22,7 +22,7 @@ The first Allow claims this Cleaner Core.
 
 ## Setup order
 
-Call `get_state` first and follow its `next` step. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask one question at a time in one short sentence, never the whole step at once. Show `options` as a choice card, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
+Call `get_state` first and follow its `next` step. Ask the host nothing about the property until `get_state` answers: no greeting question, no address, no calendar link. During setup it returns `ask`: the step, its tool, and its questions, each with the field it fills and maybe `options`, a `default`, an `example`, a `when`, and a `how`. Ask them in order, in one short sentence each, never the whole step at once. Each message asks exactly one question: never two in one message, even related ones like the checkout and check-in times, or a phone number and a name. Wait for the answer before the next one. When a question has options, show them as a choice card the host can tap, never as a list or a question in the text, offering the `default` first. Skip a question whose `when` doesn't apply or that the host already answered. Then call the step's tool.
 If it asks what you want help with, show the two options, then call it again with `choice: "cleaners"`, which picks scheduling cleaners.
 
 1. Start: `get_state`.
@@ -32,20 +32,19 @@ If it asks what you want help with, show the two options, then call it again wit
 5. Schedule: `save_schedule`. How far ahead the cleaner is offered each cleaning (1 day before checkout unless the host picks otherwise), the reminder, and quiet hours.
 6. Access: `save_door_code`, with the lock location. Always ask how many locks the cleaner goes through and where each one is, before the code, and save them all in `lockLocation`. Cleaner Core keeps one door code. Take the code on your secure card, call `save_door_code` with no `code` to get a one-time `uploadUrl`, and POST JSON `{"code": "<door code>"}` to it from your own cloud computer. Then call `get_state` to confirm.
 7. Preferences: `save_preferences`. The checklist, photos, supply notes, and other instructions.
-8. Review and Activate: summarize `setup` in your own words. When the host replies Activate, call `activate`. Pass Google Calendar's events when the host uses it.
+8. Routines: create the Cleaner Core Check and Cleaner Core Alerts routines yourself, and connect the Alerts routine with `save_alert_routine`. `activate` waits until this setup connects the Alerts routine, so the cleaner's first reply already reaches you.
+9. Review and Activate: summarize `setup` in your own words. When the host replies Activate, call `activate`. Pass Google Calendar's events when the host uses it.
 
-If `save_sources` refuses with `wouldCancel`, ask the host. Save again with `dropJobs: true` only after they say yes.
-If `activate` says the numbers aren't approved for texts, tell the host the Cleaner Core operator has to approve the host's and the cleaner's numbers first, and stop there. Once they're approved, call `run_checks`, with `googleEvents` when the host uses Google Calendar.
+If `save_sources` refuses with `wouldCancel`, ask the host. Save again with `dropJobs: true` only after they say yes. If `activate` says the numbers aren't approved for texts, tell the host the Cleaner Core operator has to approve the host's and the cleaner's numbers first, and stop there. Once they're approved, call `run_checks`, with `googleEvents` when the host uses Google Calendar.
 
-## After Activate
-
-`get_state` asks for two routines. Create both yourself. It keeps asking until this setup connects the Alerts routine, even when the server still holds one from an earlier setup.
+Step 8, Routines: after the preferences, `get_state` asks for two routines. Create both yourself, before the review. It keeps asking until this setup connects the Alerts routine, even when the server still holds one from an earlier setup. A setup that went live before this step existed is asked after its checks.
 
 - Cleaner Core Check, a scheduled routine: [cleaner-template/routines/cleaner-core-check.md](cleaner-template/routines/cleaner-core-check.md).
 - Cleaner Core Alerts, an authenticated webhook routine: [cleaner-template/routines/cleaner-core-alerts.md](cleaner-template/routines/cleaner-core-alerts.md). Only the host can see its webhook address and key. Right after you create it, without waiting to be asked, send the host a link that opens the Alerts routine's Webhook URL field directly and one that opens its Webhook key field directly, with one secure card for each, the address first. Never send a link to the Routines page, and never tell the host to open Routines and pick the routine: opening the routine from there doesn't show its Webhook URL.
 
-Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm.
-Then `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. Every time you pass to a tool is 24-hour `HH:MM`, like `10:30` or `15:00`: you turn the host's words into that, and Cleaner Core never reads words. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time, each on the day the schedule sets.
+Call `save_alert_routine` with no arguments to get a one-time upload link. From your own cloud computer, POST JSON `{"url": "<webhook address>", "token": "<webhook key>"}` to it with `Content-Type: application/json`, using the values you already hold. They never go in chat or a tool argument. Then call `get_state` to confirm. It moves on to the review. If the Check routine runs before Activate, `check_now` says Cleaner Core isn't active yet. Post nothing.
+
+After Activate, `get_state` asks for the first booking's times. Call `confirm_times` with the host's answer. Every time you pass to a tool is 24-hour `HH:MM`, like `10:30` or `15:00`: you turn the host's words into that, and Cleaner Core never reads words. When two or more upcoming turnovers have no times and the usual times are saved, `get_state` asks instead whether to use the usual times for all of them. If the host picks that, call `confirm_times` with those times and `all: true`. The cleaner still gets one cleaning offer at a time, each on the day the schedule sets.
 
 ## Every booking
 

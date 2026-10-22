@@ -5,8 +5,9 @@ re-reads the host's calendars and sends any reminder that is due. An API
 trigger is Cleaner Core's wake-up when the cleaner texts YES, a question, or
 DONE. This is the cleaning task, not Tour Core's.
 
-`get_state` hands Claude this task as `routine` after the checks, and Claude
-walks the host through making it. Claude can't make it from a chat: only the
+`get_state` hands Claude this task as `routine` after the preferences, before
+the review and Activate, and Claude walks the host through making it. Activate
+is refused until the task is connected. Claude can't make it from a chat: only the
 web can add the API trigger.
 
 ## Make it

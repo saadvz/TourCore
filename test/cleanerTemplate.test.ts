@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { liveDeskFor, resetLiveDesks, type LiveDesk } from "../src/cleaner-core/liveDesk";
 import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
+import { askNext } from "../src/cleaner-core/setupAsk";
 import { DOOR_CODE } from "./wiringProof";
 import { filesUnder } from "./files";
 
@@ -18,7 +19,7 @@ const HOSTED = "https://tourcore-production-8b80.up.railway.app";
 const REPO = "https://github.com/saadvz/TourCore";
 const ROUTINES = ["Cleaner Core Check", "Cleaner Core Alerts"];
 /** The setup order get_state asks for: the diagram's 8 steps, the checks once numbers are approved, then the routines and the first times. */
-const SETUP_TOOLS = ["get_state", "save_property", "save_sources", "save_people", "save_schedule", "save_door_code", "save_preferences", "activate", "run_checks", "save_alert_routine", "confirm_times"];
+const SETUP_TOOLS = ["get_state", "save_property", "save_sources", "save_people", "save_schedule", "save_door_code", "save_preferences", "save_alert_routine", "activate", "run_checks", "confirm_times"];
 /** Tools that need the host's yes in chat. A routine runs unattended, so it never holds them. */
 const NEEDS_HOST_YES = ["send_message", "mark_guests_left", "save_door_code", "save_sources", "activate", "retry_send", "hold_job", "resume_job", "reset_property"];
 
@@ -266,11 +267,41 @@ describe("CLEANER_CORE_BOOTSTRAP.md", () => {
   });
 });
 
+describe("Cleaner Core setup: one question per message", () => {
+  /** Every place Grok reads how to ask: each step's next line, the guide, the bot profile, and the initialize instructions. */
+  async function sources(): Promise<[string, string][]> {
+    return [
+      ["askNext", askNext("save_property")],
+      ["bootstrap", read(BOOTSTRAP)],
+      ["bot profile", read(join(TEMPLATE, "bot-profile.md"))],
+      ["initialize", String((await rpc("initialize")).instructions)],
+    ];
+  }
+
+  it("asks exactly one question per message, never two joined, and shows options as a tappable choice card", async () => {
+    for (const [name, text] of await sources()) {
+      const flat = text.replace(/\s+/g, " ");
+      expect(flat, name).toMatch(/exactly one question/);
+      expect(flat, name).toMatch(/the checkout and check-in times/);
+      expect(flat, name).toMatch(/choice card the host can tap/);
+    }
+  });
+
+  it("asks nothing about the property before get_state answers", async () => {
+    for (const [name, text] of await sources()) {
+      if (name === "askNext") continue;
+      expect(text.replace(/\s+/g, " "), name).toMatch(/Ask the host nothing about the property until `?get_state`? answers/);
+    }
+  });
+});
+
 describe("Cleaner Core initialize instructions", () => {
   it("point at the setup order", async () => {
     const text = String((await rpc("initialize")).instructions);
-    const order = SETUP_TOOLS.slice(1, 8);
-    const positions = order.map((tool) => text.indexOf(tool));
+    // save_alert_routine is named earlier for its upload link, so read the order from the setup line.
+    const setup = text.slice(text.indexOf("Setup goes in this order"));
+    const order = SETUP_TOOLS.slice(1, 9);
+    const positions = order.map((tool) => setup.indexOf(tool));
     for (const [i, p] of positions.entries()) expect(p, order[i]).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text.startsWith("Call get_state first and follow its next step.")).toBe(true);

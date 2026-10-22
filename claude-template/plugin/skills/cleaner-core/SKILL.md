@@ -81,7 +81,19 @@ with `choice: "cleaners"`, which picks scheduling cleaners.
    `get_state` to confirm.
 7. Preferences: `save_preferences`. The checklist, photos, supply notes, and
    other instructions.
-8. Review and Activate: summarize `setup` in your own words. When the host
+8. Scheduled task: `get_state` returns `routine`: one Claude scheduled task,
+   with its name, prompt, triggers, and connectors. Walk the host through
+   making it at [claude.ai/code/routines](https://claude.ai/code/routines), in
+   short steps: **New task**, name it, paste the prompt, add the hourly
+   schedule and the **API** trigger, keep only the listed connectors,
+   **Create**. The full steps are in
+   `claude-template/routines/cleaner-core-task.md` in
+   https://github.com/saadvz/TourCore. When the API trigger shows its Fire URL
+   and token, call `save_alert_routine` with no arguments and send the host
+   the `uploadUrl`. They paste both on that page, never in chat. Then call
+   `get_state` to confirm. Activate is refused until the task is connected, so
+   no reply from the cleaner goes unheard.
+9. Review and Activate: summarize `setup` in your own words. When the host
    replies Activate, call `activate`. Pass Google Calendar's events when the
    host uses it.
 
@@ -97,20 +109,7 @@ first, and stop there. Once they're approved, call `run_checks`, with
 
 ## After Activate
 
-`get_state` returns `routine`: one Claude scheduled task, with its name,
-prompt, triggers, and connectors. Walk the host through making it at
-[claude.ai/code/routines](https://claude.ai/code/routines), in short steps:
-**New task**, name it, paste the prompt, add the hourly schedule and the
-**API** trigger, keep only the listed connectors, **Create**. The full steps
-are in `claude-template/routines/cleaner-core-task.md` in
-https://github.com/saadvz/TourCore.
-
-When the API trigger shows its Fire URL and token, call `save_alert_routine`
-with no arguments and send the host the `uploadUrl`. They paste both on that
-page, never in chat. Then call `get_state` to confirm. It keeps asking until
-this setup connects the task.
-
-Then `get_state` asks for the first booking's times. Call `confirm_times` with
+`get_state` asks for the first booking's times. Call `confirm_times` with
 the host's answer. Every time you pass to a tool is 24-hour `HH:MM`, like
 `10:30` or `15:00`: you turn the host's words into that. When two or more
 upcoming turnovers have no times and the usual times are saved, `get_state`

@@ -54,7 +54,7 @@ export const CLAUDE_TASK = {
 
 /** The MCP initialize instructions for a Claude deployment. A Grok deployment keeps its own. */
 export const CLAUDE_INSTRUCTIONS = [
-  "Call get_state first and follow its next step. When it returns ask, ask the host its questions one at a time, in a short plain sentence each. When a question has options, show them as a short list of choices, the default first. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
+  "Call get_state first and follow its next step. Ask the host nothing about the property until get_state answers. When it returns ask, ask the host its questions in order, in a short plain sentence each. Each message asks exactly one question: never two in one message, even related ones like the checkout and check-in times, or a phone number and a name. When a question has options, show them as a short list of choices, the default first. Skip a question that has a when that doesn't apply. Then call the step's tool and follow its reply. Do not skip ahead. Do not read out a door code.",
   "Cleaner Core sends every text. You never text anyone yourself.",
   "Never ask for a secret in chat, and never put one in a tool argument: not the door code, a calendar export link, or the scheduled task's Fire URL or token. Each goes on a private Cleaner Core page. Call the step's tool without the value, send the host the uploadUrl it returns, and ask them to open it and type the value there. The link works once and expires in 10 minutes. When the host says it's saved, call get_state to confirm. If the host pastes a secret in chat anyway, don't repeat it, and ask them to change it.",
   "Use check_now when the scheduled task wakes you or the host says check my calendars. Read Google Calendar with your Google Calendar connector first when the host uses it, only the calendar the host named for bookings. Post each alert in your own short words.",
@@ -65,7 +65,7 @@ export const CLAUDE_INSTRUCTIONS = [
   "Cleaner Core never pauses a cleaning because of how a message sounds. When one sounds like a problem, tell the host right away, quote it, and ask whether to pause the cleaning. Pause with hold_job and resume with resume_job, each only after the host says yes.",
   "When a message needs a reply Cleaner Core doesn't send itself, draft one short reply and offer it to the host. Send it only with send_message after the host says yes.",
   "When check_now returns completed, call get_job_photos, look at the photos, and give the host a short summary in your own words: arrival, start and done times, checklist, what the photos show, and any notes.",
-  "Setup goes in this order: save_property, save_sources, save_people, save_schedule, save_door_code on its private page, save_preferences, then a review in your own words and activate after the host replies Activate. After that, help the host make the Cleaner Core scheduled task that get_state describes. Never show a door code, an id, or a full phone number.",
+  "Setup goes in this order: save_property, save_sources, save_people, save_schedule, save_door_code on its private page, save_preferences, then the Cleaner Core scheduled task that get_state describes, connected with save_alert_routine, then a review in your own words and activate after the host replies Activate. Never show a door code, an id, or a full phone number.",
 ].join(" ");
 
 /** Replies the desk gives that name the chat or its tools. */
@@ -118,7 +118,7 @@ export function claudeAsk(ask: SetupAsk): SetupAsk {
 
 /** askNext for Claude: there is no choice card, so options are a short list. */
 export function claudeAskNext(tool: string): string {
-  return `Ask the host the questions in ask, one at a time, in your own short words. Show any options as a short list of choices. Skip a question the host already answered. Then call ${tool}.`;
+  return `Ask the host the questions in ask, in order, in your own short words. Each message asks exactly one question: never two in one message, even related ones like the checkout and check-in times, or a phone number and a name. Wait for the answer before the next one. Show any options as a short list of choices. Skip a question the host already answered. Then call ${tool}.`;
 }
 
 /** Image types Claude reads. HEIC photos stay links. */

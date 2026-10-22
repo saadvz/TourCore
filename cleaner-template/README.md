@@ -71,8 +71,8 @@ that clicks Allow and refuses any other bot. To demo again:
 | --- | --- | --- |
 | The paste-in prompt | `SETUP_PROMPT.md` | Fallback without the template: the host pastes it into a new Grok Bot |
 | Profile and standing instructions | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions. They name the repository and the hosted address, so the template needs no paste-in prompt |
-| Routine: Cleaner Core Check | `routines/cleaner-core-check.md` | Grok creates it after Activate (scheduled trigger) |
-| Routine: Cleaner Core Alerts | `routines/cleaner-core-alerts.md` | Grok creates it after Activate (authenticated webhook trigger) |
+| Routine: Cleaner Core Check | `routines/cleaner-core-check.md` | Grok creates it before Activate (scheduled trigger) |
+| Routine: Cleaner Core Alerts | `routines/cleaner-core-alerts.md` | Grok creates it before Activate (authenticated webhook trigger) |
 | Manifest | `template.json` | For reviewers. It lists every item and what's never included |
 
 `SETUP_PROMPT.md` is pinned by `test/cleanerTemplate.test.ts`. Change it only

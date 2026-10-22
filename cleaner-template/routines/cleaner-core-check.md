@@ -20,7 +20,7 @@ webhook address, no key, and no secret.
    back keeps a stay that ends today in the read.
 2. Call `check_now` with `{ timeZone, items }` as `googleEvents`, exactly as
    you read it from only that calendar. Don't edit, filter, or add to the
-   events.
+   events. If it says Cleaner Core isn't active yet, post nothing and stop.
 3. If the Google read failed, call `check_now` without `googleEvents`. Never
    send an empty list for a failed read. An empty list tells Cleaner Core
    every stay was removed.
@@ -63,8 +63,8 @@ so an all-day stay would read as checking out a day late.
 
 ## Connecting it
 
-Grok creates this routine itself after Activate, when `get_state` asks for
-the routines. It needs no secret. The Alerts routine's address and key go to
+Grok creates this routine itself during setup, after the preferences and
+before the review, when `get_state` asks for the routines. It needs no secret. The Alerts routine's address and key go to
 Cleaner Core only through its one-time upload link, never in chat.
 
 ## Allowed tools
