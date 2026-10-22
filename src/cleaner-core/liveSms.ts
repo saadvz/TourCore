@@ -1,7 +1,7 @@
 import { parsePhone } from "../core/phone";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { twilioHttpClient, type TwilioClient } from "../messaging/twilio/client";
-import { GroupNotConfirmed } from "./groupThread";
+import { GroupNotConfirmed, type RefusedPhone } from "./groupThread";
 
 /** Off unless CLEANER_CORE_LIVE_SMS is exactly "1" or "true". */
 export function liveSmsOn(env: NodeJS.ProcessEnv): boolean {
@@ -215,6 +215,7 @@ async function makeGroup(api: GroupApi, audience: string[], from: string, hookUr
   }
   const sid = created.sid;
   if (!sid) throw new GroupNotConfirmed();
+  let refused: RefusedPhone | undefined;
   try {
     await call(api, "POST", conversationPath(sid, "Webhooks"), {
       Target: "webhook",
@@ -223,7 +224,15 @@ async function makeGroup(api: GroupApi, audience: string[], from: string, hookUr
       "Configuration.Filters": "onMessageAdded",
     });
     await call(api, "POST", conversationPath(sid, "Participants"), { Identity: CLEANER_GROUP_IDENTITY, "MessagingBinding.ProjectedAddress": from });
-    for (const phone of audience) await call(api, "POST", conversationPath(sid, "Participants"), { "MessagingBinding.Address": phone });
+    for (const phone of audience) {
+      try {
+        await call(api, "POST", conversationPath(sid, "Participants"), { "MessagingBinding.Address": phone });
+      } catch (err) {
+        // Twilio answered and said no, so the host can be told which number and why.
+        if (err instanceof TwilioRefusal) refused = { phone, ...(err.code !== undefined ? { code: err.code } : {}), ...(err.detail ? { message: err.detail } : {}) };
+        throw err;
+      }
+    }
     if (!(await sameGroup(api, sid, audience, from))) throw new GroupNotConfirmed(sid);
   } catch {
     // Kept only when it couldn't be emptied, so the next send empties it.
@@ -231,7 +240,7 @@ async function makeGroup(api: GroupApi, audience: string[], from: string, hookUr
       () => true,
       () => false,
     );
-    throw new GroupNotConfirmed(emptied ? undefined : sid);
+    throw new GroupNotConfirmed(emptied ? undefined : sid, refused);
   }
   return sid;
 }
@@ -316,9 +325,29 @@ async function request(api: GroupApi, method: string, url: string, fields?: Reco
   }
 }
 
-/** A POST whose reply carries a sid. Any failure throws. */
+/** Twilio answered with an error. Its code and message say why. */
+class TwilioRefusal extends Error {
+  constructor(
+    readonly code?: number,
+    readonly detail?: string,
+  ) {
+    super("not sent");
+  }
+}
+
+async function refusal(res: Response): Promise<TwilioRefusal> {
+  try {
+    const body = (await res.json()) as { code?: unknown; message?: unknown } | undefined;
+    return new TwilioRefusal(typeof body?.code === "number" ? body.code : undefined, typeof body?.message === "string" ? body.message.slice(0, 200) : undefined);
+  } catch {
+    return new TwilioRefusal();
+  }
+}
+
+/** A POST whose reply carries a sid. Any failure throws, a TwilioRefusal when Twilio answered. */
 async function call(api: GroupApi, method: string, url: string, fields: Record<string, string>): Promise<{ sid?: string }> {
   const res = await request(api, method, url, fields);
-  if (!res?.ok) throw new Error("not sent");
+  if (!res) throw new Error("not sent");
+  if (!res.ok) throw await refusal(res);
   return ((await res.json().catch(() => ({}))) ?? {}) as { sid?: string };
 }

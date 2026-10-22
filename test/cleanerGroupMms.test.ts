@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { groupInviteBody, groupOfferBody } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { GroupNotConfirmed } from "../src/cleaner-core/groupThread";
@@ -183,6 +183,22 @@ describe("group texting: how the group is made", () => {
     const fake = useFake();
     await expect(sendLiveGroup(ENV, { audience: [HOST, "+15555550199"], body: "Hello" })).rejects.toBeInstanceOf(GroupNotConfirmed);
     expect(fake.calls()).toBe(0);
+  });
+
+  it("names the phone and Twilio's code when Twilio won't add it to the group", async () => {
+    const fake = useFake({ refusePhone: HOST });
+    const failed = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello" }).catch((err: unknown) => err);
+    expect(failed).toBeInstanceOf(GroupNotConfirmed);
+    expect((failed as GroupNotConfirmed).refused).toEqual({ phone: HOST, code: 50407, message: "Invalid messaging binding address" });
+    expect(fake.posts).toEqual([]);
+    for (const sid of fake.created) expect(fake.people(sid)).toEqual([]);
+  });
+
+  it("names no phone when the group fails for another reason", async () => {
+    useFake({ failWebhooks: true });
+    const failed = await sendLiveGroup(ENV, { audience: [HOST, CLEANER], body: "Hello" }).catch((err: unknown) => err);
+    expect(failed).toBeInstanceOf(GroupNotConfirmed);
+    expect((failed as GroupNotConfirmed).refused).toBeUndefined();
   });
 
   it("leaves no half-made group when the reply webhook can't be added", async () => {
@@ -468,6 +484,35 @@ describe("group texting: when the group can't be made", () => {
     expect((await must(wired, "get_state")).notes).toContain("I couldn't send the cleaning offer to the group.");
     expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
     expect(await turnStatus(wired)).toBe("confirmed");
+  });
+});
+
+describe("group texting: when Twilio refuses a phone", () => {
+  it("tells the host which number and Twilio's code, and logs only its last four digits", async () => {
+    useFake({ refusePhone: HOST });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const wired = await app();
+      await must(wired, "get_state", { choice: "cleaners" });
+      await must(wired, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+      await must(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Mike", hostName: "Dana", groupChat: "cleaner-and-host" });
+      await must(wired, "save_calendar_link", { url: CALENDAR_URL });
+      await must(wired, "save_door_code", { code: DOOR_CODE });
+      await must(wired, "set_up_texting");
+      await must(wired, "run_checks");
+      await must(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
+      expect((await sms(wired, HOST, "YES")).status).toBe(200);
+      expect((await sms(wired, CLEANER, "YES")).status).toBe(200);
+      const last4 = HOST.slice(-4);
+      expect((await must(wired, "get_state")).notes).toContain(
+        `Twilio wouldn't add the number ending in ${last4} to the group text (Twilio error 50407). Check that number with Twilio support, or use another mobile number for that person.`,
+      );
+      const lines = warn.mock.calls.map((call) => String(call[0]));
+      expect(lines).toContain(`  Cleaner Core: Twilio refused ***${last4} for the group text (error 50407: Invalid messaging binding address).`);
+      expect(lines.join("\n")).not.toContain(HOST);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

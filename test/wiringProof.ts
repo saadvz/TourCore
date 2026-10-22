@@ -78,7 +78,7 @@ export interface WiredApp {
   tool: (path: string, token: string, name: string, args?: Record<string, unknown>, options?: { pinKey?: string | null }) => Promise<ToolResult>;
   listTools: (path: string, token: string) => Promise<{ status: number; names: string[]; raw: string }>;
   /** `extra` adds signed form fields, like NumMedia and MediaUrl0 for an MMS. */
-  postTwilio: (path: string, input: { from: string; to: string; body: string; sid: string; token: string; extra?: Record<string, string> }) => Promise<{ status: number; raw: string }>;
+  postTwilio: (path: string, input: { from: string; to: string; body: string; sid: string; token: string; extra?: Record<string, string> }) => Promise<{ status: number; raw: string; type: string }>;
   /** Changes the server's raw environment. An undefined value removes the name. */
   setEnv: (values: NodeJS.ProcessEnv) => void;
   postStatus: (input: { sid: string; status: string; signed?: boolean }) => Promise<{ status: number; raw: string }>;
@@ -218,7 +218,7 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
       headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": signature },
       body: rawBody,
     });
-    return { status: res.status, raw: await res.text() };
+    return { status: res.status, raw: await res.text(), type: res.headers.get("content-type") ?? "" };
   };
   const postStatus = async (input: { sid: string; status: string; signed?: boolean }) => {
     const path = "/webhooks/twilio/cleaner-core/status";
