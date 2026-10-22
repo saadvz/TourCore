@@ -282,6 +282,13 @@ const GROUP_SEND_TOPICS = new Map<string, string>([
   ["intro", "intro"],
 ]);
 
+/** Twilio wouldn't add this phone to the group. Only the last four digits are shown. */
+export function groupRefusedLine(refused: { phone: string; code?: number }): string {
+  const digits = refused.phone.replace(/\D/g, "").slice(-4);
+  const code = refused.code !== undefined ? ` (Twilio error ${refused.code})` : "";
+  return `Twilio wouldn't add the number ending in ${digits} to the group text${code}. Check that number with Twilio support, or use another mobile number for that person.`;
+}
+
 export function groupUnconfirmedLine(kind: string): string {
   if (kind === "host-message") return "I couldn't send your message to the group.";
   const topic = GROUP_SEND_TOPICS.get(kind);

@@ -21,7 +21,7 @@ import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, deleteLiveGroup, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms } from "./liveSms";
 import { openPin, sealPin, serverPinKey, type PinSeal } from "./pinSeal";
-import { containsCodeToken } from "./redact";
+import { containsCodeToken, redactPhone } from "./redact";
 import { isScratchTestNumber } from "./scratch";
 import { googleCalendarSource, guestyLiteSource, icalSource, type BookingSource, type GoogleEventList, type SourceSnapshot } from "./sources";
 import {
@@ -2526,6 +2526,10 @@ export class LiveDesk {
               if (text.kind === "pin" && sent?.sid) this.noteAccepted(sent.sid);
             } catch (err) {
               if (err instanceof GroupNotConfirmed && err.conversationSid) this.file.conversationSid = err.conversationSid;
+              if (err instanceof GroupNotConfirmed && err.refused) {
+                const { phone, code, message } = err.refused;
+                console.warn(`  Cleaner Core: Twilio refused ${redactPhone(phone)} for the group text${code !== undefined ? ` (error ${code}${message ? `: ${message}` : ""})` : ""}.`);
+              }
               throw err;
             }
             return;

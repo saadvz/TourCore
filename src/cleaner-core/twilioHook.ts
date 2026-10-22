@@ -10,6 +10,9 @@ import { formParams, verifyTwilioSignature } from "../messaging/twilio/signature
 export const CLEANER_TWILIO_PATH = "/webhooks/twilio/cleaner-core";
 export const CLEANER_TWILIO_STATUS_PATH = CLEANER_PIN_STATUS_PATH;
 export const CLEANER_TWILIO_GROUP_PATH = CLEANER_GROUP_HOOK_PATH;
+/** An empty TwiML reply. Twilio expects XML from a messaging webhook and logs error 12300 for JSON. */
+export const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+export const TWIML_CONTENT_TYPE = "text/xml; charset=utf-8";
 /** Twilio sends at most 10 attachments with one MMS. */
 const MAX_MEDIA = 10;
 
@@ -47,7 +50,7 @@ export async function handleCleanerTwilioWebhook(input: {
   env: () => NodeJS.ProcessEnv;
   root: string;
   now: () => Date;
-}): Promise<{ status: number; body: string }> {
+}): Promise<{ status: number; body: string; contentType?: string }> {
   const env = input.env();
   if (!cleanerCoreEnabled(env)) return { status: 404, body: "" };
   const params = formParams(input.rawBody);
@@ -60,7 +63,7 @@ export async function handleCleanerTwilioWebhook(input: {
   const media = mediaOf(params);
   const desk = liveDeskFor(input.root, input.env, input.now);
   await desk.inbound({ id, from, text, ...(media.length > 0 ? { media } : {}) });
-  return { status: 200, body: "{}" };
+  return { status: 200, body: EMPTY_TWIML, contentType: TWIML_CONTENT_TYPE };
 }
 
 /** Delivery status for a door-code text. Signature required. Never unseals or resends the code. */

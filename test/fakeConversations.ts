@@ -50,7 +50,9 @@ function fields(init: RequestInit | undefined): Record<string, string> {
   return out;
 }
 
-export function fakeConversations(options: { failMessages?: boolean; failWebhooks?: boolean; failConversationDeletes?: boolean } = {}): FakeConversations {
+export function fakeConversations(
+  options: { failMessages?: boolean; failWebhooks?: boolean; failConversationDeletes?: boolean; refusePhone?: string } = {},
+): FakeConversations {
   const conversations = new Map<string, FakeParticipant[]>();
   const removed: string[] = [];
   const posts: ConversationPost[] = [];
@@ -129,6 +131,8 @@ export function fakeConversations(options: { failMessages?: boolean; failWebhook
         const grouped = people.some((person) => person.projectedAddress) || Boolean(projectedAddress);
         // A group texting conversation takes no proxy addresses.
         if (grouped && (proxyAddress || people.some((person) => person.proxyAddress))) return reply(400, {});
+        // Twilio's answer for a phone it won't put in a group text.
+        if (address && address === options.refusePhone) return reply(400, { code: 50407, message: "Invalid messaging binding address", status: 400 });
         if (address && people.some((person) => person.address === address)) return reply(409, {});
         if (identity && people.some((person) => person.identity === identity)) return reply(409, {});
         if (!address && !identity) return reply(400, {});
