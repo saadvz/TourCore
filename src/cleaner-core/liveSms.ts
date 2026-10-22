@@ -19,9 +19,22 @@ export function smsAllowlist(env: NodeJS.ProcessEnv): string[] {
   return phones;
 }
 
+/** True when CLEANER_CORE_SMS_ALLOWLIST holds "*": any number may be texted, except this service's own lines. */
+export function smsAllowsAny(env: NodeJS.ProcessEnv): boolean {
+  return (env.CLEANER_CORE_SMS_ALLOWLIST ?? "").split(",").some((part) => part.trim() === "*");
+}
+
+/** This service's own numbers. They are never texted, even when any number is allowed. */
+const OWN_LINES = ["CLEANER_CORE_TWILIO_PHONE_NUMBER", "TOURCORE_TWILIO_PHONE_NUMBER", "TOURCORE_PHOTON_PHONE_NUMBER"] as const;
+
+function ownLine(env: NodeJS.ProcessEnv, phone: string): boolean {
+  return OWN_LINES.some((key) => parsePhone(env[key] ?? "") === phone);
+}
+
 export function isAllowlisted(env: NodeJS.ProcessEnv, phone: string): boolean {
   const parsed = parsePhone(phone);
   if (!parsed) return false;
+  if (smsAllowsAny(env)) return !ownLine(env, parsed);
   return smsAllowlist(env).includes(parsed);
 }
 
@@ -128,12 +141,11 @@ export async function sendLiveGroup(
   input: { audience: string[]; body: string; conversationSid?: string },
 ): Promise<{ sid?: string; conversationSid?: string } | undefined> {
   if (!liveSmsOn(env)) return undefined;
-  const allow = smsAllowlist(env);
-  if (allow.length === 0) return undefined;
+  if (!smsAllowsAny(env) && smsAllowlist(env).length === 0) return undefined;
   const audience = [...new Set(input.audience.map((phone) => parsePhone(phone)).filter((phone): phone is string => Boolean(phone)))];
   if (audience.length === 0) return undefined;
   // A phone left off the allowlist means the group can't be the one the engine asked for.
-  if (audience.some((phone) => !allow.includes(phone))) throw new GroupNotConfirmed(input.conversationSid);
+  if (audience.some((phone) => !isAllowlisted(env, phone))) throw new GroupNotConfirmed(input.conversationSid);
   const [only] = audience;
   if (audience.length === 1 && only) {
     // The old group is emptied first, so it can't keep capturing this person's own texts.
