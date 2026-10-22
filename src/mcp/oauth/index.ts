@@ -58,6 +58,14 @@ export interface McpOAuthOptions {
   approvalPlace?: () => "computer" | "hosted";
   publicApproval?: (clientId: string, resourcePath: string) => boolean;
   hostedClaimed?: (resourcePath: string) => boolean;
+  /** Which chat Cleaner Core's approval page names. Unset is Grok. */
+  cleanerAssistant?: () => "grok" | "claude";
+  /**
+   * Whether a client may sign in with a Client ID Metadata Document (a URL client_id). Unset is yes.
+   * A Claude deployment says no: Claude's document is one client_id for every Claude user, and a
+   * hosted owner is bound by client_id, so Claude registers its own client instead.
+   */
+  metadataDocuments?: () => boolean;
   /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
   legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
@@ -131,6 +139,8 @@ export class McpOAuth {
       approvalPlace: options.approvalPlace,
       publicApproval: options.publicApproval,
       hostedClaimed: options.hostedClaimed,
+      ...(options.cleanerAssistant ? { cleanerAssistant: options.cleanerAssistant } : {}),
+      ...(options.metadataDocuments ? { metadataDocuments: options.metadataDocuments } : {}),
       log: this.log,
     });
     this.local = this.buildLocal();
@@ -170,7 +180,7 @@ export class McpOAuth {
       issuer: ep.issuer,
       token_endpoint_auth_methods_supported: AUTH_METHODS,
       revocation_endpoint_auth_methods_supported: AUTH_METHODS,
-      client_id_metadata_document_supported: true,
+      client_id_metadata_document_supported: this.options.metadataDocuments?.() ?? true,
       authorization_response_iss_parameter_supported: true,
     };
     const protectedResourceMetadata = (r: ResourceEndpoints) => ({

@@ -18,7 +18,9 @@ import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
+import { CLAUDE_SECOND_OWNER, cleanerAssistant } from "../cleaner-core/assistant";
+import { handleCleanerUploadPage, isFormPost } from "../cleaner-core/uploadPage";
+import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, uploadPageOf, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
 import { CLEANER_PHOTO_PREFIX, photoKey, servePhoto } from "../cleaner-core/photos";
 import { publicBaseUrl } from "../messaging/publicUrl";
@@ -149,9 +151,10 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * What the public (tunnel) address may reach: the webhook, the identity form,
  * the operator tools for an agent host (authorization required) and, in OAuth
  * mode, the OAuth endpoints. Never the browser operator app, and never the
- * page where the owner approves a connection.
+ * page where the owner approves a connection. `uploadPages` is a Claude
+ * deployment, where the host also opens an upload link in a browser.
  */
-function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean): boolean {
+function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean, uploadPages = false): boolean {
   if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH || path === CLEANER_MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
@@ -172,6 +175,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (method === "POST" && calendarUploadCode(path)) return true;
   // The one-time door code upload. The code in the path is the credential.
   if (method === "POST" && doorCodeUploadCode(path)) return true;
+  if (uploadPages && method === "GET" && uploadPageOf(path)) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -349,7 +353,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           tenantPolicy: (clientId, resourcePath) => {
             if (!hostedMode()) return { allowed: true };
             const state = installation.files.state();
-            return resourcePath === CLEANER_MCP_PATH ? hostedCleanerTenantDecision(state, clientId) : hostedTenantDecision(state, clientId);
+            if (resourcePath !== CLEANER_MCP_PATH) return hostedTenantDecision(state, clientId);
+            const decision = hostedCleanerTenantDecision(state, clientId);
+            return !decision.allowed && cleanerAssistant(installation.env()) === "claude" ? { allowed: false, message: CLAUDE_SECOND_OWNER } : decision;
           },
           onOwnerApproved: (clientId, resourcePath) => {
             if (!hostedMode()) return;
@@ -358,6 +364,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             else bindHostedTenant(installation.files, clientId, now);
           },
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
+          cleanerAssistant: () => cleanerAssistant(installation.env()),
+          // A Claude deployment has Claude register its own client, so its owner is that one connection.
+          metadataDocuments: () => cleanerAssistant(installation.env()) !== "claude",
           publicApproval: (clientId, resourcePath) => {
             if (!hostedMode()) return false;
             const state = installation.files.state();
@@ -484,7 +493,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
       return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
     }
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted))) {
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, cleanerAssistant(installation.env()) === "claude"))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
@@ -697,6 +706,21 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         });
         if ("answered" in result) return;
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
+      }
+      // A Claude deployment's upload links also open as a private page, and take that page's form post.
+      const uploadPage = cleanerAssistant(installation.env()) === "claude" ? uploadPageOf(url.pathname) : undefined;
+      if (uploadPage && (method === "GET" || (method === "POST" && isFormPost(String(req.headers["content-type"] ?? ""))))) {
+        const result = await handleCleanerUploadPage({
+          ...uploadPage,
+          method,
+          contentType: String(req.headers["content-type"] ?? ""),
+          readBody: () => readCapped(req, ALERT_UPLOAD_MAX_BYTES),
+          env: () => installation.env(),
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+          saveSecrets: (values) => installation.secrets.set(values),
+        });
+        return send(result.status, result.headers["Content-Type"] ?? "text/html; charset=utf-8", result.body, { ...result.headers, ...(result.status === 413 ? { Connection: "close" } : {}) });
       }
       const uploadCode = method === "POST" ? alertUploadCode(url.pathname) : undefined;
       if (uploadCode) {
