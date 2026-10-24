@@ -1,4 +1,5 @@
 import { holdNote } from "./cleanerTexts";
+import { GROK_HELPER } from "./assistant";
 
 export const REVIEW_KINDS = [
   "stale-source",
@@ -45,7 +46,7 @@ export interface ReviewDetail {
 }
 
 /** Host-facing review alerts. None of these repeat a door code or a full phone number. */
-export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDetail): string {
+export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDetail, helper = GROK_HELPER): string {
   switch (kind) {
     case "stale-source":
       return `I can't see the latest bookings for ${address} right now, so I'm holding new cleanings and the door code. I'll pick back up once the calendar updates. If a time changed, just text it to me.`;
@@ -54,13 +55,13 @@ export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDe
     case "same-day-capacity":
       return `Same-day cleaning at ${address} may be too tight. I saved it for your review and did not add another offer.`;
     case "missed-reminder":
-      return reminderDeliveryNote(detail?.day ?? "");
+      return reminderDeliveryNote(detail?.day ?? "", helper);
     case "conflicting-replies":
       return `I got conflicting replies about the cleaning at ${address}. I did not change the job.`;
     case "failed-sms":
       return `A text failed to send. I saved it for your review and did not count it as delivered.`;
     case "uncertain-sms":
-      return detail?.about === "reminder" ? reminderDeliveryNote(detail.day ?? "") : offerDeliveryNote(detail?.day ?? "");
+      return detail?.about === "reminder" ? reminderDeliveryNote(detail.day ?? "", helper) : offerDeliveryNote(detail?.day ?? "", helper);
     case "shared-chat-routing":
       return `I could not tell who should get the cleaning texts at ${address}. I did not start a group or send the door code.`;
     case "possible-code-exposure":
@@ -70,12 +71,12 @@ export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDe
   }
 }
 
-function offerDeliveryNote(day: string): string {
-  return `My cleaning offer to the cleaner for ${day} may not have gone out. I didn't resend it. Tell your Grok Bot if you want it sent again.`;
+function offerDeliveryNote(day: string, helper: string): string {
+  return `My cleaning offer to the cleaner for ${day} may not have gone out. I didn't resend it. Tell ${helper} if you want it sent again.`;
 }
 
-function reminderDeliveryNote(day: string): string {
-  return `My reminder to the cleaner for ${day} didn't go out. I didn't resend it. Tell your Grok Bot if you want it sent again.`;
+function reminderDeliveryNote(day: string, helper: string): string {
+  return `My reminder to the cleaner for ${day} didn't go out. I didn't resend it. Tell ${helper} if you want it sent again.`;
 }
 
 /** Host-facing rotation and offboarding steps. The demo does not change the lock. */

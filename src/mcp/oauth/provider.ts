@@ -147,6 +147,10 @@ export interface ProviderOptions {
   publicApproval?: (clientId: string, resourcePath: string) => boolean;
   /** True after the first hosted Allow has bound an owner client for that resource. */
   hostedClaimed?: (resourcePath: string) => boolean;
+  /** Which chat Cleaner Core's approval page names. Unset is Grok. */
+  cleanerAssistant?: () => "grok" | "claude";
+  /** Whether a URL client_id (a Client ID Metadata Document) is accepted. Unset is yes. */
+  metadataDocuments?: () => boolean;
   log?: (line: string) => void;
 }
 
@@ -223,7 +227,13 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
 
   private async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
     if (typeof clientId !== "string" || !clientId || clientId.length > 2000) return undefined;
-    if (isMetadataDocumentClientId(clientId)) return this.metadataDocumentClient(clientId);
+    if (isMetadataDocumentClientId(clientId)) {
+      if (this.options.metadataDocuments?.() === false) {
+        this.log(`Refused a URL client_id from ${hostOf(clientId)}: this server takes registered clients only.`);
+        return undefined;
+      }
+      return this.metadataDocumentClient(clientId);
+    }
     const ep = this.defaultEndpoints();
     const stored = this.options.store.getClient(clientId);
     // Registrations belong to one authorization server: a new tunnel address means registering again.
@@ -288,7 +298,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const tenant = this.options.tenantPolicy?.(client.client_id, ep.path);
     if (tenant && !tenant.allowed) {
       const cleaner = ep.label === "Cleaner Core";
-      this.log(cleaner ? "Refused a Cleaner Core connection from a second Grok Bot. This hosted Cleaner Core has one owner." : "Refused a connection from a second account. This hosted demo is single-tenant.");
+      this.log(cleaner ? `Refused a Cleaner Core connection from a second ${this.options.cleanerAssistant?.() === "claude" ? "Claude connection" : "Grok Bot"}. This hosted Cleaner Core has one owner.` : "Refused a connection from a second account. This hosted demo is single-tenant.");
       res.status(403).set(PAGE_HEADERS).type("html").send(problemPage(cleaner ? "This Cleaner Core is already in use" : "This Tour Core demo is already in use", tenant.message));
       return;
     }
@@ -328,6 +338,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       hosted,
       firstClaim: hosted && !(this.options.hostedClaimed?.(ep.path) ?? false),
       label: ep.label,
+      ...(ep.label === "Cleaner Core" && this.options.cleanerAssistant?.() === "claude" ? { assistant: "claude" as const } : {}),
     }));
   }
 

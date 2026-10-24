@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { DeploymentMode } from "../../install/deployment";
+import { CLAUDE_REDIRECT_HOST, cleanerAssistant } from "../../cleaner-core/assistant";
 
 /**
  * Which OAuth clients may be sent an authorization code, and where. Grok
@@ -69,7 +70,9 @@ export function redirectHostsFromEnv(env: NodeJS.ProcessEnv = process.env): stri
     .split(",")
     .map((h) => h.trim().toLowerCase().replace(/^\*?\./, ""))
     .filter((h) => /^[a-z0-9.-]+$/.test(h) && h.includes("."));
-  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...extra])];
+  // A Cleaner Core deployment set to Claude takes claude.ai's connector callback without extra config.
+  const claude = cleanerAssistant(env) === "claude" ? [CLAUDE_REDIRECT_HOST] : [];
+  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...claude, ...extra])];
 }
 
 export function redirectPolicyFor(env: NodeJS.ProcessEnv = process.env, mode?: DeploymentMode): RedirectPolicy {

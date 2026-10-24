@@ -1,3 +1,4 @@
+import { GROK_HELPER } from "./assistant";
 /**
  * The only place a cleaning offer, reminder, or door code is addressed.
  * The recipient is the property's opted-in cleaner record. There is no phone
@@ -143,16 +144,16 @@ export function jobHoldLine(address: string): string {
   return `The cleaning at ${address} is on hold.`;
 }
 
-export function cleanerOptOutHold(address: string): string {
-  return `The cleaner opted out of cleaning texts for ${address}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell your Grok Bot to restart it.`;
+export function cleanerOptOutHold(address: string, helper = GROK_HELPER): string {
+  return `The cleaner opted out of cleaning texts for ${address}, so the cleaning is on hold. Find another cleaner or reach them directly, then tell ${helper} to restart it.`;
 }
 
-export function injuryHoldLine(address: string): string {
-  return `The cleaning at ${address} is on hold because the cleaner reported an injury. Once everyone's okay, tell your Grok Bot to restart it.`;
+export function injuryHoldLine(address: string, helper = GROK_HELPER): string {
+  return `The cleaning at ${address} is on hold because the cleaner reported an injury. Once everyone's okay, tell ${helper} to restart it.`;
 }
 
-export function ownerOptOutHoldNote(address: string): string {
-  return `The cleaning at ${address} is on hold because you opted out of texts. Tell your Grok Bot to restart it.`;
+export function ownerOptOutHoldNote(address: string, helper = GROK_HELPER): string {
+  return `The cleaning at ${address} is on hold because you opted out of texts. Tell ${helper} to restart it.`;
 }
 
 export function optedOutCodeLine(): string {
@@ -169,9 +170,9 @@ export function hostStopReply(address: string, held: boolean): string {
     : `You're opted out of cleaning texts for ${address}. Reply START to get texts again.`;
 }
 
-export function hostStartReply(address: string, held: boolean): string {
+export function hostStartReply(address: string, held: boolean, helper = GROK_HELPER): string {
   return held
-    ? `You'll get cleaning texts for ${address} again. The cleaning is still on hold. Tell your Grok Bot to restart it.`
+    ? `You'll get cleaning texts for ${address} again. The cleaning is still on hold. Tell ${helper} to restart it.`
     : `You'll get cleaning texts for ${address} again.`;
 }
 

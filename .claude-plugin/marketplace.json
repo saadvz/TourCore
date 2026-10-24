@@ -1,0 +1,12 @@
+{
+  "name": "tour-core",
+  "owner": { "name": "Tour Core" },
+  "metadata": { "description": "Claude plugins for Tour Core's hosted services." },
+  "plugins": [
+    {
+      "name": "cleaner-core",
+      "source": "./claude-template/plugin",
+      "description": "Set up and run Cleaner Core, the cleaning scheduler for a short-term rental, through its Cleaner Core connector."
+    }
+  ]
+}
