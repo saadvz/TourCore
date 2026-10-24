@@ -10,13 +10,23 @@ export interface GroupSeat {
 
 export type CodeRoute = "private" | "held";
 
+/** A phone Twilio answered with an error when it was added to the group, and Twilio's code and message. */
+export interface RefusedPhone {
+  phone: string;
+  code?: number;
+  message?: string;
+}
+
 export class GroupNotConfirmed extends Error {
   readonly conversationSid: string | undefined;
+  /** Set when Twilio refused one of the phones. */
+  readonly refused: RefusedPhone | undefined;
 
-  constructor(conversationSid?: string) {
+  constructor(conversationSid?: string, refused?: RefusedPhone) {
     super("not sent");
     this.name = "GroupNotConfirmed";
     this.conversationSid = conversationSid;
+    this.refused = refused;
   }
 }
 

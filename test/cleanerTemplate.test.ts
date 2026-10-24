@@ -15,7 +15,7 @@ import { filesUnder } from "./files";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const TEMPLATE = join(ROOT, "cleaner-template");
 const BOOTSTRAP = join(ROOT, "CLEANER_CORE_BOOTSTRAP.md");
-const HOSTED = "https://tourcore-production-8b80.up.railway.app";
+const HOSTED = "https://136-119-57-74.sslip.io";
 const REPO = "https://github.com/saadvz/TourCore";
 const ROUTINES = ["Cleaner Core Check", "Cleaner Core Alerts"];
 /** The setup order get_state asks for: the diagram's 8 steps, the checks once numbers are approved, then the routines and the first times. */

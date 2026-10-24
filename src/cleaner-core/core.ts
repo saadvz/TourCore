@@ -25,7 +25,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { containsCodeToken, redactLine, redactPhone } from "./redact";
-import { waitingForYesNote, withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupUnconfirmedLine, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, jobHoldLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
+import { waitingForYesNote, withoutStopAsk, addressCleaner, asOptedInCleaner, checklistBody, cleanerNextStep, cleanerOptOutHold, doorCodeBody, groupDoorCodeBody, groupIntroBody, groupInviteBody, groupUnconfirmedLine, groupRefusedLine, groupOfferBody, namedAsk, hostDoneLine, hostStartReply, hostStopReply, injuryHoldLine, isPrivateCodeLine, jobHoldLine, offerBody, offerForOthers, optedOutCodeLine, ownerOptOutHoldNote, PHOTO_FIRST, privateCodeLine, reminderBody, resumeNote, usualTimesAsk, arrivalReminderBody, hostNoteOf, withHostNote, type CleanerStep, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, type GroupSeat } from "./groupThread";
 import { GROK_HELPER } from "./assistant";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
@@ -2551,6 +2551,11 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
+        // Said once per number and code, whatever was being sent: the group can't start until it changes.
+        if (err.refused) {
+          const { phone, code } = err.refused;
+          this.keepHostNote(`group-refused:${this.options.property.id}:${phone}:${code ?? ""}`, groupRefusedLine({ phone, ...(code !== undefined ? { code } : {}) }));
+        }
         if (draft.kind !== "pin" && draft.kind !== "intro" && !isPrivateCodeLine(draft.body)) {
           this.keepHostNote(`group-unconfirmed:${this.options.property.id}:${draft.kind}`, groupUnconfirmedLine(draft.kind));
         }

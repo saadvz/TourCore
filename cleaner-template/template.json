@@ -5,7 +5,7 @@
   "profile": "bot-profile.md",
   "setupPrompt": "SETUP_PROMPT.md",
   "readme": "README.md",
-  "hostedCleanerCoreUrl": "https://tourcore-production-8b80.up.railway.app",
+  "hostedCleanerCoreUrl": "https://136-119-57-74.sslip.io",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "bootstrap": "CLEANER_CORE_BOOTSTRAP.md",

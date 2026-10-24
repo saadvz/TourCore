@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { EMPTY_TWIML } from "../src/cleaner-core/twilioHook";
 import { resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { openPin, pinKeyFor, pinKeyFromHeader, sealPin } from "../src/cleaner-core/pinSeal";
@@ -142,7 +143,9 @@ describe("Cleaner Core live wiring", () => {
     const yesOffer = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-yes-offer", token: CLEANER_AUTH });
     http.push(yesOffer.raw);
     expect(yesOffer.status).toBe(200);
-    expect(yesOffer.raw).toBe("{}");
+    expect(yesOffer.raw).toBe(EMPTY_TWIML);
+    // Twilio logs error 12300 when a messaging webhook answers with JSON.
+    expect(yesOffer.type).toBe("text/xml; charset=utf-8");
     const offer = newer(wired.cleanerSent.slice(0, offerBefore), wired.cleanerSent);
     expect(toCleaner(offer).map((item) => item.body).join("\n")).toMatch(/Reply YES to schedule it/);
     expect(toCleaner(offer)).toHaveLength(1);
@@ -150,7 +153,7 @@ describe("Cleaner Core live wiring", () => {
     const scheduleBefore = wired.cleanerSent.length;
     const yesSchedule = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-yes-schedule", token: CLEANER_AUTH });
     http.push(yesSchedule.raw);
-    expect(yesSchedule.raw).toBe("{}");
+    expect(yesSchedule.raw).toBe(EMPTY_TWIML);
     const scheduled = toCleaner(newer(wired.cleanerSent.slice(0, scheduleBefore), wired.cleanerSent));
     expect(scheduled.map((item) => item.body).join("\n")).toMatch(/Cleaning is scheduled/);
 
@@ -197,7 +200,7 @@ describe("Cleaner Core live wiring", () => {
     const stopBefore = wired.cleanerSent.length;
     const stopped = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-stop", token: CLEANER_AUTH });
     http.push(stopped.raw);
-    expect(stopped.raw).toBe("{}");
+    expect(stopped.raw).toBe(EMPTY_TWIML);
     const stopSends = newer(wired.cleanerSent.slice(0, stopBefore), wired.cleanerSent);
     expect(stopSends.find((item) => item.to === CLEANER)?.body).toBe(
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
@@ -224,7 +227,7 @@ describe("Cleaner Core live wiring", () => {
     const offBefore = wired.cleanerSent.length;
     const silent = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: OFF_LIST, to: CLEANER_LINE, body: "YES", sid: "SM-off", token: CLEANER_AUTH });
     http.push(silent.raw);
-    expect(silent.raw).toBe("{}");
+    expect(silent.raw).toBe(EMPTY_TWIML);
     expect(wired.cleanerSent.length).toBe(offBefore);
     const observer = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: OBSERVER, to: CLEANER_LINE, body: "YES", sid: "SM-observer", token: CLEANER_AUTH });
     http.push(observer.raw);
@@ -344,7 +347,7 @@ describe("Cleaner Core live wiring", () => {
     expect(times.text).toMatch(/Nothing was sent/);
     expect(times.text).not.toMatch(/got one text/i);
     const inbound = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-live-off", token: CLEANER_AUTH });
-    expect(inbound.raw).toBe("{}");
+    expect(inbound.raw).toBe(EMPTY_TWIML);
     expect(wired.cleanerSent).toEqual([]);
     expect(wired.tourSent).toEqual([]);
   });
@@ -378,7 +381,8 @@ describe("Cleaner Core live wiring", () => {
 
     const helpBeforeTour = wired.tourSent.length;
     const help = await wired.postTwilio("/webhooks/twilio", { from: CLEANER, to: CLEANER_LINE, body: "HELP", sid: "SM-clean-help", token: CLEANER_AUTH });
-    expect(help.raw).toBe("{}");
+    expect(help.raw).toBe(EMPTY_TWIML);
+    expect(help.type).toBe("text/xml; charset=utf-8");
     expect(wired.tourSent.length).toBe(helpBeforeTour);
     expect(wired.cleanerSent).toEqual([]);
     const afterHelp = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
@@ -386,7 +390,7 @@ describe("Cleaner Core live wiring", () => {
 
     const stopBeforeTour = wired.tourSent.length;
     const stop = await wired.postTwilio("/webhooks/twilio", { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-clean-stop", token: CLEANER_AUTH });
-    expect(stop.raw).toBe("{}");
+    expect(stop.raw).toBe(EMPTY_TWIML);
     expect(wired.tourSent.length).toBe(stopBeforeTour);
     expect(wired.cleanerSent.find((item) => item.to === CLEANER && /opted out/i.test(item.body))?.body).toMatch(/cleaning texts/);
 
@@ -460,7 +464,7 @@ describe("Cleaner Core live wiring", () => {
     const second = await wired.postTwilio("/webhooks/twilio", stop);
     resetLiveDesks();
     const third = await wired.postTwilio("/webhooks/twilio/cleaner-core", stop);
-    expect([first.raw, second.raw, third.raw]).toEqual(["{}", "{}", "{}"]);
+    expect([first.raw, second.raw, third.raw]).toEqual([EMPTY_TWIML, EMPTY_TWIML, EMPTY_TWIML]);
     expect(wired.cleanerSent.map((item) => ({ to: item.to, body: item.body }))).toEqual([
       {
         to: CLEANER,

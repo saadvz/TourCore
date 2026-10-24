@@ -825,7 +825,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           root: installation.root,
           now: () => options.now?.() ?? new Date(),
         });
-        return send(result.status, "application/json; charset=utf-8", result.body);
+        return send(result.status, result.contentType ?? "application/json; charset=utf-8", result.body);
       }
       if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH || url.pathname === LOCAL_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);
@@ -846,7 +846,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
               root: installation.root,
               now: () => options.now?.() ?? new Date(),
             });
-            return send(result.status, "application/json; charset=utf-8", result.body);
+            return send(result.status, result.contentType ?? "application/json; charset=utf-8", result.body);
           }
         }
         const provider = createMessagingProvider(providerId, { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now });
