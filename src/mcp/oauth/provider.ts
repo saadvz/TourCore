@@ -17,6 +17,7 @@ import type { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthToke
 import { checkRedirectUri, ClientMetadataError, fetchMetadataDocument, isMetadataDocumentClientId, parseMetadataDocument, redirectLogParts, type RedirectPolicy } from "./clients";
 import { consentPage, PAGE_HEADERS, problemPage } from "./pages";
 import { hashSecret, newSecret, type OAuthGrantStore } from "./store";
+import { ASSISTANT_PROFILES, type CleanerAssistant } from "../../cleaner-core/assistant";
 
 /**
  * Tour Core's authorization server, behind the official MCP SDK's OAuth
@@ -148,7 +149,7 @@ export interface ProviderOptions {
   /** True after the first hosted Allow has bound an owner client for that resource. */
   hostedClaimed?: (resourcePath: string) => boolean;
   /** Which chat Cleaner Core's approval page names. Unset is Grok. */
-  cleanerAssistant?: () => "grok" | "claude";
+  cleanerAssistant?: () => CleanerAssistant;
   /** Whether a URL client_id (a Client ID Metadata Document) is accepted. Unset is yes. */
   metadataDocuments?: () => boolean;
   log?: (line: string) => void;
@@ -298,7 +299,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const tenant = this.options.tenantPolicy?.(client.client_id, ep.path);
     if (tenant && !tenant.allowed) {
       const cleaner = ep.label === "Cleaner Core";
-      this.log(cleaner ? `Refused a Cleaner Core connection from a second ${this.options.cleanerAssistant?.() === "claude" ? "Claude connection" : "Grok Bot"}. This hosted Cleaner Core has one owner.` : "Refused a connection from a second account. This hosted demo is single-tenant.");
+      this.log(cleaner ? `Refused a Cleaner Core connection from a second ${ASSISTANT_PROFILES[this.options.cleanerAssistant?.() ?? "grok"].connection}. This hosted Cleaner Core has one owner.` : "Refused a connection from a second account. This hosted demo is single-tenant.");
       res.status(403).set(PAGE_HEADERS).type("html").send(problemPage(cleaner ? "This Cleaner Core is already in use" : "This Tour Core demo is already in use", tenant.message));
       return;
     }
@@ -338,7 +339,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       hosted,
       firstClaim: hosted && !(this.options.hostedClaimed?.(ep.path) ?? false),
       label: ep.label,
-      ...(ep.label === "Cleaner Core" && this.options.cleanerAssistant?.() === "claude" ? { assistant: "claude" as const } : {}),
+      ...(ep.label === "Cleaner Core" && this.options.cleanerAssistant ? { assistant: this.options.cleanerAssistant() } : {}),
     }));
   }
 

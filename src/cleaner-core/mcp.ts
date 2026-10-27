@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SettingName } from "../install/secretStore";
-import { CLAUDE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
+import { ASSISTANT_PROFILES, CHATGPT_INSTRUCTIONS, CLAUDE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
@@ -303,7 +303,7 @@ export async function handleCleanerMcpMessage(
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
       // A Claude deployment has its own words. A Grok deployment's stay exactly as they were.
-      instructions: assistant === "claude" ? CLAUDE_INSTRUCTIONS : GROK_INSTRUCTIONS,
+      instructions: { grok: GROK_INSTRUCTIONS, claude: CLAUDE_INSTRUCTIONS, chatgpt: CHATGPT_INSTRUCTIONS }[assistant],
     });
   }
   if (method === "ping") return rpcResult(id, {});
@@ -337,7 +337,7 @@ export async function handleCleanerMcpMessage(
     const text = JSON.stringify(reply.result);
     if (desk.leaks(text)) return rpcResult(id, { content: [{ type: "text", text: "That didn't work. Try again." }], isError: true });
     // Claude can't open a signed photo link from a chat, so a Claude deployment sends the photos too.
-    const images = tool.name === "get_job_photos" && assistant === "claude" ? desk.photoImages(photoLinksOf(reply.result)) : [];
+    const images = tool.name === "get_job_photos" && ASSISTANT_PROFILES[assistant].photoImages ? desk.photoImages(photoLinksOf(reply.result)) : [];
     return rpcResult(id, { content: [{ type: "text", text }, ...images], structuredContent: reply.result, isError: false });
   }
   return rpcError(id, -32601, "I don't support that.");

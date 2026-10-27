@@ -117,7 +117,7 @@ export class DeliveryError extends Error {
 }
 
 export interface OperatorNotificationSink {
-  readonly kind: "NONE" | "GROK_ROUTINE" | "CLAUDE_ROUTINE";
+  readonly kind: "NONE" | "GROK_ROUTINE" | "CLAUDE_ROUTINE" | "CHATGPT_TASK";
   /** Whether this sink has what it needs to deliver. */
   configured(): boolean;
   /** Resolves once the receiver accepted the event; throws DeliveryError otherwise. */
@@ -226,5 +226,24 @@ export class ClaudeRoutineFireSink implements OperatorNotificationSink {
     if (status === 401 || status === 403) throw new DeliveryError("The Claude scheduled task refused its token. Make a new token and save it again.", true);
     if (status === 404) throw new DeliveryError("The Claude scheduled task's Fire URL wasn't found. Check it and save it again.", true);
     throw new DeliveryError(`The Claude scheduled task didn't accept the update (status ${status}).`, status >= 500 || status === 429);
+  }
+}
+
+/**
+ * A ChatGPT scheduled task can't be started from outside ChatGPT, so there is nothing to wake. Once
+ * the hourly task is connected, a wake-up counts as delivered: the task reads every note and
+ * message with check_now on its next run. Used only by a Cleaner Core deployment set to ChatGPT.
+ */
+export class ChatGptTaskSink implements OperatorNotificationSink {
+  readonly kind = "CHATGPT_TASK" as const;
+
+  constructor(private readonly connected: () => boolean) {}
+
+  configured(): boolean {
+    return this.connected();
+  }
+
+  async deliver(): Promise<void> {
+    if (!this.connected()) throw new DeliveryError("Alerts aren't connected yet.", true);
   }
 }

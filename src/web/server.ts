@@ -18,7 +18,7 @@ import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { CLAUDE_SECOND_OWNER, cleanerAssistant } from "../cleaner-core/assistant";
+import { assistantProfile, cleanerAssistant } from "../cleaner-core/assistant";
 import { handleCleanerUploadPage, isFormPost } from "../cleaner-core/uploadPage";
 import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, uploadPageOf, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
@@ -151,7 +151,7 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * What the public (tunnel) address may reach: the webhook, the identity form,
  * the operator tools for an agent host (authorization required) and, in OAuth
  * mode, the OAuth endpoints. Never the browser operator app, and never the
- * page where the owner approves a connection. `uploadPages` is a Claude
+ * page where the owner approves a connection. `uploadPages` is a Claude or ChatGPT
  * deployment, where the host also opens an upload link in a browser.
  */
 function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean, uploadPages = false): boolean {
@@ -355,7 +355,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             const state = installation.files.state();
             if (resourcePath !== CLEANER_MCP_PATH) return hostedTenantDecision(state, clientId);
             const decision = hostedCleanerTenantDecision(state, clientId);
-            return !decision.allowed && cleanerAssistant(installation.env()) === "claude" ? { allowed: false, message: CLAUDE_SECOND_OWNER } : decision;
+            const secondOwner = assistantProfile(installation.env()).secondOwner;
+            return !decision.allowed && secondOwner ? { allowed: false, message: secondOwner } : decision;
           },
           onOwnerApproved: (clientId, resourcePath) => {
             if (!hostedMode()) return;
@@ -365,8 +366,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           },
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
           cleanerAssistant: () => cleanerAssistant(installation.env()),
-          // A Claude deployment has Claude register its own client, so its owner is that one connection.
-          metadataDocuments: () => cleanerAssistant(installation.env()) !== "claude",
+          // A Claude or ChatGPT deployment has the chat register its own client, so its owner is that one connection.
+          metadataDocuments: () => assistantProfile(installation.env()).metadataDocuments,
           publicApproval: (clientId, resourcePath) => {
             if (!hostedMode()) return false;
             const state = installation.files.state();
@@ -493,7 +494,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
       return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
     }
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, cleanerAssistant(installation.env()) === "claude"))) {
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
@@ -707,8 +708,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         if ("answered" in result) return;
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
       }
-      // A Claude deployment's upload links also open as a private page, and take that page's form post.
-      const uploadPage = cleanerAssistant(installation.env()) === "claude" ? uploadPageOf(url.pathname) : undefined;
+      // A Claude or ChatGPT deployment's upload links also open as a private page, and take that page's form post.
+      const uploadPage = assistantProfile(installation.env()).privatePages ? uploadPageOf(url.pathname) : undefined;
       if (uploadPage && (method === "GET" || (method === "POST" && isFormPost(String(req.headers["content-type"] ?? ""))))) {
         const result = await handleCleanerUploadPage({
           ...uploadPage,

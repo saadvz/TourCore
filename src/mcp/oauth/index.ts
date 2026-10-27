@@ -13,6 +13,7 @@ import { checkClientMetadata, ClientMetadataError, GROK_LEGACY_REDIRECT_URIS, ty
 import { PAGE_HEADERS, problemPage } from "./pages";
 import { TourCoreOAuthProvider, type ApprovalRequestView, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
 import { hashSecret, OAuthGrantStore } from "./store";
+import type { CleanerAssistant } from "../../cleaner-core/assistant";
 
 export { CLEANER_SCOPE, endpointsFor, OPERATOR_SCOPE, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
 export { OAuthGrantStore } from "./store";
@@ -59,7 +60,7 @@ export interface McpOAuthOptions {
   publicApproval?: (clientId: string, resourcePath: string) => boolean;
   hostedClaimed?: (resourcePath: string) => boolean;
   /** Which chat Cleaner Core's approval page names. Unset is Grok. */
-  cleanerAssistant?: () => "grok" | "claude";
+  cleanerAssistant?: () => CleanerAssistant;
   /**
    * Whether a client may sign in with a Client ID Metadata Document (a URL client_id). Unset is yes.
    * A Claude deployment says no: Claude's document is one client_id for every Claude user, and a

@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { ClaudeRoutineFireSink, cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
-import { CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, type DeskWording } from "./assistant";
+import { ChatGptTaskSink, ClaudeRoutineFireSink, cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
+import { CHATGPT_CHECK_GAP_MS, CHATGPT_DESK_WORDING, CHATGPT_TASK, CHATGPT_TASK_CONNECTED, chatGptAsk, chatGptTaskWarning, CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, type CleanerAssistant, type DeskWording } from "./assistant";
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
 import { FileRuntimeStore } from "../storage/runtimeStore";
@@ -91,7 +91,7 @@ const MASKED_LINK =
 const UPLOAD_MINUTES = 10;
 const UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
-/** A Grok deployment's wording. A Claude deployment uses CLAUDE_DESK_WORDING. */
+/** A Grok deployment's wording. A Claude deployment uses CLAUDE_DESK_WORDING and a ChatGPT one CHATGPT_DESK_WORDING. */
 const GROK_DESK_WORDING: DeskWording = {
   helper: GROK_HELPER,
   pinFailed: PIN_FAILED,
@@ -342,6 +342,8 @@ interface LiveFile {
    * environment by an earlier setup doesn't count, so the routine step is asked again.
    */
   routineConnected?: boolean;
+  /** When check_now or the checks last ran. A ChatGPT deployment warns when its hourly task stops. */
+  lastCheckAt?: string;
   /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
   alertUpload?: { hash: string; expiresAt: string };
   /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
@@ -602,7 +604,10 @@ export class LiveDesk {
         };
         const options = alertFetch ? { fetch: alertFetch } : {};
         // A Claude deployment's routine is a scheduled task's API trigger, which takes { text }.
-        return this.claude() ? new ClaudeRoutineFireSink(settings, options) : new GrokRoutineWebhookSink(settings, options);
+        if (this.claude()) return new ClaudeRoutineFireSink(settings, options);
+        // A ChatGPT task can't be woken. Its hourly run reads everything with check_now.
+        if (this.assistant() === "chatgpt") return new ChatGptTaskSink(() => this.routineReady());
+        return new GrokRoutineWebhookSink(settings, options);
       },
       { now: () => this.now().getTime() },
     );
@@ -628,11 +633,21 @@ export class LiveDesk {
   ): ToolReply {
     const url = typeof input.url === "string" ? input.url.trim() : "";
     const token = typeof input.token === "string" ? input.token.trim() : "";
+    // A ChatGPT task has no address or key: ChatGPT made it in the chat, and no values connects it.
+    if (this.assistant() === "chatgpt") return url || token ? this.fail(CHATGPT_DESK_WORDING.routineNeeded) : this.connectTask();
     // A Grok Bot's secure card can't fill a tool argument, so no values means: make an upload link.
     if (!url && !token) return this.issueUpload(pinKey);
     if (this.routineRefused(url, token, pinKey)) return this.fail(this.words().routineNeeded);
     this.connectRoutine(url, token, save);
     return this.reply({ next: this.cleaningState().next === REVIEW_ASK ? ROUTINE_SAVED_IN_SETUP : ROUTINE_SAVED });
+  }
+
+  /** Connects a ChatGPT deployment's hourly task. There is no test wake-up: nothing can wake it. */
+  private connectTask(): ToolReply {
+    this.file.routineConnected = true;
+    this.persist();
+    const inSetup = this.cleaningState().next === REVIEW_ASK;
+    return this.reply({ next: inSetup ? `${CHATGPT_TASK_CONNECTED} Then call get_state for the review.` : CHATGPT_TASK_CONNECTED });
   }
 
   /**
@@ -1273,7 +1288,10 @@ export class LiveDesk {
     return this.serial(async () => {
       if (!this.file.preferences) return this.fail("Save the cleaning preferences first, or save empty ones if there are none.");
       // Nothing texts before the alert routine is connected, so no reply from the cleaner goes unheard.
-      if (!this.routineReady()) return this.claude() ? this.failWith(CLAUDE_DESK_WORDING.routineAsk, { routine: CLAUDE_TASK }) : this.fail(ROUTINE_ASK);
+      if (!this.routineReady()) {
+        const task = this.task();
+        return task ? this.failWith(this.words().routineAsk, { routine: task }) : this.fail(ROUTINE_ASK);
+      }
       // Already inside the serial queue, so the inner steps, never runChecks.
       const texting = this.setUpTextingNow();
       if (!texting.ok) return texting;
@@ -1356,6 +1374,7 @@ export class LiveDesk {
     const finished = jobs.filter((job) => job.doneAt && !shownDone.has(job.id));
     this.file.completedShown = [...shownDone, ...finished.map((job) => job.id)];
     prunePhotos(this.root, jobs, this.now());
+    this.noteCheck();
     this.persist();
     return this.reply({
       alerts: fresh.map((note) => note.body),
@@ -1404,10 +1423,11 @@ export class LiveDesk {
     this.file.alertsShown = [...new Set([...(this.file.alertsShown ?? []), ...seen])];
     this.persist();
     const turns = this.turns();
-    // Claude follows this reply, not get_state, so on Claude the scheduled task comes first, as in get_state.
-    if (this.claude() && (!this.file.routineConnected || !this.env().CLEANER_CORE_ROUTINE_URL?.trim())) {
-      return this.reply({ next: CLAUDE_DESK_WORDING.routineAsk, routine: CLAUDE_TASK, turns });
-    }
+    this.noteCheck();
+    this.persist();
+    // Claude and ChatGPT follow this reply, not get_state, so there the scheduled task comes first, as in get_state.
+    const task = this.task();
+    if (task && !this.routineReady()) return this.reply({ next: this.words().routineAsk, routine: task, turns });
     return this.reply({
       next:
         turns.length === 0
@@ -2270,22 +2290,49 @@ export class LiveDesk {
     const notes = this.engine ? this.visibleNotes(this.engine).map((note) => note.body) : [];
     if (!this.held && this.privateCodeWaiting()) next = this.words().pinFailed;
     const asking = ask && next === askNext(ask.tool);
-    const claude = this.claude();
-    if (ask && asking && claude) next = claudeAskNext(ask.tool);
+    const assistant = this.assistant();
+    if (ask && asking && assistant !== "grok") next = claudeAskNext(ask.tool);
+    const task = this.task();
+    const warning = this.taskWarning();
     return {
       done,
       next,
-      ...(ask && asking ? { ask: claude ? claudeAsk(ask) : ask } : {}),
-      ...(claude && next === CLAUDE_DESK_WORDING.routineAsk ? { routine: CLAUDE_TASK } : {}),
+      ...(ask && asking ? { ask: assistant === "chatgpt" ? chatGptAsk(ask) : assistant === "claude" ? claudeAsk(ask) : ask } : {}),
+      ...(task && (next === this.words().routineAsk || warning) ? { routine: task } : {}),
+      ...(warning ? { warning } : {}),
       ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
       ...(this.file.checked ? { turns: this.turns() } : {}),
       ...(notes.length > 0 ? { notes } : {}),
     };
   }
 
-  /** True when this setup connected the alert routine and its address is still saved. */
+  /** True when this setup connected the alert routine and its address is still saved. A ChatGPT task has no address. */
   private routineReady(): boolean {
+    if (this.assistant() === "chatgpt") return Boolean(this.file.routineConnected);
     return Boolean(this.file.routineConnected && this.env().CLEANER_CORE_ROUTINE_URL?.trim());
+  }
+
+  /** The scheduled task get_state hands Claude or ChatGPT. A Grok Bot's routines are in its own guide. */
+  private task(): typeof CLAUDE_TASK | typeof CHATGPT_TASK | undefined {
+    const assistant = this.assistant();
+    return assistant === "claude" ? CLAUDE_TASK : assistant === "chatgpt" ? CHATGPT_TASK : undefined;
+  }
+
+  /** Notes when a check ran, on a ChatGPT deployment only. The caller persists. */
+  private noteCheck(): void {
+    if (this.assistant() === "chatgpt") this.file.lastCheckAt = this.now().toISOString();
+  }
+
+  /**
+   * On a live ChatGPT deployment, the warning when no check has come in for longer than one missed
+   * hourly run. The task can pause itself, and nothing else would tell the host.
+   */
+  private taskWarning(): string | undefined {
+    if (this.assistant() !== "chatgpt" || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
+    const last = Date.parse(this.file.lastCheckAt);
+    if (!Number.isFinite(last) || this.now().getTime() - last <= CHATGPT_CHECK_GAP_MS) return undefined;
+    const when = formatWhen(this.file.lastCheckAt, this.file.timeZone ?? "UTC");
+    return chatGptTaskWarning(`${when.day} at ${when.time}`);
   }
 
   /** The saved booking sources by name, Google Calendar last. Never a link. */
@@ -2498,7 +2545,7 @@ export class LiveDesk {
       ...this.scheduleOptions(),
       reminderAsksArrival: true,
       grokReadsMessages: true,
-      ...(this.claude() ? { helperName: this.words().helper } : {}),
+      ...(this.assistant() !== "grok" ? { helperName: this.words().helper } : {}),
       ...this.preferenceOptions(),
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
@@ -2640,14 +2687,19 @@ export class LiveDesk {
     this.persist();
   }
 
-  /** True on a Claude deployment (CLEANER_CORE_ASSISTANT=claude). Only wording and delivery format change. */
+  /** Which chat this deployment serves (CLEANER_CORE_ASSISTANT). Only wording and delivery format change. */
+  assistant(): CleanerAssistant {
+    return cleanerAssistant(this.env());
+  }
+
+  /** True on a Claude deployment (CLEANER_CORE_ASSISTANT=claude). */
   claude(): boolean {
-    return cleanerAssistant(this.env()) === "claude";
+    return this.assistant() === "claude";
   }
 
   /** The replies that name the chat or its tools, for this deployment. */
   private words(): DeskWording {
-    return this.claude() ? CLAUDE_DESK_WORDING : GROK_DESK_WORDING;
+    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING }[this.assistant()];
   }
 
   /**
