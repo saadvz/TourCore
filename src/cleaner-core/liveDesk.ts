@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node
 import { join } from "node:path";
 import { ChatGptTaskSink, ClaudeRoutineFireSink, cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
 import { CHATGPT_CHECK_GAP_MS, CHATGPT_DESK_WORDING, CHATGPT_TASK, CHATGPT_TASK_CONNECTED, chatGptAsk, chatGptTaskWarning, CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, type CleanerAssistant, type DeskWording } from "./assistant";
+import { currentCaller, withCaller, type CleanerCaller } from "./callerContext";
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
 import { FileRuntimeStore } from "../storage/runtimeStore";
@@ -342,10 +343,12 @@ interface LiveFile {
    * environment by an earlier setup doesn't count, so the routine step is asked again.
    */
   routineConnected?: boolean;
+  /** On a multi-tenant service, the connections (grant ids) that connected their own routine. */
+  routineConnections?: string[];
   /** When check_now or the checks last ran. A ChatGPT deployment warns when its hourly task stops. */
   lastCheckAt?: string;
   /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
-  alertUpload?: { hash: string; expiresAt: string };
+  alertUpload?: { hash: string; expiresAt: string; by?: CleanerCaller };
   /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
   calendarUpload?: { hash: string; expiresAt: string; name: string };
   /** The pending door code upload link, with the lock location to save with it. Never the link's code or the door code. */
@@ -604,9 +607,9 @@ export class LiveDesk {
         };
         const options = alertFetch ? { fetch: alertFetch } : {};
         // A Claude deployment's routine is a scheduled task's API trigger, which takes { text }.
-        if (this.claude()) return new ClaudeRoutineFireSink(settings, options);
+        if (this.primaryAssistant() === "claude") return new ClaudeRoutineFireSink(settings, options);
         // A ChatGPT task can't be woken. Its hourly run reads everything with check_now.
-        if (this.assistant() === "chatgpt") return new ChatGptTaskSink(() => this.routineReady());
+        if (this.primaryAssistant() === "chatgpt") return new ChatGptTaskSink(() => this.routineReady());
         return new GrokRoutineWebhookSink(settings, options);
       },
       { now: () => this.now().getTime() },
@@ -645,6 +648,7 @@ export class LiveDesk {
   /** Connects a ChatGPT deployment's hourly task. There is no test wake-up: nothing can wake it. */
   private connectTask(): ToolReply {
     this.file.routineConnected = true;
+    this.noteRoutineConnection();
     this.persist();
     const inSetup = this.cleaningState().next === REVIEW_ASK;
     return this.reply({ next: inSetup ? `${CHATGPT_TASK_CONNECTED} Then call get_state for the review.` : CHATGPT_TASK_CONNECTED });
@@ -687,6 +691,7 @@ export class LiveDesk {
     this.uploadKey = undefined;
     delete this.file.alertUpload;
     this.file.routineConnected = true;
+    this.noteRoutineConnection();
     this.persist();
     this.alerts.enqueue(testEvent(this.now()));
     this.startDrain();
@@ -699,13 +704,14 @@ export class LiveDesk {
   private issueUpload(pinKey: Buffer | undefined): ToolReply {
     const base = publicBaseUrl(this.env());
     if (!base) return this.fail(UPLOAD_LINK_OFF);
-    const origin = new URL(base).origin;
+    const origin = base;
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = randomBytes(32).toString("base64url");
       const uploadUrl = `${origin}${ALERT_UPLOAD_PREFIX}${code}`;
       // A link that happens to hold the door code would be refused as a reply, so make another.
       if (this.leaks(uploadUrl)) continue;
-      this.file.alertUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString() };
+      const by = currentCaller();
+      this.file.alertUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(), ...(by ? { by } : {}) };
       this.uploadKey = pinKey;
       this.persist();
       return this.reply({ uploadUrl, expiresInMinutes: UPLOAD_MINUTES, next: this.words().alertUploadNext });
@@ -734,9 +740,13 @@ export class LiveDesk {
       const url = typeof body.url === "string" ? body.url.trim() : "";
       const given = typeof body.token === "string" ? body.token : typeof body.key === "string" ? body.key : "";
       const token = given.trim();
-      if (this.routineRefused(url, token, this.uploadKey ?? serverPinKey(this.env()))) return { status: 400, body: { ok: false, error: UPLOAD_REFUSED } };
-      this.connectRoutine(url, token, save);
-      return { status: 200, body: { ok: true, message: UPLOAD_CONNECTED } };
+      const finish = () => {
+        if (this.routineRefused(url, token, this.uploadKey ?? serverPinKey(this.env()))) return { status: 400 as const, body: { ok: false, error: UPLOAD_REFUSED } };
+        this.connectRoutine(url, token, save);
+        return { status: 200 as const, body: { ok: true, message: UPLOAD_CONNECTED } };
+      };
+      // The link's maker is the connection whose routine this is.
+      return pending.by ? withCaller(pending.by, finish) : finish();
     });
   }
 
@@ -1089,7 +1099,7 @@ export class LiveDesk {
     if (this.carriesCode(name)) return this.fail(DOOR_CODE_IN_CHAT);
     const base = publicBaseUrl(this.env());
     if (!base) return this.fail(UPLOAD_LINK_OFF);
-    const origin = new URL(base).origin;
+    const origin = base;
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = randomBytes(32).toString("base64url");
       const uploadUrl = `${origin}${CALENDAR_UPLOAD_PREFIX}${code}`;
@@ -1190,7 +1200,7 @@ export class LiveDesk {
     if (!this.keyFor(pinKey)) return this.fail(PIN_KEY_MISSING);
     const base = publicBaseUrl(this.env());
     if (!base) return this.fail(UPLOAD_LINK_OFF);
-    const origin = new URL(base).origin;
+    const origin = base;
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = randomBytes(32).toString("base64url");
       const uploadUrl = `${origin}${DOOR_CODE_UPLOAD_PREFIX}${code}`;
@@ -2235,7 +2245,7 @@ export class LiveDesk {
     const body = host
       ? keyword === "stop"
         ? hostStopReply(address, this.held)
-        : hostStartReply(address, this.held, this.words().helper)
+        : hostStartReply(address, this.held, this.hostWords().helper)
       : keyword === "stop"
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -2325,7 +2335,10 @@ export class LiveDesk {
 
   /** True when this setup connected the alert routine and its address is still saved. A ChatGPT task has no address. */
   private routineReady(): boolean {
-    if (this.assistant() === "chatgpt") return Boolean(this.file.routineConnected);
+    // On a multi-tenant service, only the primary connection's own routine counts.
+    const primary = this.env().CLEANER_CORE_PRIMARY_CONNECTION?.trim();
+    if (primary && !(this.file.routineConnections ?? []).includes(primary)) return false;
+    if (this.primaryAssistant() === "chatgpt") return Boolean(this.file.routineConnected);
     return Boolean(this.file.routineConnected && this.env().CLEANER_CORE_ROUTINE_URL?.trim());
   }
 
@@ -2337,7 +2350,7 @@ export class LiveDesk {
 
   /** Notes when a check ran, on a ChatGPT deployment only. The caller persists. */
   private noteCheck(): void {
-    if (this.assistant() === "chatgpt") this.file.lastCheckAt = this.now().toISOString();
+    if (this.primaryAssistant() === "chatgpt") this.file.lastCheckAt = this.now().toISOString();
   }
 
   /**
@@ -2345,7 +2358,7 @@ export class LiveDesk {
    * hourly run. The task can pause itself, and nothing else would tell the host.
    */
   private taskWarning(): string | undefined {
-    if (this.assistant() !== "chatgpt" || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
+    if (this.primaryAssistant() !== "chatgpt" || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
     const last = Date.parse(this.file.lastCheckAt);
     if (!Number.isFinite(last) || this.now().getTime() - last <= CHATGPT_CHECK_GAP_MS) return undefined;
     const when = formatWhen(this.file.lastCheckAt, this.file.timeZone ?? "UTC");
@@ -2562,7 +2575,7 @@ export class LiveDesk {
       ...this.scheduleOptions(),
       reminderAsksArrival: true,
       grokReadsMessages: true,
-      ...(this.assistant() !== "grok" ? { helperName: this.words().helper } : {}),
+      ...(this.primaryAssistant() !== "grok" ? { helperName: this.hostWords().helper } : {}),
       ...this.preferenceOptions(),
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
@@ -2582,7 +2595,7 @@ export class LiveDesk {
       tenantId: file.propertyId,
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
-      pinFailedBody: this.words().pinFailed,
+      pinFailedBody: this.hostWords().pinFailed,
       ...(this.groupOn()
         ? {
             groupChat: {
@@ -2604,7 +2617,7 @@ export class LiveDesk {
             return;
           }
           const address = file.address;
-          const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "", this.words().helper);
+          const holdSms = Boolean(address) && text.body === cleanerOptOutHold(address ?? "", this.hostWords().helper);
           const readySms = text.kind === "done";
           const inviteSms = text.kind === "opt-in";
           if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind) && !holdSms && !readySms && !inviteSms) return;
@@ -2704,9 +2717,22 @@ export class LiveDesk {
     this.persist();
   }
 
-  /** Which chat this deployment serves (CLEANER_CORE_ASSISTANT). Only wording and delivery format change. */
+  /** The chat this reply goes to: the calling connection's, else the primary's. Only wording and delivery format change. */
   assistant(): CleanerAssistant {
+    return currentCaller()?.assistant ?? this.primaryAssistant();
+  }
+
+  /** The chat texts, alerts and routines follow (CLEANER_CORE_ASSISTANT; on a multi-tenant service, the tenant's primary). */
+  primaryAssistant(): CleanerAssistant {
     return cleanerAssistant(this.env());
+  }
+
+  /** Records the calling connection as one that connected its own routine. The caller persists. */
+  private noteRoutineConnection(): void {
+    const id = currentCaller()?.connectionId;
+    if (!id) return;
+    const ids = this.file.routineConnections ?? [];
+    if (!ids.includes(id)) this.file.routineConnections = [...ids, id];
   }
 
   /** True on a Claude deployment (CLEANER_CORE_ASSISTANT=claude). */
@@ -2717,6 +2743,11 @@ export class LiveDesk {
   /** The replies that name the chat or its tools, for this deployment. */
   private words(): DeskWording {
     return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING }[this.assistant()];
+  }
+
+  /** The words in texts to the host and cleaner, which always name the primary chat. */
+  private hostWords(): DeskWording {
+    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING }[this.primaryAssistant()];
   }
 
   /**
@@ -2888,7 +2919,7 @@ export class LiveDesk {
       return { sent: result.sent, ...this.handledBy(result) };
     }
     this.resume();
-    this.engine?.keepHostNote("host:direct-left", this.words().directTextReply);
+    this.engine?.keepHostNote("host:direct-left", this.hostWords().directTextReply);
     if (this.scratchCapture()) this.noteLocal(from, "held");
     return { sent: [], handled: "none" };
   }
