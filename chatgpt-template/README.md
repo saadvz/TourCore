@@ -73,6 +73,23 @@ To demo again with a new ChatGPT account, set `CLEANER_CORE_HOSTED_OWNER_RESET`
 to `reset-cleaner-owner` for one deploy, then remove it. The next Allow becomes
 the owner.
 
+## Which ChatGPT plans work
+
+Cleaner Core needs a custom connector (Developer Mode) and an hourly scheduled
+task. As of October 2026:
+
+| Plan | Custom connector | Scheduled tasks | Cleaner Core |
+| --- | --- | --- | --- |
+| Free | No: directory apps only | Reported as 3 tasks, each at most once a day | Doesn't work |
+| Plus | Yes | Hourly | Works. Setup, Activate, texting, and the hourly check were tested live on Plus. |
+| Pro, Business, Enterprise, Edu | Yes. On Business, an admin turns on Developer Mode for themselves. | Hourly | Should work. Not tested yet. |
+
+Published sources disagree on whether Plus and Pro get write tools in
+Developer Mode, and OpenAI changes these limits often. Recheck before telling
+a host which plan they need. A Free host can only use Cleaner Core once it is
+a published app in ChatGPT's directory, and even then a once-a-day task can't
+keep up with new bookings.
+
 ## How a host starts
 
 1. On chatgpt.com (web only), open **Settings → Apps & Connectors →

@@ -22,7 +22,8 @@
       "type": "custom-mcp-server",
       "url": "hostedCleanerCoreUrl/mcp/cleaner-core",
       "auth": "OAuth 2.1 discovered from the Cleaner Core service. ChatGPT registers its own client. The host clicks Allow on the Cleaner Core page. ChatGPT cannot approve itself.",
-      "where": "chatgpt.com Settings → Apps & Connectors → Advanced → Developer Mode on, then create the connector. Web only. Never add it a second way."
+      "where": "chatgpt.com Settings → Apps & Connectors → Advanced → Developer Mode on, then create the connector. Web only. Never add it a second way.",
+      "plans": "Plus or above. The Free plan has no custom connectors. See README.md, Which ChatGPT plans work."
     },
     {
       "name": "Google Calendar",
