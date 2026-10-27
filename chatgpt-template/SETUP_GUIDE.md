@@ -21,11 +21,12 @@ how you hear from the cleaner right away (see [Day to day](#day-to-day)).
 | --- | --- | --- |
 | ChatGPT Plus or above | The Free plan has no custom connectors. Plus is tested. Pro, Business, Enterprise, and Edu should work. See [README.md](README.md#which-chatgpt-plans-work). | Your ChatGPT account |
 | A computer with a web browser | Developer Mode and custom connectors are set up on chatgpt.com only, not in the apps | — |
-| The ChatGPT Cleaner Core address, ending in `/mcp/cleaner-core` | The connector points here. The Grok and Claude services are different addresses. | The Cleaner Core operator (`hostedCleanerCoreUrl` in [template.json](template.json)) |
+| An invite code from Saad | It links your ChatGPT to your own Cleaner Core account. You type it once, when you connect | Saad |
 | Your phone and the cleaner's phone approved for texts | Activate is refused until both numbers are on the operator's list | The Cleaner Core operator |
 
-Each Cleaner Core service has one owner: the first connection that clicks
-Allow. Use the ChatGPT account you'll run it from.
+The Cleaner Core address is the same for everyone: `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core`.
+Your invite code puts your ChatGPT in your own Cleaner Core account. Other
+hosts on the same service never see your property, people, or texts.
 
 ## Step 1: Turn on Developer Mode
 
@@ -45,19 +46,20 @@ needed.
 | Field | Choose | Why |
 | --- | --- | --- |
 | Name | Cleaner Core | Any name works; this one matches the guide |
-| URL | `<the address from the operator>/mcp/cleaner-core` | The ChatGPT Cleaner Core service |
-| Authentication | OAuth | ChatGPT registers its own client, so only your connection owns this Cleaner Core |
+| URL | `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core` | The Cleaner Core service. Every host and every chat uses this address |
+| Authentication | OAuth | The invite code, not the client, decides whose Cleaner Core this is |
 
 Then:
 
 1. Click **Create** (or **Connect**). A page titled **Connect ChatGPT to
    Cleaner Core** opens.
-2. Click **Allow**.
+2. Type the invite code from Saad in **Invite code from Saad**, then click
+   **Allow**.
 3. If your bookings are in Google Calendar, also connect ChatGPT's **Google
    Calendar** app.
 
-Add it only once. A second connection to the same Cleaner Core is refused as
-a second owner.
+Add it only once. If you also want Grok or Claude on the same Cleaner Core
+account, ask Saad for another invite code for that chat.
 
 ## Step 3: Run setup in a chat
 
@@ -137,10 +139,10 @@ Every row here came up while testing on ChatGPT Plus.
 | --- | --- | --- |
 | "This tool call was blocked by OpenAI's safety checks" | ChatGPT's own check stopped the call before it reached Cleaner Core | Say "try again". It usually goes through. |
 | ChatGPT answers from general knowledge, or asks what Cleaner Core is | Cleaner Core isn't added to this chat | Click **+** and add Cleaner Core, or start a new chat with it added |
-| The Allow page doesn't open, or sign-in fails with a redirect error | The service isn't set up for ChatGPT | Ask the operator to set `CLEANER_CORE_ASSISTANT=chatgpt` |
-| "This Cleaner Core is already in use" | Another connection owns it, including your own earlier one you removed | The operator releases the owner for one deploy (`CLEANER_CORE_HOSTED_OWNER_RESET`), then you click Allow again |
-| ChatGPT walks you through a Claude routine, with a Fire URL and token | The service is set up for Claude | Ask the operator to set `CLEANER_CORE_ASSISTANT=chatgpt` |
+| "That invite code isn't right", "has expired", or "was already used" | Each invite code works once, for 7 days | Ask Saad for a new invite code, then click **Connect** again |
+| "This connection isn't linked to a Cleaner Core account" | Saad disconnected this chat, or turned the account off | Ask Saad for a new invite code, then remove and add the connector again |
+| Alerts go to another chat on your account, not ChatGPT | That chat connected its alerts first, so it is the primary | Ask Saad to make ChatGPT the primary on the admin page |
 | Activate says the numbers aren't approved | A number isn't on the operator's list | Ask the operator to approve both, then say "run the checks" |
-| Setup finished but no text arrived, or ChatGPT says "Nothing was sent yet" | Live texting is off, or the Twilio details are missing on the service | Tell the operator. They check `CLEANER_CORE_LIVE_SMS` and the Twilio variables ([README.md](README.md#deploy-the-operator-once)). |
+| Setup finished but no text arrived, or ChatGPT says "Nothing was sent yet" | Live texting is off, or the Twilio details are missing on the service | Tell Saad. The service's variables are in `docs/deployment.md`. |
 | The scheduled task paused itself after an error | An older task prompt, or a task made before Cleaner Core was set up | Delete it and ask ChatGPT to create the Cleaner Core task again from setup |
 | The cleaner said YES but no group started | Twilio didn't create the group text | The operator checks the deploy log for "Twilio refused … for the group text". The number must support group texts (local, MMS-capable, not toll-free). |

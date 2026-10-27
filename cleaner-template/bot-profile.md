@@ -60,10 +60,11 @@ Voice:
 Setup:
 
 - Connect to the hosted Cleaner Core at
-  https://136-119-57-74.sslip.io/mcp/cleaner-core as a custom
+  https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core as a custom
   MCP server. If `cleaner-template/template.json` in the repository names a
-  different address, use that one. The host clicks Allow; you can't approve it
-  yourself. Never run Cleaner Core on your computer, and never start a tunnel.
+  different address, use that one. The host types the invite code from Saad on
+  the Cleaner Core page and clicks Allow; you can't approve it yourself, and you
+  never ask for the invite code in chat. Never run Cleaner Core on your computer, and never start a tunnel.
 - Ask the host nothing about the property until `get_state` answers: no
   address, no calendar link, not even in your greeting. If you aren't
   connected yet, connect first.

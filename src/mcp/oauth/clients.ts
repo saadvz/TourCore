@@ -2,7 +2,8 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { DeploymentMode } from "../../install/deployment";
-import { assistantProfile } from "../../cleaner-core/assistant";
+import { assistantProfile, CHATGPT_REDIRECT_HOST, CLAUDE_REDIRECT_HOST } from "../../cleaner-core/assistant";
+import { cleanerMultiTenant } from "../../cleaner-core/flag";
 
 /**
  * Which OAuth clients may be sent an authorization code, and where. Grok
@@ -72,7 +73,9 @@ export function redirectHostsFromEnv(env: NodeJS.ProcessEnv = process.env): stri
     .filter((h) => /^[a-z0-9.-]+$/.test(h) && h.includes("."));
   // A Cleaner Core deployment set to Claude or ChatGPT takes that chat's connector callback without extra config.
   const own = assistantProfile(env).redirectHost;
-  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...(own ? [own] : []), ...extra])];
+  // A multi-tenant Cleaner Core serves every chat at once.
+  const all = cleanerMultiTenant(env) ? [CLAUDE_REDIRECT_HOST, CHATGPT_REDIRECT_HOST] : [];
+  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...(own ? [own] : []), ...all, ...extra])];
 }
 
 export function redirectPolicyFor(env: NodeJS.ProcessEnv = process.env, mode?: DeploymentMode): RedirectPolicy {
@@ -174,10 +177,13 @@ export function checkClientMetadata(body: unknown, policy: RedirectPolicy, allow
   // One bad URI refuses the whole registration (never silently dropped), but every bad one is reported.
   const refused = (m.redirect_uris as string[]).map((uri) => checkRedirectUri(uri, policy, appType)).filter((p): p is RedirectProblem => !!p);
   if (refused.length) throw new ClientMetadataError("invalid_redirect_uri", `redirect_uri ${refused[0]!.reason}.`, refused);
-  const grantTypes = m.grant_types === undefined ? ["authorization_code"] : m.grant_types;
-  if (!stringArray(grantTypes) || !(grantTypes as string[]).every((g) => GRANTS.has(g)) || !(grantTypes as string[]).includes("authorization_code")) {
+  const asked = m.grant_types === undefined ? ["authorization_code"] : m.grant_types;
+  if (!stringArray(asked) || !(asked as string[]).includes("authorization_code")) {
     throw new ClientMetadataError("invalid_client_metadata", "grant_types must be authorization_code, optionally with refresh_token.");
   }
+  // Grants this server never issues are dropped, not refused (RFC 7591 §3.2.1 lets a server
+  // pare a client's metadata down). Claude's published identity also lists jwt-bearer.
+  const grantTypes = (asked as string[]).filter((g) => GRANTS.has(g));
   const responseTypes = m.response_types === undefined ? ["code"] : m.response_types;
   if (!stringArray(responseTypes) || (responseTypes as string[]).length !== 1 || (responseTypes as string[])[0] !== "code") {
     throw new ClientMetadataError("invalid_client_metadata", "response_types must be code.");
@@ -256,7 +262,11 @@ export function parseMetadataDocument(clientId: string, document: unknown, polic
   if (doc.client_secret !== undefined || doc.client_secret_expires_at !== undefined) {
     throw new ClientMetadataError("invalid_client_metadata", "A client metadata document can't carry a client secret.");
   }
-  const checked = checkClientMetadata({ token_endpoint_auth_method: "none", ...doc }, policy, new Set(["none"]));
+  // A client may prefer a stronger method but list "none" among those it supports (ChatGPT's does).
+  // This server advertises only "none", so that is the method such a client uses here.
+  const supported = (doc as { token_endpoint_auth_methods_supported?: unknown }).token_endpoint_auth_methods_supported;
+  const publicToo = Array.isArray(supported) && supported.includes("none");
+  const checked = checkClientMetadata({ ...doc, token_endpoint_auth_method: publicToo ? "none" : (doc.token_endpoint_auth_method ?? "none") }, policy, new Set(["none"]));
   return {
     client_id: clientId,
     client_name: typeof doc.client_name === "string" ? doc.client_name : undefined,

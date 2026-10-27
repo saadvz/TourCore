@@ -14,6 +14,22 @@ export function cleanerAssistant(env: NodeJS.ProcessEnv = process.env): CleanerA
   return raw === "claude" || raw === "chatgpt" ? raw : "grok";
 }
 
+/**
+ * Which chat a connector callback belongs to, on a multi-tenant service where one server serves all
+ * three: claude.ai is Claude, chatgpt.com is ChatGPT, anything else is a Grok Bot.
+ */
+export function assistantForRedirect(uri: string): CleanerAssistant {
+  let host: string;
+  try {
+    host = new URL(uri).hostname.toLowerCase();
+  } catch {
+    return "grok";
+  }
+  if (host === CLAUDE_REDIRECT_HOST || host.endsWith(`.${CLAUDE_REDIRECT_HOST}`)) return "claude";
+  if (host === CHATGPT_REDIRECT_HOST || host.endsWith(`.${CHATGPT_REDIRECT_HOST}`)) return "chatgpt";
+  return "grok";
+}
+
 /** Who a text to the host tells them to talk to. */
 export const GROK_HELPER = "your Grok Bot";
 export const CLAUDE_HELPER = "Claude";

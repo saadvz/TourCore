@@ -17,8 +17,8 @@ The cleaner gets the door code (in the group only when the group is just the hos
 Read `cleaner-template/template.json`. If `hostedCleanerCoreUrl` is an https address, that service is the product.
 Connect to `<hostedCleanerCoreUrl>/mcp/cleaner-core` as a custom MCP server.
 The clone is only for reading these instructions. Do not run Cleaner Core on your computer. Do not start a local server or a tunnel.
-The connection asks for approval. The host clicks Allow. You can't approve it yourself.
-The first Allow claims this Cleaner Core.
+The connection asks for approval. The host types the invite code from Saad on the Cleaner Core page and clicks Allow. You can't approve it yourself.
+Never ask for the invite code in chat.
 
 ## Setup order
 

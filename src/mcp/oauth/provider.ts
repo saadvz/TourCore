@@ -17,7 +17,8 @@ import type { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthToke
 import { checkRedirectUri, ClientMetadataError, fetchMetadataDocument, isMetadataDocumentClientId, parseMetadataDocument, redirectLogParts, type RedirectPolicy } from "./clients";
 import { consentPage, PAGE_HEADERS, problemPage } from "./pages";
 import { hashSecret, newSecret, type OAuthGrantStore } from "./store";
-import { ASSISTANT_PROFILES, type CleanerAssistant } from "../../cleaner-core/assistant";
+import { ASSISTANT_PROFILES, assistantForRedirect, type CleanerAssistant } from "../../cleaner-core/assistant";
+import type { InviteRefusal } from "../../cleaner-core/hosted/registry";
 
 /**
  * Tour Core's authorization server, behind the official MCP SDK's OAuth
@@ -109,6 +110,8 @@ interface ApprovalRequest extends ApprovalRequestView {
   resource: string;
   resourcePath: string;
   status: "pending" | "approved" | "denied";
+  /** Multi-tenant Cleaner Core: set when the host's invite code was accepted. */
+  tenantId?: string;
 }
 
 interface CodeEntry {
@@ -122,6 +125,18 @@ interface CodeEntry {
   expiresAt: number;
   used: boolean;
   grantId?: string;
+  tenantId?: string;
+  assistant?: CleanerAssistant;
+}
+
+/** Multi-tenant Cleaner Core: invite codes on the Allow page decide which tenant a grant belongs to. */
+export interface InviteBook {
+  /** Uses the invite up when it is good. */
+  claim(code: string): { tenantId: string } | { refused: InviteRefusal };
+  /** The grant now exists. */
+  connected(tenantId: string, grantId: string, assistant: CleanerAssistant): void;
+  /** The words for each refusal. */
+  refusal(reason: InviteRefusal): string;
 }
 
 export interface ProviderOptions {
@@ -152,6 +167,8 @@ export interface ProviderOptions {
   cleanerAssistant?: () => CleanerAssistant;
   /** Whether a URL client_id (a Client ID Metadata Document) is accepted. Unset is yes. */
   metadataDocuments?: () => boolean;
+  /** Set on a multi-tenant Cleaner Core. Cleaner Core approvals then need an invite code. */
+  invites?: InviteBook;
   log?: (line: string) => void;
 }
 
@@ -337,9 +354,13 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       clientName: request.clientName,
       redirectHost: request.redirectHost,
       hosted,
-      firstClaim: hosted && !(this.options.hostedClaimed?.(ep.path) ?? false),
+      firstClaim: hosted && !this.options.invites && !(this.options.hostedClaimed?.(ep.path) ?? false),
       label: ep.label,
-      ...(ep.label === "Cleaner Core" && this.options.cleanerAssistant ? { assistant: this.options.cleanerAssistant() } : {}),
+      ...(ep.label === "Cleaner Core" && this.options.invites
+        ? { assistant: assistantForRedirect(request.redirectUri), invite: true }
+        : ep.label === "Cleaner Core" && this.options.cleanerAssistant
+          ? { assistant: this.options.cleanerAssistant() }
+          : {}),
     }));
   }
 
@@ -352,8 +373,33 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const request = this.requests.get(id);
     if (!request || request.status !== "pending") return false;
     if (!this.options.publicApproval?.(request.clientId, request.resourcePath)) return false;
+    // On a multi-tenant Cleaner Core, only an invite code says whose this connection is.
+    if (this.options.invites && request.label === "Cleaner Core") return false;
     if (!codesMatch(matchCodeGiven, request.matchCode)) return false;
     return this.decide(id, "approved");
+  }
+
+  /**
+   * Allow with the invite code from the multi-tenant Cleaner Core's page. The match code is checked
+   * first, then the invite is used up and the request remembers its tenant.
+   */
+  approveWithInvite(id: string, matchCodeGiven: string, inviteCode: string): { ok: true } | { ok: false; message: string } {
+    const invites = this.options.invites;
+    const refused = { ok: false as const, message: "That connection can't be approved from here." };
+    if (!invites) return refused;
+    this.prune();
+    const request = this.requests.get(id);
+    if (!request || request.status !== "pending" || request.label !== "Cleaner Core") return refused;
+    if (!codesMatch(matchCodeGiven, request.matchCode)) return refused;
+    const claim = invites.claim(inviteCode);
+    if ("refused" in claim) {
+      this.log(`Refused a Cleaner Core approval: the invite code was ${claim.refused}.`);
+      return { ok: false, message: invites.refusal(claim.refused) };
+    }
+    request.tenantId = claim.tenantId;
+    if (!this.decide(id, "approved")) return refused;
+    this.log(`A Cleaner Core approval used an invite for ${claim.tenantId}.`);
+    return { ok: true };
   }
 
   /** Pending, already decided, expired, or not a request this process has. */
@@ -427,6 +473,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
         resource: r.resource,
         expiresAt: this.now() + CODE_SECONDS * 1000,
         used: false,
+        ...(r.tenantId ? { tenantId: r.tenantId, assistant: assistantForRedirect(r.redirectUri) } : {}),
       });
       url.searchParams.set("code", code);
     } else {
@@ -485,8 +532,10 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       accessHash: hashSecret(access),
       accessExpiresAt: t + ACCESS_TOKEN_SECONDS * 1000,
       ...(refresh ? { refreshHash: hashSecret(refresh), refreshExpiresAt: Math.min(approvalEnds, t + REFRESH_TOKEN_SECONDS * 1000) } : {}),
+      ...(entry.tenantId && entry.assistant ? { tenantId: entry.tenantId, assistant: entry.assistant } : {}),
     });
     entry.grantId = grant.id;
+    if (entry.tenantId && entry.assistant) this.options.invites?.connected(entry.tenantId, grant.id, entry.assistant);
     return this.tokens(access, refresh, grant.scopes);
   }
 
@@ -538,7 +587,14 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     // The scope is checked by the gate (requiredScopes): a right-resource grant without it gets 403 insufficient_scope.
     if (grant.issuer !== ep.issuer || grant.resource !== ep.resource) throw new InvalidTokenError("The access token was issued for a different Tour Core address.");
     if (grant.accessExpiresAt <= this.now()) throw new InvalidTokenError("The access token has expired.");
-    return { token, clientId: grant.clientId, scopes: grant.scopes, expiresAt: Math.floor(grant.accessExpiresAt / 1000), resource: new URL(grant.resource) };
+    return {
+      token,
+      clientId: grant.clientId,
+      scopes: grant.scopes,
+      expiresAt: Math.floor(grant.accessExpiresAt / 1000),
+      resource: new URL(grant.resource),
+      extra: { grantId: grant.id, ...(grant.tenantId ? { tenantId: grant.tenantId } : {}), ...(grant.assistant ? { assistant: grant.assistant } : {}) },
+    };
   }
 
   /** RFC 7009: revoking either token of a grant ends the whole grant. Unknown tokens are silently ignored. */

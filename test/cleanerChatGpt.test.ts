@@ -338,10 +338,15 @@ describe("ChatGPT template", () => {
       expect(() => read(file), file).not.toThrow();
     }
     const manifest = JSON.parse(read("chatgpt-template/template.json")) as { hostedCleanerCoreUrl: string | null; deployment: { env: Record<string, string> } };
-    expect(manifest.deployment.env.CLEANER_CORE_ASSISTANT).toBe("chatgpt");
-    // Its own service once it has one: never the Grok or Claude address.
+    // The one multi-tenant service every chat shares.
+    expect(manifest.deployment.env).toEqual({ CLEANER_CORE_ENABLED: "1", CLEANER_CORE_MULTI_TENANT: "1" });
     for (const other of ["cleaner-template/template.json", "claude-template/template.json"]) {
-      expect(manifest.hostedCleanerCoreUrl).not.toBe((JSON.parse(read(other)) as { hostedCleanerCoreUrl: string }).hostedCleanerCoreUrl);
+      expect(manifest.hostedCleanerCoreUrl).toBe((JSON.parse(read(other)) as { hostedCleanerCoreUrl: string }).hostedCleanerCoreUrl);
+    }
+    for (const file of ["chatgpt-template/README.md", "chatgpt-template/SETUP_GUIDE.md"]) {
+      expect(read(file), file).toContain(`${manifest.hostedCleanerCoreUrl}/mcp/cleaner-core`);
+      expect(read(file), file).toMatch(/invite code/i);
+      expect(read(file), file).not.toMatch(/CLEANER_CORE_ASSISTANT=chatgpt/);
     }
   });
 

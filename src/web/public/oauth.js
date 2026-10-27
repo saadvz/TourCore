@@ -7,6 +7,8 @@
 const status = document.getElementById("oauth-status");
 const deny = document.getElementById("oauth-deny");
 const allow = document.getElementById("oauth-allow");
+// A multi-tenant Cleaner Core asks for the invite code from Saad.
+const invite = document.getElementById("oauth-invite");
 const base = `/oauth/requests/${encodeURIComponent(status.dataset.request)}`;
 let finished = false;
 
@@ -45,10 +47,11 @@ if (allow) {
     const res = await fetch(`${base}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchCode: allow.dataset.code || "" }),
+      body: JSON.stringify({ matchCode: allow.dataset.code || "", ...(invite ? { inviteCode: invite.value } : {}) }),
     }).catch(() => null);
     if (!res || !res.ok) {
-      status.textContent = "That didn't go through. Start connecting again from Grok.";
+      const said = invite && res ? await res.json().then((body) => body?.error?.message).catch(() => undefined) : undefined;
+      status.textContent = said || "That didn't go through. Start connecting again from Grok.";
       allow.disabled = false;
       deny.disabled = false;
       return;

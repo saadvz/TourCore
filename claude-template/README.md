@@ -2,11 +2,12 @@
 
 Everything Claude needs to set up and run Cleaner Core. Claude is the host's
 chat. Cleaner Core is the hosted service that keeps the records and sends the
-texts. The Grok Bot version in [`cleaner-template/`](../cleaner-template/) is
-unchanged and keeps its own deployment.
+texts. The Grok Bot version in [`cleaner-template/`](../cleaner-template/) and
+the ChatGPT version in [`chatgpt-template/`](../chatgpt-template/) connect to
+the same service.
 
 ```
-Host ─► Claude ─► Claude deployment of Cleaner Core (/mcp/cleaner-core) ─► the cleaner's phone
+Host ─► Claude ─► hosted Cleaner Core (/mcp/cleaner-core) ─► the cleaner's phone
           │
           └─ Claude's Google Calendar connector, a scheduled task, and vision
 ```
@@ -26,37 +27,24 @@ Everything else is the same server and the same gates: the setup steps, the
 questions, the approval codes, who gets the door code and when, and every
 safety rule in [`docs/cleaner-core-safety-gates.md`](../docs/cleaner-core-safety-gates.md).
 
-## Deploy (the operator, once)
+## The service (Saad, once)
 
-A hosted Cleaner Core has one owner, so Claude gets its own service. It runs
-the same build as the Grok one.
+Every host on every chat uses one multi-tenant Cleaner Core service:
+`https://tourcore-production-8b80.up.railway.app`. Each host is a tenant with its own folder, secrets, and
+Twilio number, so hosts never see each other's records. How it works is in
+[`docs/hosted-multitenancy.md`](../docs/hosted-multitenancy.md), and its
+Railway variables are in [`docs/deployment.md`](../docs/deployment.md).
 
-1. Create a second Railway service from this repository, the same way as the
-   Grok service: deployment mode `HOSTED_RAILWAY_P0`, its own volume, its own
-   public address, and OAuth on (`TOURCORE_MCP_AUTH_MODE` unset or `oauth`,
-   never `static`).
-2. Set the same Cleaner Core variables as the Grok service, plus one:
-   `CLEANER_CORE_ASSISTANT=claude`. Give it its own Twilio number for the
-   cleaner texts, with that number's incoming-message webhook set to this
-   service's `/webhooks/twilio/cleaner-core`. A number has one webhook, so on
-   a shared number one service never hears the cleaner's YES, DONE, or STOP,
-   and a STOP to the number blocks both. Group chats are not affected: each
-   group conversation sends replies to the service that made it.
-3. Put its https address in `hostedCleanerCoreUrl` in
-   [`template.json`](template.json) and share it with hosts. The Claude
-   service is `https://tourcore-production-1056.up.railway.app`.
-4. Set the Twilio number's incoming-message webhook to
-   `<hostedCleanerCoreUrl>/webhooks/twilio/cleaner-core`.
+To add a host, Saad opens `https://tourcore-production-8b80.up.railway.app/admin`, creates a tenant with the host's
+label and Twilio number, and sends the host the invite code. The host types
+it on the Cleaner Core page that opens when they connect Claude. A host can
+also connect Grok, Claude, or ChatGPT to the same tenant, each with its own
+invite code. Texts to the host and the alerts follow the tenant's primary
+chat: the first one connected, or the chat that connects its alert routine
+when the primary hasn't. Saad can change it on the admin page.
 
-`CLEANER_CORE_ASSISTANT=claude` changes only words and formats: the connector
-instructions, the setup `how` lines, the texts to the host, the approval page,
-the private upload pages, the alert format, and photos as images. It also
-allows claude.ai's connector callback without setting
-`TOURCORE_OAUTH_REDIRECT_HOSTS`. Leave it unset on the Grok service.
-
-To demo again with a new Claude account, set `CLEANER_CORE_HOSTED_OWNER_RESET`
-to `reset-cleaner-owner` for one deploy on the Claude service, then remove it.
-The next Allow becomes the owner.
+To start a host over, the host asks Claude to reset the property. To remove
+a host or one chat's access, Saad uses the admin page.
 
 ## How a host starts
 
@@ -64,20 +52,19 @@ The illustrated, step-by-step version is [`SETUP_GUIDE.md`](SETUP_GUIDE.md).
 
 1. In claude.ai, open **Settings → Connectors → Add custom connector**. Name
    it **Cleaner Core** and enter
-   `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (the
-   `hostedCleanerCoreUrl` in [`template.json`](template.json)).
-2. Keep **Sign in now**. For the OAuth client, Claude should detect
-   **Register automatically**: this deployment doesn't take Claude's shared
-   published identity, because one client ID for every Claude user can't
-   name one owner. Click **Add**, then **Allow** on the Cleaner Core page.
+   `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core` (the `hostedCleanerCoreUrl` in
+   [`template.json`](template.json)).
+2. Keep **Sign in now** and the OAuth client Claude detects. Click **Add**.
+   On the Cleaner Core page, type the invite code from Saad and click
+   **Allow**.
 3. Connect Claude's **Google Calendar** connector too, if the bookings are in
    Google Calendar.
 4. Optional, for the fullest guide: add the `cleaner-core` skill (below).
 5. Say "Set up Cleaner Core".
 
 The connector is shared by claude.ai, the desktop and mobile apps, Cowork,
-Claude Code, and the scheduled task. Add it only once: a second connection to
-the same Cleaner Core, such as `claude mcp add` in Claude Code, is refused.
+Claude Code, and the scheduled task. Add it only once: a second connection,
+such as `claude mcp add` in Claude Code, needs its own invite code.
 
 ## The skill
 

@@ -1,3 +1,4 @@
+import { withCaller, type CleanerCaller } from "./callerContext";
 import { authorized } from "../mcp/mcpBridge";
 import { cleanerAssistant } from "./assistant";
 import { cleanerCoreEnabled } from "./flag";
@@ -38,6 +39,8 @@ export async function handleCleanerMcpHttp(input: {
    * false after it has answered the request itself.
    */
   oauth?: { authenticate(): Promise<boolean> };
+  /** On a multi-tenant service: the connection making this call. Its chat gets the replies. */
+  caller?: CleanerCaller;
 }): Promise<{ status: number; body: string; headers?: Record<string, string> } | typeof ANSWERED> {
   const env = input.env();
   if (!cleanerCoreEnabled(env)) {
@@ -73,7 +76,9 @@ export async function handleCleanerMcpHttp(input: {
   // The header wins. Without it (a Grok Bot connected by OAuth), the server's own key, made once.
   const pinKey = pinKeyFromHeader(input.pinKeyHeader) ?? serverPinKey(input.env(), input.saveSecrets);
   const desk = liveDeskFor(input.root, input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets, input.deleteSecrets, cleanerAssistant(env));
+  const caller = input.caller;
+  const handle = () => handleCleanerMcpMessage(desk, message, pinKey, scratchToolsOn(env), input.saveSecrets, input.deleteSecrets, caller?.assistant ?? cleanerAssistant(env));
+  const reply = caller ? await withCaller(caller, handle) : await handle();
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }

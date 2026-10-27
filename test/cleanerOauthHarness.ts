@@ -105,38 +105,40 @@ export async function hostedApp(extra: NodeJS.ProcessEnv = {}, existing?: { root
   cleanups.push(() => server.close());
   const http = hostedFetch((server.address() as { port: number }).port);
 
-  const register = async (name = "Grok") => {
+  const register = async (name = "Grok", redirect = REDIRECT) => {
     const res = await http("/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: name, redirect_uris: [REDIRECT], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
+      body: JSON.stringify({ client_name: name, redirect_uris: [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
     });
     expect(res.status).toBe(201);
     return ((await res.json()) as { client_id: string }).client_id;
   };
 
-  const authorize = (clientId: string, challenge: string, resource: string, scope: string, state = "state-1") =>
-    http(`/authorize?${new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: REDIRECT, code_challenge: challenge, code_challenge_method: "S256", state, scope, resource })}`);
+  const authorize = (clientId: string, challenge: string, resource: string, scope: string, state = "state-1", redirect = REDIRECT) =>
+    http(`/authorize?${new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: "S256", state, scope, resource })}`);
 
   const pageParts = (html: string) => ({ id: /data-request="([^"]+)"/.exec(html)![1]!, code: /class="match-code">([^<]+)/.exec(html)![1]! });
 
-  const approve = (id: string, code: string, headers: Record<string, string> = {}) =>
-    http(`/oauth/requests/${id}/approve`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ matchCode: code }) });
+  /** `inviteCode` is the multi-tenant service's invite field on the Allow page. */
+  const approve = (id: string, code: string, headers: Record<string, string> = {}, inviteCode?: string) =>
+    http(`/oauth/requests/${id}/approve`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ matchCode: code, ...(inviteCode !== undefined ? { inviteCode } : {}) }) });
 
   /** The whole dance for one resource. Returns the access token. */
-  const connect = async (clientId: string, resource: string, scope: string, tokenResource = resource) => {
+  const connect = async (clientId: string, resource: string, scope: string, tokenResource = resource, options: { inviteCode?: string; redirect?: string } = {}) => {
     const { verifier, challenge } = pkce();
-    const page = await authorize(clientId, challenge, resource, scope);
+    const redirect = options.redirect ?? REDIRECT;
+    const page = await authorize(clientId, challenge, resource, scope, "state-1", redirect);
     expect(page.status).toBe(200);
     const { id, code } = pageParts(await page.text());
-    expect((await approve(id, code)).status).toBe(200);
+    expect((await approve(id, code, {}, options.inviteCode)).status).toBe(200);
     const back = await http(`/oauth/requests/${id}/continue`);
     expect(back.status).toBe(302);
     const location = new URL(back.headers.location!);
     const token = await http("/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code: location.searchParams.get("code")!, code_verifier: verifier, client_id: clientId, redirect_uri: REDIRECT, resource: tokenResource }).toString(),
+      body: new URLSearchParams({ grant_type: "authorization_code", code: location.searchParams.get("code")!, code_verifier: verifier, client_id: clientId, redirect_uri: redirect, resource: tokenResource }).toString(),
     });
     expect(token.status).toBe(200);
     const body = (await token.json()) as { access_token: string; refresh_token: string; scope: string };

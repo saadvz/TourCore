@@ -4,8 +4,8 @@
   "readme": "README.md",
   "skill": "plugin/skills/cleaner-core/SKILL.md",
   "plugin": "plugin",
-  "hostedCleanerCoreUrl": "https://tourcore-production-1056.up.railway.app",
-  "hostedCleanerCoreUrlNote": "The Claude deployment's https address. It is a separate service from the Grok one in cleaner-template/template.json, because a hosted Cleaner Core has one owner.",
+  "hostedCleanerCoreUrl": "https://tourcore-production-8b80.up.railway.app",
+  "hostedCleanerCoreUrlNote": "The one Cleaner Core service every host and chat uses. Saad adds each host on its /admin page and sends them an invite code.",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "note": "Claude never clones or runs Cleaner Core. The skill and the connector's own instructions carry the guide."
@@ -14,16 +14,16 @@
     "mode": "HOSTED_RAILWAY_P0",
     "env": {
       "CLEANER_CORE_ENABLED": "1",
-      "CLEANER_CORE_ASSISTANT": "claude"
+      "CLEANER_CORE_MULTI_TENANT": "1"
     },
-    "note": "Same build and the same variables as the Grok deployment, plus CLEANER_CORE_ASSISTANT=claude. OAuth stays on (TOURCORE_MCP_AUTH_MODE unset or oauth). claude.ai's connector callback is allowed automatically on this deployment."
+    "note": "The one multi-tenant Cleaner Core service every chat shares. The full variable list is in docs/deployment.md. Each host's chat, number, and keys come from its tenant, never from these variables."
   },
   "integrations": [
     {
       "name": "Cleaner Core",
       "type": "custom-connector",
       "url": "hostedCleanerCoreUrl/mcp/cleaner-core",
-      "auth": "OAuth 2.1 discovered from the Cleaner Core service. The host clicks Allow on the Cleaner Core page. Claude cannot approve itself.",
+      "auth": "OAuth 2.1 discovered from the Cleaner Core service. The host types the invite code from Saad on the Cleaner Core page and clicks Allow. Claude cannot approve itself.",
       "where": "claude.ai Settings → Connectors → Add custom connector. One connector serves every Claude app and the scheduled task. Never add it a second way."
     },
     {

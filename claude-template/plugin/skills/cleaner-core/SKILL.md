@@ -31,13 +31,14 @@ left.
 You need the **Cleaner Core** connector. If its tools aren't available, ask the
 host to add it once, in claude.ai **Settings → Connectors → Add custom
 connector**, with the address
-`https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` (or the one
-the operator gives), with **Sign in now** and **Register automatically**, then
-click **Add** and **Allow** on the Cleaner Core page. You can't approve it yourself. The first Allow claims this Cleaner Core.
+`https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core`, with **Sign in now**, then
+click **Add**. On the Cleaner Core page they type the invite code from Saad and
+click **Allow**. You can't approve it yourself, and you never ask for the invite
+code in chat.
 
 That one connector works in every Claude app and in the scheduled task. Never
-add Cleaner Core a second way (for example `claude mcp add` in Claude Code): a
-hosted Cleaner Core has one owner and refuses a second connection.
+add Cleaner Core a second way (for example `claude mcp add` in Claude Code): each
+connection needs its own invite code.
 
 When the host uses Google Calendar, they also connect Claude's **Google
 Calendar** connector.

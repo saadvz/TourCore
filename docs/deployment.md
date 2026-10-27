@@ -574,6 +574,35 @@ Grok then saves the first portable backup to Drive. The conversation does not
 mention Railway, ports, tunnels, or `/mcp`, and it does not ask for a second
 Google approval.
 
+## Multi-tenant Cleaner Core (one service, many hosts)
+
+One Railway service serves every Cleaner Core host, on Grok, Claude, and ChatGPT.
+How it keeps hosts apart is in `docs/hosted-multitenancy.md`.
+
+Saad creates a `cleaner-core` service from this repository in the Railway
+dashboard, with its own volume at `/data` and the same build, start command,
+healthcheck, and Railpack variables as `.railway/railway.ts`. That file stays the
+Tour Core service's.
+
+| Variable | Value |
+| --- | --- |
+| `TOURCORE_DEPLOYMENT_MODE` | `HOSTED_RAILWAY_P0` |
+| `TOURCORE_HOME` | `/data` |
+| `CLEANER_CORE_MULTI_TENANT` | `1` |
+| `CLEANER_CORE_ENABLED` | `1` |
+| `CLEANER_CORE_ADMIN_PASSWORD` | Saad's admin password. Railway variables only |
+| `CLEANER_CORE_TWILIO_ACCOUNT_SID`, `CLEANER_CORE_TWILIO_AUTH_TOKEN` | The one Twilio account every tenant's number is on |
+| `CLEANER_CORE_LIVE_SMS`, `CLEANER_CORE_SMS_ALLOWLIST` | As on any Cleaner Core deployment |
+| `NODE_ENV`, `RAILPACK_NODE_NPM_INSTALL`, `NPM_CONFIG_PRODUCTION`, `RAILPACK_NODE_VERSION` | As in `.railway/railway.ts` |
+
+Do not set `CLEANER_CORE_TWILIO_PHONE_NUMBER`, `CLEANER_CORE_ASSISTANT`, or
+`CLEANER_CORE_MCP_TOKEN` there. Each tenant's number and chat come from its
+tenant, and a fixed token names no tenant.
+
+Adding a host: on `/admin`, create a tenant with its label and Twilio number,
+then send the host the invite code. They add the connector at
+`<service>/mcp/cleaner-core` and type the code on the page that opens.
+
 ## Self-hosted
 
 An operator who runs their own copy sets `TOURCORE_DEPLOYMENT_MODE=SELF_HOSTED`

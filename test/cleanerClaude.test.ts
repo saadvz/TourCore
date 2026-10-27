@@ -387,12 +387,16 @@ describe("Claude template", () => {
       expect(() => read(file), file).not.toThrow();
     }
     const manifest = JSON.parse(read("claude-template/template.json")) as { hostedCleanerCoreUrl: string; deployment: { env: Record<string, string> } };
-    expect(manifest.deployment.env.CLEANER_CORE_ASSISTANT).toBe("claude");
-    // Its own service: a hosted Cleaner Core has one owner, and the Grok one is already claimed.
+    // The one multi-tenant service every chat shares. Its chat comes from the connection, not the deployment.
+    expect(manifest.deployment.env).toEqual({ CLEANER_CORE_ENABLED: "1", CLEANER_CORE_MULTI_TENANT: "1" });
     const grok = (JSON.parse(read("cleaner-template/template.json")) as { hostedCleanerCoreUrl: string }).hostedCleanerCoreUrl;
-    expect(manifest.hostedCleanerCoreUrl).toMatch(/^https:\/\/[a-z0-9.-]+$/);
-    expect(manifest.hostedCleanerCoreUrl).not.toBe(grok);
+    expect(manifest.hostedCleanerCoreUrl).toBe(grok);
     expect(read("claude-template/plugin/skills/cleaner-core/SKILL.md")).toContain(`${manifest.hostedCleanerCoreUrl}/mcp/cleaner-core`);
+    for (const file of ["claude-template/README.md", "claude-template/SETUP_GUIDE.md"]) {
+      expect(read(file), file).toContain(`${manifest.hostedCleanerCoreUrl}/mcp/cleaner-core`);
+      expect(read(file), file).toMatch(/invite code/i);
+      expect(read(file), file).not.toMatch(/tourcore-production-1056|CLEANER_CORE_ASSISTANT=claude/);
+    }
   });
 
   it("holds no secret, no real-looking phone number, and no door code", () => {

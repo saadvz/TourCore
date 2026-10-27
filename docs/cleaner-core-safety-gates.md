@@ -16,6 +16,7 @@ What pauses live activation: the flag defaults off; CI fails when a configured s
 | Restart | A crash after the sink accepts an offer leaves it uncertain. Replay alerts the host once and does not send the offer again. `RETRY` from the host sends that offer once, only to the opted-in cleaner. A crash after clearance sends the door code once on the next reminder pass. | `evidence/step-g/recovery-after-restart` |
 | Backup | A consistent SQLite snapshot restores one tenant. The next tick sends nothing. The opt-out remains. The other tenant's job remains. | `evidence/step-g/backup-restore` |
 | Tenants | Lane and Court keep separate reviews, backups, replays, and health counts. | `evidence/step-g/tenant-isolation` |
+| Hosted tenants | Two tenants on one multi-tenant service keep their own texts, tools, links, and door codes. A text to one number, a grant, a swapped /t/<id>/ prefix, or a process env value never reaches the other. | `test/cleanerHostedTenants.test.ts` |
 | Health | Counters, open reviews, and stale sources. `sends` is false. The log has no full phone number and no door code. | `evidence/step-g/observability` |
 | STOP, HELP, injury | STOP and HELP still win. Hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one, use the 911 path once. | `evidence/step-g/stop-help-injury` |
 | Fetch limits | A calendar link must be public https. Private addresses and redirects are refused. | `test/cleanerCoreStepG.test.ts` |
