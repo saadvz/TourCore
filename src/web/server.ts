@@ -56,7 +56,7 @@ import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
 import { applyHostedStorageGuard, runStorageCheck } from "../install/persistentVolume";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
-import { bindHostedCleanerTenant, bindHostedTenant, cleanerOwnerResetLeftSet, clearHostedTenant, hostedCleanerTenantDecision, hostedTenantDecision, HOSTED_TENANT_RESET, resetHostedCleanerOwner } from "../install/tenant";
+import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
 import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
@@ -339,6 +339,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   })();
   // One Cleaner Core service for many hosts: the invite code on the Allow page picks the tenant.
   const multiTenant = () => cleanerMultiTenant(installation.env());
+  // Hosted, Cleaner Core runs only as the multi-tenant service: a hosted desk with no tenants would be open to anyone.
+  const cleanerOn = () => cleanerCoreEnabled(installation.env()) && (!hostedMode() || multiTenant());
   const tenants = new TenantRegistry(installation.root, () => options.now?.() ?? new Date());
   const hostedCleanerService = hostedCleaner({
     registry: tenants,
@@ -363,7 +365,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           runtime,
           resources: [
             { path: MCP_PATH, scope: OPERATOR_SCOPE, label: "Tour Core" },
-            { path: CLEANER_MCP_PATH, scope: CLEANER_SCOPE, label: "Cleaner Core", enabled: () => cleanerCoreEnabled(installation.env()) },
+            { path: CLEANER_MCP_PATH, scope: CLEANER_SCOPE, label: "Cleaner Core", enabled: cleanerOn },
           ],
           endpoints: (path) => {
             const base = installation.publicBaseUrl();
@@ -376,27 +378,19 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
               : undefined,
           now: options.authNow,
           fetchClientMetadata: options.fetchClientMetadata,
-          // Each resource has its own hosted owner. Cleaner Core's never touches Tour Core's hostedTenant.
+          // The multi-tenant service runs Cleaner Core only. The hosted Tour Core demo has one owner, and no Cleaner Core.
           tenantPolicy: (clientId, resourcePath) => {
             if (multiTenant()) return resourcePath === CLEANER_MCP_PATH ? { allowed: true } : { allowed: false, message: "This service runs Cleaner Core only." };
             if (!hostedMode()) return { allowed: true };
-            const state = installation.files.state();
-            if (resourcePath !== CLEANER_MCP_PATH) return hostedTenantDecision(state, clientId);
-            const decision = hostedCleanerTenantDecision(state, clientId);
-            const secondOwner = assistantProfile(installation.env()).secondOwner;
-            return !decision.allowed && secondOwner ? { allowed: false, message: secondOwner } : decision;
+            if (resourcePath === CLEANER_MCP_PATH) return { allowed: false, message: CLEANER_NEEDS_MULTI_TENANT };
+            return hostedTenantDecision(installation.files.state(), clientId);
           },
           onOwnerApproved: (clientId, resourcePath) => {
-            if (!hostedMode() || multiTenant()) return;
-            const now = new Date(installation.now());
-            if (resourcePath === CLEANER_MCP_PATH) bindHostedCleanerTenant(installation.files, clientId, now);
-            else bindHostedTenant(installation.files, clientId, now);
+            if (!hostedMode() || multiTenant() || resourcePath === CLEANER_MCP_PATH) return;
+            bindHostedTenant(installation.files, clientId, new Date(installation.now()));
           },
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
           cleanerAssistant: () => cleanerAssistant(installation.env()),
-          // A Claude or ChatGPT deployment has the chat register its own client, so its owner is that one connection.
-          // Grants bind per approval on a multi-tenant service, so a shared client_id is harmless there.
-          metadataDocuments: () => multiTenant() || assistantProfile(installation.env()).metadataDocuments,
           ...(cleanerMultiTenant(installation.env())
             ? {
                 invites: {
@@ -409,15 +403,13 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             : {}),
           publicApproval: (clientId, resourcePath) => {
             if (multiTenant()) return true;
-            if (!hostedMode()) return false;
-            const state = installation.files.state();
-            const bound = resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId;
+            if (!hostedMode() || resourcePath === CLEANER_MCP_PATH) return false;
+            const bound = installation.files.state().hostedTenant?.clientId;
             return !bound || bound === clientId;
           },
           hostedClaimed: (resourcePath) => {
-            if (!hostedMode() || multiTenant()) return false;
-            const state = installation.files.state();
-            return !!(resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId);
+            if (!hostedMode() || multiTenant() || resourcePath === CLEANER_MCP_PATH) return false;
+            return !!installation.files.state().hostedTenant?.clientId;
           },
           onApprovalRequest: (request) => {
             log(`${request.clientName} is asking to connect to ${request.label} (code ${request.matchCode}).`);
@@ -631,6 +623,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           ...(oauth ? { authenticate: () => oauth.authenticate(req, res, CLEANER_MCP_PATH) } : {}),
         });
         if (handled) return;
+      } else if (hostedMode() && cleanerCoreEnabled(installation.env())) {
+        const offRoute = hostedCleanerRoute(method, url.pathname);
+        if (offRoute === "mcp") return send(503, "application/json; charset=utf-8", JSON.stringify({ error: { message: CLEANER_NEEDS_MULTI_TENANT } }));
+        if (offRoute) return send(404, "text/plain", "Not found");
       }
       if (isOAuthLocalPath(url.pathname)) {
         if (!isLocal) return send(404, "text/plain", "Not found");
@@ -831,7 +827,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       if (method === "GET" && url.pathname.startsWith(CLEANER_PHOTO_PREFIX)) {
         // A cleaner photo for Grok. Public, but only with a signed token that hasn't expired.
         const env = installation.env();
-        if (!cleanerCoreEnabled(env)) return send(404, "text/plain", "Not found");
+        if (!cleanerOn()) return send(404, "text/plain", "Not found");
         const photo = servePhoto(installation.root, url.pathname.slice(CLEANER_PHOTO_PREFIX.length), photoKey(env), options.now?.() ?? new Date());
         if (photo.status !== 200) return send(404, "text/plain", "Not found", { "Cache-Control": "no-store" });
         res.writeHead(200, { ...photo.headers, "Content-Length": String(photo.body.length) });
@@ -902,7 +898,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           const tourNumber = readTwilioEnv(env).fromNumber;
           const cleanerNumber = env.CLEANER_CORE_TWILIO_PHONE_NUMBER;
           // A text sent to the cleaning number is handled by Cleaner Core, even on this path.
-          if (cleanerCoreEnabled(env) && textAddressedTo(rawBody, cleanerNumber) && !textAddressedTo(rawBody, tourNumber)) {
+          if (cleanerOn() && textAddressedTo(rawBody, cleanerNumber) && !textAddressedTo(rawBody, tourNumber)) {
             const result = await handleCleanerTwilioWebhook({
               rawBody,
               headers: req.headers,
@@ -982,7 +978,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     // The cleaner outbox's own guard keeps two drains from overlapping. A throw stays inside the promise.
     void Promise.resolve()
       .then(() => {
-        if (!cleanerCoreEnabled(installation.env())) return undefined;
+        if (!cleanerOn()) return undefined;
         if (multiTenant()) return drainAllTenants(hostedCleanerService);
         return drainCleanerAlerts(installation.root, () => installation.env(), () => options.now?.() ?? new Date());
       })
@@ -1010,6 +1006,17 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       tickOverstay: () => conversations.tickOverstay(),
     },
   });
+}
+
+const CLEANER_NEEDS_MULTI_TENANT = "Hosted Cleaner Core runs only as the multi-tenant service. Set CLEANER_CORE_MULTI_TENANT=1.";
+
+/** A Cleaner Core route, on a hosted service without the multi-tenant flag, where all of them are off. */
+function hostedCleanerRoute(method: string, path: string): "mcp" | "other" | undefined {
+  if (path === CLEANER_MCP_PATH) return "mcp";
+  if (path === CLEANER_TWILIO_PATH || path === CLEANER_TWILIO_STATUS_PATH || path === CLEANER_TWILIO_GROUP_PATH) return "other";
+  if (path.startsWith(CLEANER_PHOTO_PREFIX) || uploadPageOf(path)) return "other";
+  if (method === "POST" && (alertUploadCode(path) || calendarUploadCode(path) || doorCodeUploadCode(path))) return "other";
+  return undefined;
 }
 
 function readRaw(req: IncomingMessage): Promise<Buffer> {
@@ -1144,12 +1151,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.env.TOURCORE_HOSTED_OWNER_RESET === HOSTED_OWNER_RESET && clearHostedTenant(installation.files)) {
       console.log("  Cleared the hosted demo owner. The next approved Grok connection becomes the owner. Tour records were not deleted. Remove TOURCORE_HOSTED_OWNER_RESET after this deploy.");
     }
-    // Checked first: true only when an earlier deploy already applied the reset.
-    const cleanerResetLeftSet = cleanerOwnerResetLeftSet(process.env, installation.files);
-    if (resetHostedCleanerOwner(process.env, installation.files, () => new OAuthGrantStore(installation.runtime).revokeForPath(CLEANER_MCP_PATH))) {
-      console.log("  Cleared the hosted Cleaner Core owner and signed out its Grok Bot. The next approved Grok Bot becomes the owner. Cleaning records were not deleted. Remove CLEANER_CORE_HOSTED_OWNER_RESET after this deploy.");
-    } else if (cleanerResetLeftSet) {
-      console.log("  CLEANER_CORE_HOSTED_OWNER_RESET was already applied on an earlier deploy, so the Cleaner Core owner was kept. Remove it, and set it again only for the next reset.");
+    if (process.env.CLEANER_CORE_HOSTED_OWNER_RESET) {
+      console.log("  CLEANER_CORE_HOSTED_OWNER_RESET does nothing now: hosted Cleaner Core has no single owner. Remove it, and use the /admin page to manage hosts.");
     }
   }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";

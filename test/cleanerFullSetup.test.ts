@@ -7,7 +7,7 @@ import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { cleanerOptOutHold, offerForOthers } from "../src/cleaner-core/cleanerTexts";
 import { postToGroup } from "./hostApproval";
 import type { CleanerCore } from "../src/cleaner-core/core";
-import { DOOR_CODE_IN_CHAT, drainCleanerAlerts, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
+import { DOOR_CODE_IN_CHAT, liveDeskFor, resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch, type LiveDesk, type ToolReply } from "../src/cleaner-core/liveDesk";
 import { isScratchTestNumber } from "../src/cleaner-core/scratch";
 import { setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { fakeConversations } from "./fakeConversations";
@@ -20,6 +20,9 @@ import { CLEANER_SCOPE } from "../src/mcp/oauth/provider";
 import { twilioSignature } from "../src/messaging/twilio/signature";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { BASE, CLEANER_RESOURCE, closeHostedApps, hostedApp } from "./cleanerOauthHarness";
+import { TenantRegistry, tenantFolder } from "../src/cleaner-core/hosted/registry";
+import { drainAllTenants, hostedCleaner } from "../src/cleaner-core/hosted/router";
+import { TenantSecrets } from "../src/cleaner-core/hosted/tenantSecrets";
 import {
   ADDRESS,
   BUSINESS,
@@ -1942,6 +1945,24 @@ const PARKING = "Parking is on the street today.";
 /** The plain door code as its own token, so a random id that happens to hold the digits doesn't count. */
 const PLAIN_CODE = new RegExp(`(?<![0-9A-Za-z])${DOOR_CODE}(?![0-9A-Za-z])`);
 
+/** Scratch Lane as a tenant of the multi-tenant service, on the rehearsal's Twilio number. */
+function laneTenant(hosted: Awaited<ReturnType<typeof hostedApp>>, clock: () => Date) {
+  const registry = new TenantRegistry(hosted.root, clock);
+  const { tenant } = registry.create({ label: "Scratch Lane", twilioNumber: CLEANER_LINE });
+  const secrets = new TenantSecrets(hosted.root);
+  const h = hostedCleaner({
+    registry,
+    secrets,
+    dataRoot: hosted.root,
+    origin: () => BASE,
+    baseEnv: () => hosted.inst.env(),
+    grantLive: () => true,
+    now: clock,
+    log: () => undefined,
+  });
+  return { tenant, room: tenantFolder(hosted.root, tenant.id), secrets, drain: () => drainAllTenants(h) };
+}
+
 describe("Cleaner Core full diagram", () => {
   it("diagram rehearsal", async () => {
     const address = LANE.property.address;
@@ -1968,7 +1989,7 @@ describe("Cleaner Core full diagram", () => {
         CLEANER_CORE_SMS_ALLOWLIST: `${host},${cleaner}`,
         CLEANER_CORE_TWILIO_ACCOUNT_SID: REHEARSAL_TWILIO_SID,
         CLEANER_CORE_TWILIO_AUTH_TOKEN: REHEARSAL_TWILIO_AUTH,
-        CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+        CLEANER_CORE_MULTI_TENANT: "1",
       },
       undefined,
       undefined,
@@ -1979,8 +2000,9 @@ describe("Cleaner Core full diagram", () => {
 
     // 1. Grok connects through OAuth with one Allow.
     expect((await hosted.rpc(PATH, "tools/list")).status).toBe(401);
+    const { tenant, room, secrets, drain } = laneTenant(hosted, clock);
     const clientId = await hosted.register("Grok");
-    const { access, scope } = await hosted.connect(clientId, CLEANER_RESOURCE, CLEANER_SCOPE);
+    const { access, scope } = await hosted.connect(clientId, CLEANER_RESOURCE, CLEANER_SCOPE, CLEANER_RESOURCE, { inviteCode: new TenantRegistry(hosted.root, clock).invite(tenant.id) });
     expect(scope).toBe(CLEANER_SCOPE);
     const listed = await hosted.rpc(PATH, "tools/list", access);
     expect(listed.status).toBe(200);
@@ -2028,7 +2050,7 @@ describe("Cleaner Core full diagram", () => {
 
     /** The checks after every step: Scratch numbers only, and the door code nowhere but the cleaner's private text or the group of the host and the cleaner. */
     const safe = async (step: string) => {
-      await drainCleanerAlerts(hosted.root, () => hosted.inst.env(), clock);
+      await drain();
       for (const item of sms.sent) {
         expect(scratch.has(item.to), `${step}: text to ${item.to}`).toBe(true);
         expect(isScratchTestNumber(item.to), step).toBe(true);
@@ -2049,11 +2071,11 @@ describe("Cleaner Core full diagram", () => {
       expect(PLAIN_CODE.test(hosted.logs.join("\n")), `${step}: logs`).toBe(false);
       expect(hosted.logs.join("\n").includes(access), `${step}: token in logs`).toBe(false);
       // The server's door-code key stays in the secret store: never in a reply, a log, or the desk's file.
-      const serverKey = hosted.inst.env().CLEANER_CORE_PIN_KEY;
+      const serverKey = secrets.tenant(tenant.id).CLEANER_CORE_PIN_KEY;
       if (serverKey) {
         expect(replies.join("\n").includes(serverKey), `${step}: key in replies`).toBe(false);
         expect(hosted.logs.join("\n").includes(serverKey), `${step}: key in logs`).toBe(false);
-        const live = join(hosted.root, "cleaner-live.json");
+        const live = join(room, "cleaner-live.json");
         if (existsSync(live)) expect(readFileSync(live, "utf8").includes(serverKey), `${step}: key in cleaner-live.json`).toBe(false);
       }
     };
@@ -2093,7 +2115,7 @@ describe("Cleaner Core full diagram", () => {
     await say("activate", { googleEvents: googleList([]) });
     expect((await say("get_state")).done).toContain("Checks finished.");
     expect(sms.sent).toEqual([]);
-    expect(Buffer.from(hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
+    expect(Buffer.from(secrets.tenant(tenant.id).CLEANER_CORE_PIN_KEY ?? "", "base64")).toHaveLength(32);
     await safe("3 activate");
 
     // 4. A booking appears in Google. The alert names the usual times, and the host says yes.
@@ -2213,13 +2235,14 @@ describe("Cleaner Core full diagram", () => {
         CLEANER_CORE_SMS_ALLOWLIST: `${host},${cleaner}`,
         CLEANER_CORE_TWILIO_ACCOUNT_SID: REHEARSAL_TWILIO_SID,
         CLEANER_CORE_TWILIO_AUTH_TOKEN: REHEARSAL_TWILIO_AUTH,
-        CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+        CLEANER_CORE_MULTI_TENANT: "1",
       },
       undefined,
       undefined,
       () => at,
     );
-    const { access } = await hosted.connect(await hosted.register("Grok"), CLEANER_RESOURCE, CLEANER_SCOPE);
+    const { tenant, room, secrets } = laneTenant(hosted, () => at);
+    const { access } = await hosted.connect(await hosted.register("Grok"), CLEANER_RESOURCE, CLEANER_SCOPE, CLEANER_RESOURCE, { inviteCode: new TenantRegistry(hosted.root, () => at).invite(tenant.id) });
     const replies: string[] = [];
     let rpcId = 0;
     // The bearer token only: no door-code key header.
@@ -2282,9 +2305,9 @@ describe("Cleaner Core full diagram", () => {
     expect(again.text).toContain("I already sent the door code to the cleaner.");
     expect(codeTexts()).toHaveLength(1);
 
-    const serverKey = hosted.inst.env().CLEANER_CORE_PIN_KEY ?? "";
+    const serverKey = secrets.tenant(tenant.id).CLEANER_CORE_PIN_KEY ?? "";
     expect(Buffer.from(serverKey, "base64")).toHaveLength(32);
-    const live = readFileSync(join(hosted.root, "cleaner-live.json"), "utf8");
+    const live = readFileSync(join(room, "cleaner-live.json"), "utf8");
     expect(live.includes(serverKey)).toBe(false);
     expect(PLAIN_CODE.test(live)).toBe(false);
     expect(replies.join("\n").includes(serverKey)).toBe(false);

@@ -8,7 +8,6 @@ import {
   ASSISTANT_PROFILES,
   CHATGPT_DESK_WORDING,
   CHATGPT_INSTRUCTIONS,
-  CHATGPT_SECOND_OWNER,
   CHATGPT_TASK,
   CHATGPT_TASK_CONNECTED,
   CHATGPT_TASK_PROMPT,
@@ -21,7 +20,7 @@ import { handleCleanerMcpMessage } from "../src/cleaner-core/mcp";
 import { reviewAlert } from "../src/cleaner-core/review";
 import { DEFAULT_REDIRECT_HOSTS, redirectHostsFromEnv } from "../src/mcp/oauth/clients";
 import { consentPage } from "../src/mcp/oauth/pages";
-import { CLEANER_RESOURCE, closeHostedApps, hostedApp, pkce } from "./cleanerOauthHarness";
+import { closeHostedApps } from "./cleanerOauthHarness";
 import { PUBLIC } from "./fakeSendblue";
 import { filesUnder } from "./files";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, startWiredApp, type WiredApp } from "./wiringProof";
@@ -133,7 +132,7 @@ describe("Cleaner Core for ChatGPT", () => {
     expect(redirectHostsFromEnv({ CLEANER_CORE_ASSISTANT: "chatgpt" })).toEqual([...DEFAULT_REDIRECT_HOSTS, "chatgpt.com"]);
     const page = consentPage({ requestId: "r", matchCode: "123456", clientName: "ChatGPT", redirectHost: "chatgpt.com", hosted: true, firstClaim: true, label: "Cleaner Core", assistant: "chatgpt" });
     expect(page).toContain("<h1>Connect ChatGPT to Cleaner Core</h1>");
-    expect(page).toContain("will make this ChatGPT connection the owner of this Cleaner Core.");
+    expect(page).not.toContain("owner");
     expect(page).not.toMatch(/Grok|Claude/);
   });
 
@@ -181,33 +180,6 @@ describe("Cleaner Core for ChatGPT", () => {
     expect(again.text).toContain("Go back to ChatGPT and ask for a new link.");
     // There is no Fire URL to paste, so no alert page opens.
     expect((await publicRequest(wired, "GET", "/cleaner-core/alert-routine/abcdefghijklmnopqrstuvwxyz012345")).status).toBe(404);
-  });
-});
-
-describe("ChatGPT signs in with its own registered client", () => {
-  const CALLBACK = "https://chatgpt.com/connector/oauth/made-up-callback-id";
-  const authorize = (hosted: Awaited<ReturnType<typeof hostedApp>>, clientId: string) =>
-    hosted.http(`/authorize?${new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: CALLBACK, code_challenge: pkce().challenge, code_challenge_method: "S256", state: "s", scope: "cleanercore.operator", resource: CLEANER_RESOURCE })}`);
-
-  it("stops advertising metadata documents and approves a registered ChatGPT client", async () => {
-    const hosted = await hostedApp({ CLEANER_CORE_ASSISTANT: "chatgpt" });
-    const meta = (await (await hosted.http("/.well-known/oauth-authorization-server")).json()) as Record<string, unknown>;
-    expect(meta.client_id_metadata_document_supported).toBe(false);
-    const registered = await hosted.http("/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: "ChatGPT", redirect_uris: [CALLBACK], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
-    });
-    expect(registered.status).toBe(201);
-    const { client_id } = (await registered.json()) as { client_id: string };
-    const page = await authorize(hosted, client_id);
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain("<h1>Connect ChatGPT to Cleaner Core</h1>");
-  });
-
-  it("names ChatGPT when a second connection is refused", () => {
-    expect(ASSISTANT_PROFILES.chatgpt.secondOwner).toBe(CHATGPT_SECOND_OWNER);
-    expect(CHATGPT_SECOND_OWNER).toBe("This hosted Cleaner Core already belongs to one ChatGPT connection. A second one can't connect here.");
   });
 });
 

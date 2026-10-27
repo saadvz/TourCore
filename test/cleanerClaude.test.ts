@@ -13,7 +13,7 @@ import { photoKey, photoLinks, storePhoto } from "../src/cleaner-core/photos";
 import { reviewAlert } from "../src/cleaner-core/review";
 import { DEFAULT_REDIRECT_HOSTS, redirectHostsFromEnv } from "../src/mcp/oauth/clients";
 import { consentPage } from "../src/mcp/oauth/pages";
-import { CLEANER_RESOURCE, closeHostedApps, hostedApp, pkce } from "./cleanerOauthHarness";
+import { closeHostedApps } from "./cleanerOauthHarness";
 import { PUBLIC } from "./fakeSendblue";
 import { filesUnder } from "./files";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, startWiredApp, type WiredApp } from "./wiringProof";
@@ -116,7 +116,7 @@ describe("Cleaner Core for Grok stays as it was", () => {
     expect(redirectHostsFromEnv({})).toEqual(DEFAULT_REDIRECT_HOSTS);
     const page = consentPage({ requestId: "r", matchCode: "123456", clientName: "Grok", redirectHost: "grok.com", hosted: true, firstClaim: true, label: "Cleaner Core" });
     expect(page).toContain("<h1>Connect your Grok Bot to Cleaner Core</h1>");
-    expect(page).toContain("will make this Grok Bot the owner of this Cleaner Core.");
+    expect(page).not.toContain("owner");
     expect(page).not.toContain("Claude");
   });
 
@@ -153,7 +153,7 @@ describe("Cleaner Core for Claude", () => {
     expect(redirectHostsFromEnv({ CLEANER_CORE_ASSISTANT: "claude" })).toEqual([...DEFAULT_REDIRECT_HOSTS, "claude.ai"]);
     const page = consentPage({ requestId: "r", matchCode: "123456", clientName: "Claude", redirectHost: "claude.ai", hosted: true, firstClaim: true, label: "Cleaner Core", assistant: "claude" });
     expect(page).toContain("<h1>Connect Claude to Cleaner Core</h1>");
-    expect(page).toContain("will make this Claude connection the owner of this Cleaner Core.");
+    expect(page).not.toContain("owner");
     expect(page).not.toContain("Grok");
   });
 
@@ -223,39 +223,6 @@ describe("Cleaner Core for Claude", () => {
     const posted = await publicRequest(wired, "POST", path, { type: "application/json", text: JSON.stringify({ code: DOOR_CODE }) });
     expect(posted.status).toBe(200);
     expect(JSON.parse(posted.text)).toMatchObject({ ok: true });
-  });
-});
-
-describe("Claude signs in with its own registered client", () => {
-  /** Claude's Client ID Metadata Document: one client_id for every Claude user. */
-  const SHARED_CLIENT = "https://claude.ai/oauth/mcp-oauth-client-metadata";
-  const CALLBACK = "https://claude.ai/api/mcp/auth_callback";
-  const authorize = (app: Awaited<ReturnType<typeof hostedApp>>, clientId: string) =>
-    app.http(`/authorize?${new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: CALLBACK, code_challenge: pkce().challenge, code_challenge_method: "S256", state: "s", scope: "cleanercore.operator", resource: CLEANER_RESOURCE })}`);
-
-  it("keeps advertising metadata documents on a Grok deployment", async () => {
-    const app = await hostedApp();
-    const meta = (await (await app.http("/.well-known/oauth-authorization-server")).json()) as Record<string, unknown>;
-    expect(meta.client_id_metadata_document_supported).toBe(true);
-  });
-
-  it("stops advertising them on a Claude deployment, refuses the shared client_id, and approves a registered one", async () => {
-    const app = await hostedApp({ CLEANER_CORE_ASSISTANT: "claude" });
-    const meta = (await (await app.http("/.well-known/oauth-authorization-server")).json()) as Record<string, unknown>;
-    expect(meta.client_id_metadata_document_supported).toBe(false);
-    expect((await authorize(app, SHARED_CLIENT)).status).toBe(400);
-    expect(app.logs.some((line) => line.includes("Refused a URL client_id from claude.ai"))).toBe(true);
-
-    const registered = await app.http("/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: "Claude", redirect_uris: [CALLBACK], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
-    });
-    expect(registered.status).toBe(201);
-    const { client_id } = (await registered.json()) as { client_id: string };
-    const page = await authorize(app, client_id);
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain("<h1>Connect Claude to Cleaner Core</h1>");
   });
 });
 

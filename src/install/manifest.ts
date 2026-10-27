@@ -72,13 +72,6 @@ export interface InstallState {
    * client is refused. Not a secret. Marketplace tenancy is not this field.
    */
   hostedTenant?: { clientId: string; boundAt: string };
-  /** HOSTED_RAILWAY_P0 only. The first Grok Bot allowed on /mcp/cleaner-core. Separate from hostedTenant. Not a secret. */
-  hostedCleanerTenant?: { clientId: string; boundAt: string };
-  /**
-   * When CLEANER_CORE_HOSTED_OWNER_RESET was last applied. While the variable stays set, a later
-   * deploy doesn't reset again. Removed once a deploy runs without the variable. Not a secret.
-   */
-  cleanerOwnerResetAppliedAt?: string;
   /** Where canonical tour records live when DIRECT_GOOGLE_DRIVE is in use. Tokens are never stored here. */
   storage?: {
     mode?: "LOCAL_DEMO" | "GOOGLE_DRIVE";

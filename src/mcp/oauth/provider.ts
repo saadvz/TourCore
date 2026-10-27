@@ -17,7 +17,7 @@ import type { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthToke
 import { checkRedirectUri, ClientMetadataError, fetchMetadataDocument, isMetadataDocumentClientId, parseMetadataDocument, redirectLogParts, type RedirectPolicy } from "./clients";
 import { consentPage, PAGE_HEADERS, problemPage } from "./pages";
 import { hashSecret, newSecret, type OAuthGrantStore } from "./store";
-import { ASSISTANT_PROFILES, assistantForRedirect, type CleanerAssistant } from "../../cleaner-core/assistant";
+import { assistantForRedirect, type CleanerAssistant } from "../../cleaner-core/assistant";
 import type { InviteRefusal } from "../../cleaner-core/hosted/registry";
 
 /**
@@ -165,8 +165,6 @@ export interface ProviderOptions {
   hostedClaimed?: (resourcePath: string) => boolean;
   /** Which chat Cleaner Core's approval page names. Unset is Grok. */
   cleanerAssistant?: () => CleanerAssistant;
-  /** Whether a URL client_id (a Client ID Metadata Document) is accepted. Unset is yes. */
-  metadataDocuments?: () => boolean;
   /** Set on a multi-tenant Cleaner Core. Cleaner Core approvals then need an invite code. */
   invites?: InviteBook;
   log?: (line: string) => void;
@@ -245,13 +243,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
 
   private async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
     if (typeof clientId !== "string" || !clientId || clientId.length > 2000) return undefined;
-    if (isMetadataDocumentClientId(clientId)) {
-      if (this.options.metadataDocuments?.() === false) {
-        this.log(`Refused a URL client_id from ${hostOf(clientId)}: this server takes registered clients only.`);
-        return undefined;
-      }
-      return this.metadataDocumentClient(clientId);
-    }
+    if (isMetadataDocumentClientId(clientId)) return this.metadataDocumentClient(clientId);
     const ep = this.defaultEndpoints();
     const stored = this.options.store.getClient(clientId);
     // Registrations belong to one authorization server: a new tunnel address means registering again.
@@ -316,8 +308,10 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const tenant = this.options.tenantPolicy?.(client.client_id, ep.path);
     if (tenant && !tenant.allowed) {
       const cleaner = ep.label === "Cleaner Core";
-      this.log(cleaner ? `Refused a Cleaner Core connection from a second ${ASSISTANT_PROFILES[this.options.cleanerAssistant?.() ?? "grok"].connection}. This hosted Cleaner Core has one owner.` : "Refused a connection from a second account. This hosted demo is single-tenant.");
-      res.status(403).set(PAGE_HEADERS).type("html").send(problemPage(cleaner ? "This Cleaner Core is already in use" : "This Tour Core demo is already in use", tenant.message));
+      // The multi-tenant Cleaner Core service refuses Tour Core; the hosted Tour Core demo refuses a second account.
+      const title = cleaner ? "Cleaner Core isn't available here" : this.options.invites ? "Tour Core isn't on this service" : "This Tour Core demo is already in use";
+      this.log(cleaner || this.options.invites ? `Refused a connection: ${title}.` : "Refused a connection from a second account. This hosted demo is single-tenant.");
+      res.status(403).set(PAGE_HEADERS).type("html").send(problemPage(title, tenant.message));
       return;
     }
     this.prune();
