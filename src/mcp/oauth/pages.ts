@@ -89,7 +89,7 @@ function cleanerConsentPage(p: { requestId: string; matchCode: string; clientNam
     ? `<p><label for="oauth-invite">Invite code from Saad</label><br /><input id="oauth-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" /></p>`
     : "";
   const decision = p.hosted
-    ? `${p.firstClaim && !p.invite ? `<p>Approving this first connection will make ${who.owner} the owner of this Cleaner Core.</p>` : ""}${invite}
+    ? `${invite}
           <p><button type="button" class="primary" id="oauth-allow" data-code="${escape(p.matchCode)}">Allow</button></p>`
     : `<p><strong>Approve on the Cleaner Core computer.</strong> Open <em>${who.connect}</em> there, check it shows this code, then choose Allow:</p>`;
   return shell(

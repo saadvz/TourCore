@@ -1,10 +1,9 @@
 import type { SetupAsk } from "./setupAsk";
 
 /**
- * Which chat a Cleaner Core deployment serves. A Grok deployment is the default, and its wording
- * stays exactly as it was. A Claude deployment sets CLEANER_CORE_ASSISTANT=claude and a ChatGPT one
- * sets it to chatgpt: each a separate service, since a hosted Cleaner Core has one owner. Only the
- * words and formats change, never a gate.
+ * Which chat Cleaner Core speaks to. Grok is the default, and its wording stays exactly as it was.
+ * On the multi-tenant service, CLEANER_CORE_ASSISTANT is set per tenant from its primary chat; a
+ * local run sets it by hand. Only the words and formats change, never a gate.
  */
 export type CleanerAssistant = "grok" | "claude" | "chatgpt";
 
@@ -43,7 +42,6 @@ export const CHATGPT_REDIRECT_HOST = "chatgpt.com";
 /** Who Cleaner Core's approval page names. */
 export interface ConsentWho {
   chat: string;
-  owner: string;
   connect: string;
 }
 
@@ -53,58 +51,35 @@ export interface AssistantProfile {
   helper: string;
   /** The connector callback host this deployment allows without TOURCORE_OAUTH_REDIRECT_HOSTS. */
   redirectHost?: string;
-  /**
-   * Whether the server advertises Client ID Metadata Documents. Off where that document is one
-   * client_id for every user of the chat: a hosted Cleaner Core binds its owner by client_id, so the
-   * chat registers its own client instead.
-   */
-  metadataDocuments: boolean;
   /** Secrets go on Cleaner Core's own private page from a one-time link, since there is no secure card. */
   privatePages: boolean;
   /** get_job_photos also returns the photos as images. */
   photoImages: boolean;
   /** The names on the approval page. */
   consent: ConsentWho;
-  /** What the log calls a refused second connection. */
-  connection: string;
-  /** The refusal when a second connection reaches a claimed deployment. Unset keeps Grok's. */
-  secondOwner?: string;
 }
-
-/** The refusal when a second Claude connection reaches a claimed Claude deployment. */
-export const CLAUDE_SECOND_OWNER = "This hosted Cleaner Core already belongs to one Claude connection. A second one can't connect here.";
-/** The refusal when a second ChatGPT connection reaches a claimed ChatGPT deployment. */
-export const CHATGPT_SECOND_OWNER = "This hosted Cleaner Core already belongs to one ChatGPT connection. A second one can't connect here.";
 
 export const ASSISTANT_PROFILES: Readonly<Record<CleanerAssistant, AssistantProfile>> = {
   grok: {
     helper: GROK_HELPER,
-    metadataDocuments: true,
     privatePages: false,
     photoImages: false,
-    consent: { chat: "your Grok Bot", owner: "this Grok Bot", connect: "Connect Grok" },
-    connection: "Grok Bot",
+    consent: { chat: "your Grok Bot", connect: "Connect Grok" },
   },
   claude: {
     helper: CLAUDE_HELPER,
     redirectHost: CLAUDE_REDIRECT_HOST,
-    metadataDocuments: false,
     privatePages: true,
     photoImages: true,
-    consent: { chat: "Claude", owner: "this Claude connection", connect: "Connect Claude" },
-    connection: "Claude connection",
-    secondOwner: CLAUDE_SECOND_OWNER,
+    consent: { chat: "Claude", connect: "Connect Claude" },
   },
   // Photos stay links on ChatGPT until it is shown to read image content in a tool result.
   chatgpt: {
     helper: CHATGPT_HELPER,
     redirectHost: CHATGPT_REDIRECT_HOST,
-    metadataDocuments: false,
     privatePages: true,
     photoImages: false,
-    consent: { chat: "ChatGPT", owner: "this ChatGPT connection", connect: "Connect ChatGPT" },
-    connection: "ChatGPT connection",
-    secondOwner: CHATGPT_SECOND_OWNER,
+    consent: { chat: "ChatGPT", connect: "Connect ChatGPT" },
   },
 };
 
