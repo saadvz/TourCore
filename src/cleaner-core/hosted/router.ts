@@ -72,14 +72,17 @@ export function splitTenantPath(pathname: string): { tenantId: string; rest: str
 }
 
 /** A tenant's folder, its environment (rebuilt on every read, so a saved secret is seen at once), and its secret saver. */
-export function tenantContext(h: HostedCleaner, tenant: Tenant, override: NodeJS.ProcessEnv = {}): TenantContext {
+export function tenantContext(h: HostedCleaner, tenant: Tenant): TenantContext {
   const id = tenant.id;
   return {
     root: tenantFolder(h.dataRoot, id),
     env: () => {
-      const current = h.registry.get(id) ?? tenant;
+      const current = h.registry.get(id);
       const primary = h.registry.primary(id, (grantId) => h.grantLive(grantId));
-      return { ...buildTenantEnv({ base: h.baseEnv(), tenant: current, secrets: h.secrets, primary, origin: h.origin() ?? "" }), ...override };
+      const env = buildTenantEnv({ base: h.baseEnv(), tenant: current ?? tenant, secrets: h.secrets, primary, origin: h.origin() ?? "" });
+      // Deleted or turned off while a request or drain was under way: nothing more is sent for it.
+      if (!current || current.disabled) env.CLEANER_CORE_ENABLED = "0";
+      return env;
     },
     // A routine belongs to the connection that saved it. Everything else is the tenant's.
     saveSecrets: (values) => {
@@ -98,7 +101,7 @@ export function tenantContext(h: HostedCleaner, tenant: Tenant, override: NodeJS
   };
 }
 
-/** The chat a private upload page speaks as: the primary when it uses pages, else the first connection that does. */
+/** The chat a private upload page speaks as when its link doesn't say: the primary when it uses pages, else the first connection that does. */
 function pageAssistant(h: HostedCleaner, tenant: Tenant): CleanerAssistant | undefined {
   const primary = h.registry.primary(tenant.id, (grantId) => h.grantLive(grantId));
   if (primary && ASSISTANT_PROFILES[primary.assistant].privatePages) return primary.assistant;
@@ -232,10 +235,17 @@ async function handleTenantPath(h: HostedCleaner, r: HostedRequest, tenant: Tena
   }
   const page = uploadPageOf(rest);
   if (page && (method === "GET" || (method === "POST" && isFormPost(contentType)))) {
-    const assistant = pageAssistant(h, tenant);
-    if (!assistant) return false;
-    const pageCtx = tenantContext(h, tenant, { CLEANER_CORE_ASSISTANT: assistant });
-    const result = await handleCleanerUploadPage({ ...page, method, contentType, readBody: () => r.readCapped(ALERT_UPLOAD_MAX_BYTES), env: pageCtx.env, root: ctx.root, now, saveSecrets: ctx.saveSecrets });
+    const result = await handleCleanerUploadPage({
+      ...page,
+      method,
+      contentType,
+      readBody: () => r.readCapped(ALERT_UPLOAD_MAX_BYTES),
+      env: ctx.env,
+      root: ctx.root,
+      now,
+      saveSecrets: ctx.saveSecrets,
+      multiTenant: { fallback: pageAssistant(h, tenant) },
+    });
     r.send(result.status, result.headers["Content-Type"] ?? "text/html; charset=utf-8", result.body, { ...result.headers, ...(result.status === 413 ? { Connection: "close" } : {}) });
     return true;
   }
@@ -258,8 +268,10 @@ async function handleTenantPath(h: HostedCleaner, r: HostedRequest, tenant: Tena
 
 /** Delivers every enabled tenant's waiting wake-ups. One tenant's failure never stops the rest. */
 export async function drainAllTenants(h: HostedCleaner): Promise<void> {
-  for (const tenant of h.registry.list()) {
-    if (tenant.disabled) continue;
+  for (const listed of h.registry.list()) {
+    // Read again: a tenant deleted or turned off while this round runs is skipped.
+    const tenant = h.registry.get(listed.id);
+    if (!tenant || tenant.disabled) continue;
     const ctx = tenantContext(h, tenant);
     try {
       await drainCleanerAlerts(ctx.root, ctx.env, () => h.now());

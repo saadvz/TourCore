@@ -137,6 +137,12 @@ export class OAuthGrantStore {
     return full;
   }
 
+  /** Not past its hard end, and its access or refresh token still works. Expired grants stay in the file until the next write. */
+  isLive(grant: Grant): boolean {
+    const t = this.now();
+    return grant.expiresAt > t && (grant.accessExpiresAt > t || (grant.refreshExpiresAt ?? 0) > t);
+  }
+
   get(grantId: string): Grant | undefined {
     return this.read().grants.find((g) => g.id === grantId);
   }

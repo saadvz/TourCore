@@ -349,7 +349,11 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       return base ? new URL(base).origin : undefined;
     },
     baseEnv: () => installation.env(),
-    grantLive: (grantId) => Boolean(new OAuthGrantStore(installation.runtime).get(grantId)),
+    grantLive: (grantId) => {
+      const store = new OAuthGrantStore(installation.runtime, options.authNow);
+      const grant = store.get(grantId);
+      return Boolean(grant && store.isLive(grant));
+    },
     now: () => options.now?.() ?? new Date(),
     log,
   });
@@ -609,7 +613,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           h: hostedCleanerService,
           password: () => installation.env().CLEANER_CORE_ADMIN_PASSWORD,
           revokeGrant: (grantId) => void new OAuthGrantStore(installation.runtime).revokeGrant(grantId),
-          grantIds: () => new Set(new OAuthGrantStore(installation.runtime).list().map((grant) => grant.id)),
+          grantIds: () => {
+            const store = new OAuthGrantStore(installation.runtime, options.authNow);
+            return new Set(store.list().filter((grant) => store.isLive(grant)).map((grant) => grant.id));
+          },
           https: !hosted || forwardedProto(req) === "https",
         });
         if (admin) return;

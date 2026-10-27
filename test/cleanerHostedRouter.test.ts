@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { tenantFolder } from "../src/cleaner-core/hosted/registry";
-import { drainAllTenants, hostedCleaner, splitTenantPath } from "../src/cleaner-core/hosted/router";
+import { liveDeskFor, resetLiveDesks } from "../src/cleaner-core/liveDesk";
+import { drainAllTenants, hostedCleaner, splitTenantPath, tenantContext } from "../src/cleaner-core/hosted/router";
 import { TenantSecrets } from "../src/cleaner-core/hosted/tenantSecrets";
 import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
 import { BASE, closeHostedApps } from "./cleanerOauthHarness";
@@ -157,5 +158,47 @@ describe("routing on the multi-tenant service", () => {
     await drainAllTenants(h);
     expect(m.wakes.slice(before).map((wake) => wake.url)).toContain(GROK_HOOK);
     expect(logs.some((line) => line.includes(lane.id))).toBe(true);
+  });
+
+  it("a page probe on a fresh desk never changes which chat the tenant's texts and alerts follow", async () => {
+    const { m, lane } = await start();
+    await m.join(lane.id, "grok");
+    await m.join(lane.id, "claude");
+    resetLiveDesks();
+    const probe = `/t/${lane.id}/cleaner-core/door-code/${"A".repeat(43)}`;
+    expect((await m.app.http(probe)).status).toBe(404);
+    const desk = liveDeskFor(tenantFolder(m.app.root, lane.id), () => ({}), () => new Date());
+    expect(desk.primaryAssistant()).toBe("grok");
+  });
+
+  it("an upload page speaks as the chat that made the link, even when the primary is another chat", async () => {
+    const { m, lane } = await start();
+    await m.join(lane.id, "chatgpt");
+    const claude = await m.join(lane.id, "claude");
+    const link = await m.tool(claude, "save_alert_routine", {});
+    const path = new URL(String(link.structured?.uploadUrl)).pathname;
+    const page = await m.app.http(path);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("Claude");
+    expect(html).not.toContain("ChatGPT");
+  });
+
+  it("a removed tenant's context has Cleaner Core off, so nothing in flight can send for it", async () => {
+    const { m, lane } = await start();
+    const h = hostedCleaner({
+      registry: m.registry,
+      secrets: new TenantSecrets(m.app.root),
+      dataRoot: m.app.root,
+      origin: () => BASE,
+      baseEnv: () => m.app.inst.env(),
+      grantLive: () => true,
+      now: clock,
+      log: () => undefined,
+    });
+    const ctx = tenantContext(h, lane);
+    expect(ctx.env().CLEANER_CORE_ENABLED).toBe("1");
+    m.registry.remove(lane.id);
+    expect(ctx.env().CLEANER_CORE_ENABLED).toBe("0");
   });
 });

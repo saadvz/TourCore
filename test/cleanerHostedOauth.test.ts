@@ -128,4 +128,12 @@ describe("the invite code on the Allow page", () => {
     const { page } = await pendingRequest(app, clientId, `${BASE}/mcp`, OPERATOR_SCOPE);
     expect(page.status).toBe(403);
   });
+
+  it("counts an expired grant as gone, not live", () => {
+    const store = new OAuthGrantStore({ get: () => undefined, set: () => undefined } as never, () => 1_000_000);
+    const base = { clientId: "c", issuer: BASE, resource: CLEANER_RESOURCE, scopes: [CLEANER_SCOPE], createdAt: 0, accessHash: "a" };
+    expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 999_999, accessExpiresAt: 999_999 })).toBe(false);
+    expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 2_000_000, accessExpiresAt: 999_999, refreshExpiresAt: 2_000_000 })).toBe(true);
+    expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 2_000_000, accessExpiresAt: 999_999 })).toBe(false);
+  });
 });

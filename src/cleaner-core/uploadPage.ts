@@ -1,4 +1,4 @@
-import { assistantProfile, cleanerAssistant } from "./assistant";
+import { ASSISTANT_PROFILES, cleanerAssistant, type CleanerAssistant } from "./assistant";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import type { SaveSecrets } from "./mcp";
@@ -71,16 +71,24 @@ export async function handleCleanerUploadPage(input: {
   root: string;
   now: () => Date;
   saveSecrets: SaveSecrets;
+  /**
+   * Multi-tenant Cleaner Core: the page speaks as the chat that made the link, and this chat when
+   * the link doesn't say. Never put into the env: the desk's env decides texts and alerts.
+   */
+  multiTenant?: { fallback: CleanerAssistant | undefined };
 }): Promise<{ status: number; body: string; headers: Record<string, string> }> {
   const env = input.env();
-  // A ChatGPT deployment has no Fire URL or token, so it has no alert page.
-  const notFound = !assistantProfile(env).privatePages || (input.kind === "alert-routine" && cleanerAssistant(env) === "chatgpt");
-  if (!cleanerCoreEnabled(env) || notFound) return { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
-  const chat = assistantProfile(env).helper;
-  const copy = COPY[input.kind];
+  const missing = { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
+  // A ChatGPT chat has no Fire URL or token, so it has no alert page.
+  const noPage = (assistant: CleanerAssistant | undefined) => !assistant || !ASSISTANT_PROFILES[assistant].privatePages || (input.kind === "alert-routine" && assistant === "chatgpt");
+  if (!cleanerCoreEnabled(env) || (!input.multiTenant && noPage(cleanerAssistant(env)))) return missing;
   const desk = liveDeskFor(input.root, input.env, input.now);
   const html = (status: number, body: string) => ({ status, body, headers: { "Content-Type": "text/html; charset=utf-8", ...HEADERS } });
   const link = await desk.uploadLinkOpen(input.kind, input.code);
+  const assistant = input.multiTenant ? (link.by?.assistant ?? input.multiTenant.fallback) : cleanerAssistant(env);
+  if (noPage(assistant)) return missing;
+  const chat = ASSISTANT_PROFILES[assistant!].helper;
+  const copy = COPY[input.kind];
   if (!link.open) return html(404, page(GONE_TITLE, `<p>${goneText(chat)}</p>`));
   if (input.method === "GET") return html(200, formPage(copy, chat, link.name));
   const raw = await input.readBody();

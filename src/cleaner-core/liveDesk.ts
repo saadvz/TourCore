@@ -350,9 +350,9 @@ interface LiveFile {
   /** The pending alert upload link: the sha256 of its code and when it expires. Never the code. */
   alertUpload?: { hash: string; expiresAt: string; by?: CleanerCaller };
   /** The pending calendar upload link, with the name the link is saved under. Never the code or the link. */
-  calendarUpload?: { hash: string; expiresAt: string; name: string };
+  calendarUpload?: { hash: string; expiresAt: string; name: string; by?: CleanerCaller };
   /** The pending door code upload link, with the lock location to save with it. Never the link's code or the door code. */
-  doorCodeUpload?: { hash: string; expiresAt: string; lockLocation?: string };
+  doorCodeUpload?: { hash: string; expiresAt: string; lockLocation?: string; by?: CleanerCaller };
   pinSeal?: PinSeal;
   pinSend?: PinSend;
   texting?: boolean;
@@ -1109,7 +1109,8 @@ export class LiveDesk {
       const code = randomBytes(32).toString("base64url");
       const uploadUrl = `${origin}${CALENDAR_UPLOAD_PREFIX}${code}`;
       if (this.leaks(uploadUrl)) continue;
-      this.file.calendarUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(), name };
+      const by = currentCaller();
+      this.file.calendarUpload = { hash: uploadHash(code), expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(), name, ...(by ? { by } : {}) };
       if (google === true) this.file.google = true;
       this.calendarUploadKey = pinKey;
       this.persist();
@@ -1214,6 +1215,7 @@ export class LiveDesk {
         hash: uploadHash(code),
         expiresAt: new Date(this.now().getTime() + UPLOAD_MINUTES * 60_000).toISOString(),
         ...(lockLocation ? { lockLocation } : {}),
+        ...(currentCaller() ? { by: currentCaller() } : {}),
       };
       this.doorCodeUploadKey = pinKey;
       this.persist();
@@ -2759,13 +2761,13 @@ export class LiveDesk {
    * True while an upload link of `kind` with this one-time code is waiting and not expired. Reads
    * only; opening the private page never uses the link up.
    */
-  uploadLinkOpen(kind: "door-code" | "calendar-link" | "alert-routine", code: string): Promise<{ open: boolean; name?: string }> {
+  uploadLinkOpen(kind: "door-code" | "calendar-link" | "alert-routine", code: string): Promise<{ open: boolean; name?: string; by?: CleanerCaller }> {
     return this.serial(async () => {
       const pending = kind === "door-code" ? this.file.doorCodeUpload : kind === "calendar-link" ? this.file.calendarUpload : this.file.alertUpload;
       if (!pending || !sameHash(uploadHash(code), pending.hash)) return { open: false };
       if (this.now().getTime() >= Date.parse(pending.expiresAt)) return { open: false };
       const name = kind === "calendar-link" ? this.file.calendarUpload?.name : undefined;
-      return { open: true, ...(name ? { name } : {}) };
+      return { open: true, ...(name ? { name } : {}), ...(pending.by ? { by: pending.by } : {}) };
     });
   }
 
