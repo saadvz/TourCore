@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { assistantForRedirect } from "../src/cleaner-core/assistant";
 import { TenantRegistry, type Tenant } from "../src/cleaner-core/hosted/registry";
-import { redirectHostsFromEnv } from "../src/mcp/oauth/clients";
+import { checkClientMetadata, parseMetadataDocument, redirectHostsFromEnv, redirectPolicyFor } from "../src/mcp/oauth/clients";
 import { consentPage, INVITE_REFUSALS } from "../src/mcp/oauth/pages";
 import { CLEANER_SCOPE, OPERATOR_SCOPE } from "../src/mcp/oauth/provider";
 import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
@@ -135,5 +135,28 @@ describe("the invite code on the Allow page", () => {
     expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 999_999, accessExpiresAt: 999_999 })).toBe(false);
     expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 2_000_000, accessExpiresAt: 999_999, refreshExpiresAt: 2_000_000 })).toBe(true);
     expect(store.isLive({ ...base, id: "g", retiredRefreshHashes: [], expiresAt: 2_000_000, accessExpiresAt: 999_999 })).toBe(false);
+  });
+
+  it("accepts Claude's published identity, keeping only the grant types this server issues", () => {
+    // Claude's document as published at its client_id URL on 2026-10-27.
+    const claude = {
+      client_id: "https://claude.ai/oauth/mcp-oauth-client-metadata",
+      client_name: "Claude",
+      client_uri: "https://claude.ai",
+      redirect_uris: [CLAUDE_REDIRECT],
+      grant_types: ["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    };
+    const client = parseMetadataDocument(claude.client_id, claude, redirectPolicyFor({ CLEANER_CORE_MULTI_TENANT: "1" }, "HOSTED_RAILWAY_P0"));
+    expect(client.grant_types).toEqual(["authorization_code", "refresh_token"]);
+    expect(client.redirect_uris).toEqual([CLAUDE_REDIRECT]);
+  });
+
+  it("still refuses a client that can't use the authorization code grant", () => {
+    const policy = redirectPolicyFor({ CLEANER_CORE_MULTI_TENANT: "1" }, "HOSTED_RAILWAY_P0");
+    for (const grant_types of [["urn:ietf:params:oauth:grant-type:jwt-bearer"], ["implicit"], ["refresh_token"]]) {
+      expect(() => checkClientMetadata({ redirect_uris: [CLAUDE_REDIRECT], grant_types, token_endpoint_auth_method: "none" }, policy, new Set(["none"])), JSON.stringify(grant_types)).toThrow(/grant_types/);
+    }
   });
 });

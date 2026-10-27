@@ -177,10 +177,13 @@ export function checkClientMetadata(body: unknown, policy: RedirectPolicy, allow
   // One bad URI refuses the whole registration (never silently dropped), but every bad one is reported.
   const refused = (m.redirect_uris as string[]).map((uri) => checkRedirectUri(uri, policy, appType)).filter((p): p is RedirectProblem => !!p);
   if (refused.length) throw new ClientMetadataError("invalid_redirect_uri", `redirect_uri ${refused[0]!.reason}.`, refused);
-  const grantTypes = m.grant_types === undefined ? ["authorization_code"] : m.grant_types;
-  if (!stringArray(grantTypes) || !(grantTypes as string[]).every((g) => GRANTS.has(g)) || !(grantTypes as string[]).includes("authorization_code")) {
+  const asked = m.grant_types === undefined ? ["authorization_code"] : m.grant_types;
+  if (!stringArray(asked) || !(asked as string[]).includes("authorization_code")) {
     throw new ClientMetadataError("invalid_client_metadata", "grant_types must be authorization_code, optionally with refresh_token.");
   }
+  // Grants this server never issues are dropped, not refused (RFC 7591 §3.2.1 lets a server
+  // pare a client's metadata down). Claude's published identity also lists jwt-bearer.
+  const grantTypes = (asked as string[]).filter((g) => GRANTS.has(g));
   const responseTypes = m.response_types === undefined ? ["code"] : m.response_types;
   if (!stringArray(responseTypes) || (responseTypes as string[]).length !== 1 || (responseTypes as string[])[0] !== "code") {
     throw new ClientMetadataError("invalid_client_metadata", "response_types must be code.");
