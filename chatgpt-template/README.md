@@ -56,7 +56,20 @@ the same build as the Grok and Claude ones.
    `CLEANER_CORE_ASSISTANT=chatgpt`. Give it its own Twilio number for the
    cleaner texts. A number has one incoming-message webhook, so on a shared
    number one service never hears the cleaner's YES, DONE, or STOP, and a STOP
-   to the number blocks both.
+   to the number blocks both. The full list:
+
+   | Variable | Value | Without it |
+   | --- | --- | --- |
+   | `CLEANER_CORE_ENABLED` | `1` | Cleaner Core is off |
+   | `CLEANER_CORE_ASSISTANT` | `chatgpt` | The service talks to Grok: ChatGPT's sign-in is refused, and setup asks for Grok's secure card |
+   | `CLEANER_CORE_LIVE_SMS` | `1` | Every text is held and nothing reaches Twilio |
+   | `CLEANER_CORE_TWILIO_ACCOUNT_SID`, `CLEANER_CORE_TWILIO_AUTH_TOKEN`, `CLEANER_CORE_TWILIO_PHONE_NUMBER` | This service's own Twilio account and number | No text can go out |
+   | `CLEANER_CORE_SMS_ALLOWLIST` | The host's and the cleaner's numbers, comma-separated in `+1XXXXXXXXXX` form, or `*` for any number | Activate is refused: "only after those numbers are approved for texts" |
+   | `CLEANER_CORE_GROUP_CHAT` | Leave unset | `0` or `false` turns off the group text, the fast way the host hears from the cleaner |
+
+   Leave `TOURCORE_MCP_AUTH_MODE` unset. Don't set `CLEANER_CORE_PIN_KEY` or
+   `CLEANER_CORE_PHOTO_KEY`: the service makes and keeps its own. Secret values
+   go in Railway's variables, never in a chat or this repository.
 3. Set that Twilio number's incoming-message webhook to
    `<hostedCleanerCoreUrl>/webhooks/twilio/cleaner-core`.
 4. Put the service's https address in `hostedCleanerCoreUrl` in
@@ -91,6 +104,9 @@ a published app in ChatGPT's directory, and even then a once-a-day task can't
 keep up with new bookings.
 
 ## How a host starts
+
+The step-by-step version, with troubleshooting, is
+[`SETUP_GUIDE.md`](SETUP_GUIDE.md).
 
 1. On chatgpt.com (web only), open **Settings → Apps & Connectors →
    Advanced** and turn on **Developer Mode**. A custom connector needs it until

@@ -334,7 +334,7 @@ describe("ChatGPT template", () => {
   const files = filesUnder("chatgpt-template").filter((file) => /\.(md|json)$/.test(file));
 
   it("ships the guide and the task, for a deployment set to chatgpt", () => {
-    for (const file of ["chatgpt-template/README.md", "chatgpt-template/template.json", "chatgpt-template/routines/cleaner-core-task.md"]) {
+    for (const file of ["chatgpt-template/README.md", "chatgpt-template/SETUP_GUIDE.md", "chatgpt-template/template.json", "chatgpt-template/routines/cleaner-core-task.md"]) {
       expect(() => read(file), file).not.toThrow();
     }
     const manifest = JSON.parse(read("chatgpt-template/template.json")) as { hostedCleanerCoreUrl: string | null; deployment: { env: Record<string, string> } };
@@ -346,7 +346,7 @@ describe("ChatGPT template", () => {
   });
 
   it("holds no secret, no real-looking phone number, and no door code", () => {
-    expect(files.length).toBeGreaterThanOrEqual(3);
+    expect(files.length).toBeGreaterThanOrEqual(4);
     for (const file of files) {
       const text = read(file);
       expect(text, file).not.toMatch(/sk-(?:ant-|proj-)?[A-Za-z0-9]{8}/);
