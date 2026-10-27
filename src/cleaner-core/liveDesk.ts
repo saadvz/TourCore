@@ -2734,6 +2734,11 @@ export class LiveDesk {
     return cleanerAssistant(this.env());
   }
 
+  /** On a multi-tenant service: the connections (grant ids) that connected their own routine, oldest first. */
+  routineConnectionIds(): string[] {
+    return [...(this.file.routineConnections ?? [])];
+  }
+
   /** Records the calling connection as one that connected its own routine. The caller persists. */
   private noteRoutineConnection(): void {
     const id = currentCaller()?.connectionId;

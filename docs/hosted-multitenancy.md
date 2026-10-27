@@ -42,8 +42,11 @@ The registry is `/data/tenants.json`. Invite codes are stored only as hashes.
 
 A tool reply speaks to the chat making the call. Texts to the host and cleaner,
 and which alert routine is woken, follow the tenant's **primary** connection: the
-first one, until Saad changes it on the admin page. When the primary's grant is
-gone, the oldest live connection stands in.
+first one connected. When the primary hasn't connected its alert routine and
+another chat on the tenant does, that chat becomes primary, so setup never
+waits on a chat that won't make one. A primary whose routine is connected
+changes only when Saad changes it on the admin page. When the primary's grant
+is gone, the oldest live connection stands in.
 
 ## Saad's admin page
 

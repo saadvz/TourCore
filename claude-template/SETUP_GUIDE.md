@@ -111,7 +111,7 @@ Every row here came up during testing.
 | --- | --- | --- |
 | "That invite code isn't right", "has expired", or "was already used" | Each invite code works once, for 7 days | Ask Saad for a new invite code, then click **Connect** again |
 | "This connection isn't linked to a Cleaner Core account" | Saad disconnected this chat, or turned the account off | Ask Saad for a new invite code, then remove and add the connector again |
-| Setup keeps asking for the scheduled task after you made it | Another chat on your account gets the alerts (the primary) | Ask Saad to make Claude the primary on the admin page |
+| Alerts go to another chat on your account, not Claude | That chat connected its alerts first, so it is the primary | Ask Saad to make Claude the primary on the admin page |
 | Activate says the numbers aren't approved | A number isn't on the operator's list | Ask the operator to approve both, then say "run the checks" |
 | Setup finished but no text arrived | The times aren't confirmed yet, or live texting is off on the service | Confirm the first booking's times; if Claude says nothing was sent, tell the operator |
 | The task's run says `check_now` isn't available | The task is missing the Cleaner Core connector | Edit the task: Connectors → add Cleaner Core |

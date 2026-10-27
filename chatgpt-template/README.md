@@ -56,7 +56,8 @@ label and Twilio number, and sends the host the invite code. The host types
 it on the Cleaner Core page that opens when they connect ChatGPT. A host can
 also connect Grok, Claude, or ChatGPT to the same tenant, each with its own
 invite code. Texts to the host and the alerts follow the tenant's primary
-chat, which Saad sets on the admin page.
+chat: the first one connected, or the chat that connects its alert routine
+when the primary hasn't. Saad can change it on the admin page.
 
 To start a host over, the host asks ChatGPT to reset the property. To remove
 a host or one chat's access, Saad uses the admin page.

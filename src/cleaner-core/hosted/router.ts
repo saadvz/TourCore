@@ -20,7 +20,7 @@ import {
   handleCleanerTwilioWebhook,
   uploadPageOf,
 } from "../http";
-import { drainCleanerAlerts } from "../liveDesk";
+import { drainCleanerAlerts, liveDeskFor } from "../liveDesk";
 import type { DeleteSecrets, SaveSecrets } from "../mcp";
 import { CLEANER_PHOTO_PREFIX, photoKey, servePhoto } from "../photos";
 import { handleCleanerUploadPage, isFormPost } from "../uploadPage";
@@ -168,6 +168,7 @@ export async function handleHostedCleaner(h: HostedCleaner, r: HostedRequest): P
       caller: { assistant: extra.assistant, connectionId: extra.grantId },
     });
     h.registry.touch(tenant.id);
+    promoteRoutineOwner(h, tenant.id);
     if ("answered" in result) return true;
     r.send(result.status, JSON_TYPE, result.body, result.headers);
     return true;
@@ -208,6 +209,7 @@ export async function handleHostedCleaner(h: HostedCleaner, r: HostedRequest): P
   const handled = await handleTenantPath(h, r, tenant, scoped.rest, signed(path), now);
   if (!handled) return notFound();
   h.registry.touch(tenant.id);
+  promoteRoutineOwner(h, tenant.id);
   return true;
 }
 
@@ -264,6 +266,24 @@ async function handleTenantPath(h: HostedCleaner, r: HostedRequest, tenant: Tena
   if (!result) return false;
   r.send(result.status, JSON_TYPE, result.body, result.status === 413 ? { Connection: "close" } : {});
   return true;
+}
+
+/**
+ * The primary is the chat that gets the alerts. When its routine isn't connected but another live
+ * connection's is, the most recent such connection becomes primary, so setup doesn't wait on a chat
+ * that will never connect one. A primary with a connected routine is never changed here.
+ */
+export function promoteRoutineOwner(h: HostedCleaner, tenantId: string): void {
+  const tenant = h.registry.get(tenantId);
+  if (!tenant || tenant.disabled) return;
+  const live = (grantId: string) => h.grantLive(grantId) && tenant.connections.some((c) => c.grantId === grantId);
+  const ctx = tenantContext(h, tenant);
+  const connected = liveDeskFor(ctx.root, ctx.env, () => h.now()).routineConnectionIds().filter(live);
+  const primary = h.registry.primary(tenantId, (grantId) => h.grantLive(grantId));
+  if (connected.length === 0 || (primary && connected.includes(primary.grantId))) return;
+  const next = connected.at(-1)!;
+  h.registry.setPrimary(tenantId, next);
+  h.log(`${tenantId}'s primary chat is now the one that connected its alert routine.`);
 }
 
 /** Delivers every enabled tenant's waiting wake-ups. One tenant's failure never stops the rest. */

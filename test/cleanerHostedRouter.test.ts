@@ -208,4 +208,40 @@ describe("routing on the multi-tenant service", () => {
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { message: "Connect Cleaner Core in your chat to sign in." } });
   });
+
+  it("makes the chat that connects its routine the primary when the primary has none", async () => {
+    const { m, lane } = await start();
+    await m.join(lane.id, "claude");
+    const grok = await m.join(lane.id, "grok");
+    const grokGrant = grantOf(m, grok).id;
+    expect(m.registry.get(lane.id)!.primaryGrantId).not.toBe(grokGrant);
+    expect((await m.tool(grok, "save_alert_routine", { url: GROK_HOOK, token: "grok-routine-key-1" })).isError).toBe(false);
+    expect(m.registry.get(lane.id)!.primaryGrantId).toBe(grokGrant);
+    // Its own alerts now reach it, including the test wake-up that waited while Claude was primary.
+    expect((await m.tool(grok, "save_alert_routine", { url: GROK_HOOK, token: "grok-routine-key-2" })).isError).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(m.wakes.length).toBeGreaterThan(0);
+    expect(m.wakes.every((wake) => wake.url === GROK_HOOK)).toBe(true);
+  });
+
+  it("leaves a primary whose routine is connected alone", async () => {
+    const { m, lane } = await start();
+    const grok = await m.join(lane.id, "grok");
+    const claude = await m.join(lane.id, "claude");
+    expect((await m.tool(grok, "save_alert_routine", { url: GROK_HOOK, token: "grok-routine-key-1" })).isError).toBe(false);
+    expect((await m.tool(claude, "save_alert_routine", { url: CLAUDE_FIRE, token: "claude-routine-key-1" })).isError).toBe(false);
+    expect(m.registry.get(lane.id)!.primaryGrantId).toBe(grantOf(m, grok).id);
+  });
+
+  it("promotes on a routine saved through the upload link, too", async () => {
+    const { m, lane } = await start();
+    await m.join(lane.id, "claude");
+    const grok = await m.join(lane.id, "grok");
+    const link = await m.tool(grok, "save_alert_routine", {});
+    const path = new URL(String(link.structured?.uploadUrl)).pathname;
+    expect(m.registry.get(lane.id)!.primaryGrantId).not.toBe(grantOf(m, grok).id);
+    const res = await m.app.http(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: GROK_HOOK, token: "grok-routine-key-1" }) });
+    expect(res.status).toBe(200);
+    expect(m.registry.get(lane.id)!.primaryGrantId).toBe(grantOf(m, grok).id);
+  });
 });

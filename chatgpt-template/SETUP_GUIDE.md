@@ -141,7 +141,7 @@ Every row here came up while testing on ChatGPT Plus.
 | ChatGPT answers from general knowledge, or asks what Cleaner Core is | Cleaner Core isn't added to this chat | Click **+** and add Cleaner Core, or start a new chat with it added |
 | "That invite code isn't right", "has expired", or "was already used" | Each invite code works once, for 7 days | Ask Saad for a new invite code, then click **Connect** again |
 | "This connection isn't linked to a Cleaner Core account" | Saad disconnected this chat, or turned the account off | Ask Saad for a new invite code, then remove and add the connector again |
-| ChatGPT walks you through a Claude routine or a Grok routine, or setup keeps asking for the task after you made it | Another chat on your account gets the alerts (the primary) | Ask Saad to make ChatGPT the primary on the admin page |
+| Alerts go to another chat on your account, not ChatGPT | That chat connected its alerts first, so it is the primary | Ask Saad to make ChatGPT the primary on the admin page |
 | Activate says the numbers aren't approved | A number isn't on the operator's list | Ask the operator to approve both, then say "run the checks" |
 | Setup finished but no text arrived, or ChatGPT says "Nothing was sent yet" | Live texting is off, or the Twilio details are missing on the service | Tell Saad. The service's variables are in `docs/deployment.md`. |
 | The scheduled task paused itself after an error | An older task prompt, or a task made before Cleaner Core was set up | Delete it and ask ChatGPT to create the Cleaner Core task again from setup |
