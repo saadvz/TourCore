@@ -24,7 +24,7 @@ export interface Wake {
   body: string;
 }
 
-export async function multiTenantApp(options: { now?: () => Date } = {}) {
+export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.ProcessEnv } = {}) {
   const sms = fakeSms();
   setCleanerTwilioClient(sms);
   setCleanerCalendarFetch(async (url) => ({
@@ -49,6 +49,7 @@ export async function multiTenantApp(options: { now?: () => Date } = {}) {
       CLEANER_CORE_GROUP_CHAT: "0",
       CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACmultitenant",
       CLEANER_CORE_TWILIO_AUTH_TOKEN: MULTI_AUTH,
+      ...options.env,
     },
     undefined,
     undefined,

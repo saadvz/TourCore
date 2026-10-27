@@ -22,6 +22,7 @@ import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cl
 import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
 import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath } from "../cleaner-core/hosted/router";
 import { TenantSecrets } from "../cleaner-core/hosted/tenantSecrets";
+import { handleAdmin } from "../cleaner-core/hosted/admin";
 import { INVITE_REFUSALS } from "../mcp/oauth/pages";
 import { handleCleanerUploadPage, isFormPost } from "../cleaner-core/uploadPage";
 import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, uploadPageOf, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
@@ -160,7 +161,7 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  */
 function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean, uploadPages = false, multiTenant = false): boolean {
   // A multi-tenant Cleaner Core's per-tenant links. The router checks the tenant and the route.
-  if (multiTenant && splitTenantPath(path)) return true;
+  if (multiTenant && (splitTenantPath(path) || path === "/admin" || path.startsWith("/admin/"))) return true;
   if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH || path === CLEANER_MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
@@ -604,6 +605,14 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       }
       if (oauth && isOAuthPublicPath(url.pathname, OAUTH_RESOURCE_PATHS)) return await oauth.handle(req, res);
       if (multiTenant()) {
+        const admin = await handleAdmin(req, res, url, {
+          h: hostedCleanerService,
+          password: () => installation.env().CLEANER_CORE_ADMIN_PASSWORD,
+          revokeGrant: (grantId) => void new OAuthGrantStore(installation.runtime).revokeGrant(grantId),
+          grantIds: () => new Set(new OAuthGrantStore(installation.runtime).list().map((grant) => grant.id)),
+          https: !hosted || forwardedProto(req) === "https",
+        });
+        if (admin) return;
         const handled = await handleHostedCleaner(hostedCleanerService, {
           req,
           res,
