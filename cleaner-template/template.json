@@ -5,7 +5,7 @@
   "profile": "bot-profile.md",
   "setupPrompt": "SETUP_PROMPT.md",
   "readme": "README.md",
-  "hostedCleanerCoreUrl": "https://136-119-57-74.sslip.io",
+  "hostedCleanerCoreUrl": "https://tourcore-production-8b80.up.railway.app",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "bootstrap": "CLEANER_CORE_BOOTSTRAP.md",
@@ -16,7 +16,7 @@
       "name": "Cleaner Core",
       "type": "custom-mcp-server",
       "url": "hostedCleanerCoreUrl/mcp/cleaner-core",
-      "auth": "OAuth 2.1 discovered from the Cleaner Core service. The owner clicks Allow. Grok cannot approve itself.",
+      "auth": "OAuth 2.1 discovered from the Cleaner Core service. The host types the invite code from Saad on the Cleaner Core page and clicks Allow. Grok cannot approve itself.",
       "travelsWithTemplate": false
     },
     {

@@ -17,7 +17,8 @@ From the team template (the usual way):
 1. Open the Cleaner Core template link and click **Add to Grok Bot**, then
    **Add Bot**.
 2. Say "Set up Cleaner Core".
-3. Click Allow when the connection asks.
+3. When the Cleaner Core page opens, type the invite code from Saad and click
+   Allow.
 
 Without the template, open a new Grok Bot and paste the prompt in
 [`SETUP_PROMPT.md`](SETUP_PROMPT.md) instead.
@@ -41,9 +42,8 @@ nothing from a real setup comes along.
    instructions** section as the bot's instructions. Add the suggested
    starting prompts.
 3. Don't connect Cleaner Core, don't create the routines, and don't run setup.
-   The hosted service belongs to the first bot that clicks Allow, so the
-   template bot must never claim it. Each installed bot connects and creates
-   its own routines during setup.
+   Each installed bot connects with its host's own invite code and creates its
+   own routines during setup. The template bot has no invite code.
 4. Open the bot's settings and click **Share as Template**. In **View
    Details**, check that it has the instructions and nothing else: no
    memories, no integrations, no routines.
@@ -56,14 +56,14 @@ or the routine docs reach every bot on its next setup without re-sharing.
 
 ### Demos
 
-The hosted Cleaner Core serves one host at a time. It belongs to the first bot
-that clicks Allow and refuses any other bot. To demo again:
+The hosted Cleaner Core serves many hosts. Each host is a tenant that Saad adds
+on `https://tourcore-production-8b80.up.railway.app/admin`, with its own Twilio number and invite code.
+To demo again:
 
 - With the same bot: ask it to reset the property (`reset_property`), then
   set up again.
-- With a new bot: the operator sets `CLEANER_CORE_HOSTED_OWNER_RESET` to
-  `reset-cleaner-owner` for one deploy, then removes it. The next bot to click
-  Allow becomes the owner.
+- With a new bot: Saad makes a new invite code on the admin page, or a new
+  tenant for a separate demo, and the new bot connects with it.
 
 ## What's in the template
 
@@ -99,10 +99,11 @@ pattern, a phone number outside 555-01xx, or a door-code-like number shows up
 here or in `CLEANER_CORE_BOOTSTRAP.md`.
 
 Custom MCP servers and credentials don't travel with a Grok Bot template. Each
-host connects with their own Allow and creates their own routines.
+host connects with their own invite code and creates their own routines.
 
 ## Admin prep (the operator, once)
 
-The host must run in deployment mode `HOSTED_RAILWAY_P0` with OAuth on
-(`TOURCORE_MCP_AUTH_MODE` unset or `oauth`, never `static`), or the Allow
-button never appears.
+The service runs in deployment mode `HOSTED_RAILWAY_P0` with
+`CLEANER_CORE_MULTI_TENANT=1` and OAuth on (`TOURCORE_MCP_AUTH_MODE` unset or
+`oauth`, never `static`), or the Allow page never appears. Its variables are in
+[`docs/deployment.md`](../docs/deployment.md).

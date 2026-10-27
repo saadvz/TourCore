@@ -16,16 +16,16 @@ Adding the connector and making the scheduled task are the two steps Grok Bot do
 
 ## Before you start
 
-You need four things before step 1.
+You need four things before step 1. The Cleaner Core address is the same for everyone: `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core`.
 
 | What | Why | Where it comes from |
 | --- | --- | --- |
 | A Claude Pro, Max, Team or Enterprise plan | Scheduled tasks (alerts and hourly checks) need one; Free allows the connector but no task | Your Claude account |
-| The Claude Cleaner Core address: `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` | The connector points here; the Grok service at a different address is not this one | The Cleaner Core operator |
+| An invite code from Saad | It links your Claude to your own Cleaner Core account. You type it once, when you connect | Saad |
 | Your phone and the cleaner's phone approved for texts | Activate is refused until both numbers are on the operator's list | The Cleaner Core operator |
 | On a Team or Enterprise plan: an Owner | Only Owners can add a custom connector for the org | Your Claude admin |
 
-Each Cleaner Core service has one owner: the first connection that clicks Allow. Use the account you'll run it from.
+Your invite code puts your Claude in your own Cleaner Core account. Other hosts on the same service never see your property, people, or texts.
 
 ## Step 1: Add the Cleaner Core connector
 
@@ -34,20 +34,20 @@ You add the connector once, and every Claude app and the scheduled task share it
 1. Open [claude.ai/customize/connectors](https://claude.ai/customize/connectors).
 2. Click **+ Add**, then **Add custom connector**.
 3. Fill in the dialog as in the table below, then click **Add**.
-4. On the page titled **Connect Claude to Cleaner Core**, click **Allow**.
+4. On the page titled **Connect Claude to Cleaner Core**, type the invite code from Saad in **Invite code from Saad**, then click **Allow**.
 5. If your bookings are in Google Calendar, also connect Claude's **Google Calendar** connector.
 
 | Field | Choose | Why |
 | --- | --- | --- |
 | Name | Cleaner Core | Any name works; this one matches the guide |
-| URL | `https://tourcore-production-1056.up.railway.app/mcp/cleaner-core` | The Claude Cleaner Core service |
+| URL | `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core` | The Cleaner Core service. Every host and every chat uses this address |
 | Authentication | Sign in now | Cleaner Core uses OAuth |
-| OAuth client | **Register automatically** | Gives your connection its own client ID, so only you own this Cleaner Core |
+| OAuth client | Leave what Claude detects | Either **Use Claude's published identity** or **Register automatically** works. The invite code, not the client, decides whose Cleaner Core this is |
 | Advanced | Leave as is | Nothing to change |
 
-On a Team or Enterprise plan, an Owner adds it instead at **Organization settings → Connectors → Add → Custom → Web**, with the same settings. Then each person clicks **Connect** under Customize → Connectors.
+On a Team or Enterprise plan, an Owner adds it instead at **Organization settings → Connectors → Add → Custom → Web**, with the same settings. Then each person clicks **Connect** under Customize → Connectors and types their own invite code.
 
-Add it only one way. A second connection to the same Cleaner Core, such as `claude mcp add` in Claude Code, is refused as a second owner.
+Add it only once. If you also want Grok or ChatGPT on the same Cleaner Core account, ask Saad for another invite code for that chat.
 
 ## Step 2 (optional): Add the cleaner-core skill
 
@@ -109,8 +109,9 @@ Every row here came up during testing.
 
 | What you see | Cause | Fix |
 | --- | --- | --- |
-| `invalid_client` / "Invalid client_id" after Connect | The connector used Claude's published identity | Remove the connector and add it again with **Register automatically** |
-| "This Cleaner Core is already in use" | Another connection owns it, including your own earlier one you removed | The operator releases the owner for one deploy (`CLEANER_CORE_HOSTED_OWNER_RESET`), then you click Allow again |
+| "That invite code isn't right", "has expired", or "was already used" | Each invite code works once, for 7 days | Ask Saad for a new invite code, then click **Connect** again |
+| "This connection isn't linked to a Cleaner Core account" | Saad disconnected this chat, or turned the account off | Ask Saad for a new invite code, then remove and add the connector again |
+| Setup keeps asking for the scheduled task after you made it | Another chat on your account gets the alerts (the primary) | Ask Saad to make Claude the primary on the admin page |
 | Activate says the numbers aren't approved | A number isn't on the operator's list | Ask the operator to approve both, then say "run the checks" |
 | Setup finished but no text arrived | The times aren't confirmed yet, or live texting is off on the service | Confirm the first booking's times; if Claude says nothing was sent, tell the operator |
 | The task's run says `check_now` isn't available | The task is missing the Cleaner Core connector | Edit the task: Connectors → add Cleaner Core |

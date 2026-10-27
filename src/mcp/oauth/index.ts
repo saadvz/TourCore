@@ -328,7 +328,9 @@ export class McpOAuth {
     }
     if (!req.headers.authorization) {
       // RFC 6750 §3: no error code when no credentials were sent; point the client at the metadata (RFC 9728 §5.1).
-      json(res, 401, { error: { message: `Connect ${ep.label} in Grok to sign in.` } }, { "WWW-Authenticate": `Bearer resource_metadata="${ep.resourceMetadataUrl}", scope="${ep.scope}"` });
+      // A multi-tenant Cleaner Core serves every chat, so it names none of them.
+      const where = this.options.invites ? "your chat" : "Grok";
+      json(res, 401, { error: { message: `Connect ${ep.label} in ${where} to sign in.` } }, { "WWW-Authenticate": `Bearer resource_metadata="${ep.resourceMetadataUrl}", scope="${ep.scope}"` });
       return undefined;
     }
     const gate = this.appsFor(eps).gates.get(path)!;

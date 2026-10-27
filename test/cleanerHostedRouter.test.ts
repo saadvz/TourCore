@@ -201,4 +201,11 @@ describe("routing on the multi-tenant service", () => {
     m.registry.remove(lane.id);
     expect(ctx.env().CLEANER_CORE_ENABLED).toBe("0");
   });
+
+  it("asks an unsigned caller to sign in from its own chat, not from Grok", async () => {
+    const { m } = await start();
+    const res = await m.app.http("/mcp/cleaner-core", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { message: "Connect Cleaner Core in your chat to sign in." } });
+  });
 });

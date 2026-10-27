@@ -15,7 +15,7 @@ import { filesUnder } from "./files";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const TEMPLATE = join(ROOT, "cleaner-template");
 const BOOTSTRAP = join(ROOT, "CLEANER_CORE_BOOTSTRAP.md");
-const HOSTED = "https://136-119-57-74.sslip.io";
+const HOSTED = "https://tourcore-production-8b80.up.railway.app";
 const REPO = "https://github.com/saadvz/TourCore";
 const ROUTINES = ["Cleaner Core Check", "Cleaner Core Alerts"];
 /** The setup order get_state asks for: the diagram's 8 steps, the checks once numbers are approved, then the routines and the first times. */
@@ -79,7 +79,7 @@ describe("Cleaner Core template manifest", () => {
       expect.objectContaining({
         name: "Cleaner Core",
         url: "hostedCleanerCoreUrl/mcp/cleaner-core",
-        auth: expect.stringMatching(/The owner clicks Allow\. Grok cannot approve itself\./),
+        auth: expect.stringMatching(/types the invite code from Saad on the Cleaner Core page and clicks Allow\. Grok cannot approve itself\./),
         travelsWithTemplate: false,
       }),
     ]);
@@ -138,7 +138,9 @@ describe("Cleaner Core template manifest", () => {
     expect(readme).toContain("## Build the team template");
     expect(readme).toMatch(/Don't connect Cleaner Core, don't create the routines, and don't run setup/);
     expect(readme).toMatch(/no\s+memories/);
-    expect(readme).toContain("CLEANER_CORE_HOSTED_OWNER_RESET");
+    // One multi-tenant service: a new bot joins with an invite code, never by resetting an owner.
+    expect(readme).toMatch(/invite code/);
+    expect(readme).not.toContain("CLEANER_CORE_HOSTED_OWNER_RESET");
   });
 
   it("has the suggested prompts in the bot profile", () => {
