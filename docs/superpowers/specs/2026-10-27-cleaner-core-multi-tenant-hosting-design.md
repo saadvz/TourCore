@@ -56,11 +56,11 @@ A Grok Bot user starts from the template. A Claude or ChatGPT user starts from t
 | `id` | `tnt_` plus random characters. Also names the desk folder `/data/tenants/<id>/` |
 | `label` | Saad's name for the host, e.g. "Maria – 12 Main St". Only Saad sees it |
 | `twilioNumber` | E.164. Unique across tenants |
-| `primaryAssistant` | `grok`, `claude`, or `chatgpt`. Unset until the first connection |
+| `primaryGrantId` | The primary connection. Its `assistant` is the primary assistant. Unset until the first connection |
 | `connections[]` | `{ grantId, assistant, connectedAt }` |
-| `invites[]` | `{ hash, expiresAt, usedAt? }`. Codes are shown once and only their hash is stored. They are valid for 7 days |
+| `invites[]` | `{ hash, expiresAt, usedAt? }`. Codes look like `K7QM-3XRP-9DWT` (Crockford base32, case, spaces and dashes ignored). They are shown once, only their hash is stored, and they are valid for 7 days. A code is used up when the host clicks Allow |
 | `disabled` | Turns the tenant off without deleting anything |
-| `createdAt` | ISO time |
+| `createdAt`, `lastActivityAt` | ISO times. Activity is written at most every 5 minutes |
 
 **Per-tenant secrets** live in `/data/tenants/<id>/secrets.json` (mode 600, the same pattern as `src/install/secretStore.ts`). They never live in the process environment:
 
@@ -73,7 +73,7 @@ A Grok Bot user starts from the template. A Claude or ChatGPT user starts from t
 
 - `/admin` is password-protected by `CLEANER_CORE_ADMIN_PASSWORD`. When that variable is unset, `/admin` and everything under it return 404.
   - The password is compared in constant time, and login attempts are rate-limited (the OAuth rate limiter).
-  - The session is an `HttpOnly; Secure; SameSite=Strict` cookie that lasts 12 hours, and every form carries a CSRF token.
+  - The session is an `HttpOnly; Secure; SameSite=Strict` cookie that lasts 12 hours, and every form carries a CSRF token. Sessions live in memory, so a redeploy signs Saad out.
 - **Tenants list:** label, number, primary assistant, connections, last activity, disabled.
 - **Create tenant:** label and Twilio number.
   - Checks that the number is on the Twilio account and not used by another tenant.
@@ -106,21 +106,21 @@ Every way in resolves exactly one tenant before reading or writing any state. Wh
   - The Twilio signature is checked with the shared auth token over the full signed URL.
   - The `To` number picks the tenant.
   - An unknown or disabled `To` gets an empty TwiML reply and a log line. Nothing is sent.
-- **Group texts.**
-  - When a desk creates a group conversation, it registers that conversation's webhook as `<base>/webhooks/twilio/cleaner-core/group?t=<tenantId>`.
-  - Twilio signs the full URL, so `t` can't be changed without the check failing.
-  - The desk's existing check (only from the saved group and a saved person in it) still applies.
-- **Links Cleaner Core gives out.**
-  - Upload pages, private pages, and photos carry the tenant in the path: `/cleaner-core/t/<tenantId>/…`.
+- **Everything else Cleaner Core hands out carries a `/t/<tenantId>/` path prefix:** the group conversation webhook, Twilio status callbacks, upload pages, private pages, and photo links.
+  - It works by giving each desk `PUBLIC_BASE_URL=<origin>/t/<tenantId>`. `publicBaseUrl()` keeps the path, so every link a desk builds from it is scoped.
+  - Twilio signs the full URL, so the prefix can't be changed without the signature check failing.
+  - The desk's existing group check (only from the saved group and a saved person in it) still applies.
   - Photo links are signed with that tenant's photo key, so a link edited to point at another tenant fails the signature check.
+  - Without the prefix, those paths answer 404 on this service.
 - **Background work.** The alert retry timer and any scheduled checks run over enabled tenants, one desk at a time.
 - **The tenant's environment.**
   - A desk gets a built environment: the process environment minus every name in `PER_TENANT_NAMES`, plus that tenant's secrets, plus `CLEANER_CORE_TWILIO_PHONE_NUMBER` set to its number.
-  - `PER_TENANT_NAMES` covers the routine URL and key, the pin key, the photo key, the Cleaner Core phone number, and `CLEANER_CORE_ASSISTANT`.
+  - `PER_TENANT_NAMES` covers the routine URL and key, the pin key, the photo key, the Cleaner Core phone number, `CLEANER_CORE_ASSISTANT`, `CLEANER_CORE_MCP_TOKEN`, and `PUBLIC_BASE_URL`.
+  - The built environment also carries the primary: `CLEANER_CORE_ASSISTANT` is the primary connection's assistant, `CLEANER_CORE_PRIMARY_CONNECTION` is its grant id, and the routine URL and key are that connection's. A primary whose grant no longer exists is skipped for the oldest live connection.
 
 ## Part 4. Behavior per assistant
 
-`CLEANER_CORE_ASSISTANT` is ignored on this service. What it decided today splits in two.
+On this service `CLEANER_CORE_ASSISTANT` comes from the tenant's primary, never from Railway. What it decided today splits in two. The calling connection is carried through each request (an `AsyncLocalStorage` caller), and without one a desk falls back to the primary, which is exactly today's behavior on a single-tenant deployment.
 
 **Follows the calling connection** (`grant.assistant`):
 
@@ -168,25 +168,22 @@ New files in `src/cleaner-core/hosted/`:
 | `registry.ts` | create, invite, redeem, connect, disconnect, set primary, disable, delete; number uniqueness | `writeJsonAtomic` |
 | `tenantSecrets.ts` | reads and writes a tenant's `secrets.json` | the `secretStore.ts` pattern |
 | `tenantEnv.ts` | builds a desk's environment; owns `PER_TENANT_NAMES` | registry, tenantSecrets |
-| `resolve.ts` | grant, `To` number, group `?t=`, and link path → tenant or refuse | registry |
-| `desks.ts` | `deskFor(tenantId)`; iterates enabled tenants for timers | `liveDeskFor`, tenantEnv |
+| `router.ts` | resolves a tenant (grant, `To` number, `/t/<id>/` prefix) and dispatches to the existing `http.ts` handlers with that tenant's root, environment, and secret saver; runs the alert drain per tenant | registry, tenantEnv, `http.ts` |
 | `twilioNumbers.ts` | checks a number is on the account; sets or clears its SMS webhook (Twilio REST, `fetch` injected) | shared Twilio credentials |
 | `admin.ts`, `adminPages.ts` | `/admin` login, session, CSRF, and pages | registry, twilioNumbers |
 
 Changed files:
 
 - `src/cleaner-core/liveDesk.ts`
-  - The caller's assistant (per tool call) and the primary assistant (per tenant) replace `env.CLEANER_CORE_ASSISTANT`.
-  - Routine secrets are saved per connection through an injected saver.
-  - The group webhook URL and link paths include the tenant id.
+  - Tool replies follow the caller's assistant; texts, alerts, and routine readiness follow the primary's.
+  - Routine connections are recorded per connection, and the upload link remembers which connection made it.
+  - The three upload-link builders use the full `publicBaseUrl`, not just its origin.
 - `src/cleaner-core/mcp.ts`: instructions and output formats come from the caller's assistant.
 - `src/mcp/oauth/store.ts`: `Grant` gains optional `tenantId` and `assistant`.
 - `src/mcp/oauth/provider.ts` and `pages.ts`: the invite code field and its check, and the tenant policy for this mode.
-- `src/install/deployment.ts`: a new mode, `HOSTED_CLEANER_CORE`.
-  - Cleaner Core is on and the Tour Core `/mcp` is off.
-  - It listens on `0.0.0.0:$PORT` and uses `RAILWAY_PUBLIC_DOMAIN`, like `HOSTED_RAILWAY_P0`.
-- `src/web/server.ts`: in that mode, Cleaner Core routes go through `resolve.ts`, then `desks.ts`, and `/admin` is mounted. Every other mode keeps today's code path.
-- Railway: a `cleaner-core` service with its own volume at `/data` and `TOURCORE_DEPLOYMENT_MODE=HOSTED_CLEANER_CORE`. It uses the same build, start, healthcheck, and Node version as `.railway/railway.ts`.
+- `src/cleaner-core/flag.ts`: `cleanerMultiTenant(env)`, true when `CLEANER_CORE_MULTI_TENANT=1`. The service keeps `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0`, because hosting (port, Railway domain, volume checks) is the same; 45 places branch on that mode and all of them should stay as they are. With the flag on, Cleaner Core is multi-tenant and the Tour Core `/mcp` is off.
+- `src/web/server.ts`: with the flag on, Cleaner Core routes go through `src/cleaner-core/hosted/router.ts` and `/admin` is mounted. With it off, every route keeps today's code path.
+- Railway: Saad creates a `cleaner-core` service from this repo in the Railway dashboard, with its own volume at `/data`, the same build, start, healthcheck, and Node version as `.railway/railway.ts`, and the variables in `docs/deployment.md`. `.railway/railway.ts` stays the Tour Core service's.
 
 ## Part 7. Templates and cutover
 
@@ -213,7 +210,7 @@ Rollback before step 6: point a number's webhook back at its old service.
 **Docs.**
 
 - `docs/hosted-multitenancy.md` is rewritten to describe what is built.
-- `docs/deployment.md` gains a `HOSTED_CLEANER_CORE` row.
+- `docs/deployment.md` gains a section for the multi-tenant Cleaner Core service and its variables.
 - `docs/cleaner-core-safety-gates.md` gains the Hosted tenants row.
 - `AGENTS.md` is not edited. A lesson for it goes in a separate proposed PR for QA bot.
 
@@ -242,7 +239,7 @@ Vitest. Only 555 numbers and made-up door codes. Twilio is faked through the inj
 - **Hosted tenants gate.** A new safety-gates row: two tenants (Scratch Lane and Scratch Court, each with its own 555 number) through the real HTTP server. Each of these is refused or sends nothing:
   - a text to A's number from B's cleaner
   - B's grant calling A's tools
-  - a group webhook with `t` changed
+  - a group webhook with the `/t/<id>/` prefix changed
   - a photo or upload link with the tenant changed
   - the process environment leaking a per-tenant value
 
@@ -260,7 +257,7 @@ Vitest. Only 555 numbers and made-up door codes. Twilio is faked through the inj
 Each step is its own reviewable change:
 
 1. Registry, tenant secrets, tenant environment.
-2. Tenant resolution, desks, and server routing behind `HOSTED_CLEANER_CORE`.
+2. Tenant routing in the server behind `CLEANER_CORE_MULTI_TENANT`.
 3. Invite code on the Allow page; the grant carries `tenantId` and `assistant`.
 4. Split the caller's assistant from the primary in `liveDesk.ts` and `mcp.ts`.
 5. Admin page and Twilio number setup.
