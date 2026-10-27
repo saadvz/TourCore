@@ -3,6 +3,7 @@
  * with everything escaped; the only script is /oauth.js (no inline code), and
  * the pages can't be framed or leak their URL through a referrer.
  */
+import { ASSISTANT_PROFILES, type CleanerAssistant, type ConsentWho } from "../../cleaner-core/assistant";
 
 export const PAGE_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
@@ -34,8 +35,8 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; label?: "Tour Core" | "Cleaner Core"; assistant?: "claude" }): string {
-  if (p.label === "Cleaner Core") return p.assistant === "claude" ? claudeCleanerConsentPage(p) : cleanerConsentPage(p);
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; label?: "Tour Core" | "Cleaner Core"; assistant?: CleanerAssistant }): string {
+  if (p.label === "Cleaner Core") return cleanerConsentPage(p, ASSISTANT_PROFILES[p.assistant ?? "grok"].consent);
   const requestId = escape(p.requestId);
   const decision = p.hosted
     ? `${p.firstClaim ? "<p>Approving this first connection will make this Grok connection the owner of this Tour Core demo.</p>" : ""}
@@ -72,18 +73,8 @@ export function consentPage(p: { requestId: string; matchCode: string; clientNam
   );
 }
 
-/** Who Cleaner Core's approval page names. */
-interface ConsentWho {
-  chat: string;
-  owner: string;
-  connect: string;
-}
-
-const GROK_WHO: ConsentWho = { chat: "your Grok Bot", owner: "this Grok Bot", connect: "Connect Grok" };
-const CLAUDE_WHO: ConsentWho = { chat: "Claude", owner: "this Claude connection", connect: "Connect Claude" };
-
 /** The same approval, worded for Cleaner Core. Its scope opens only /mcp/cleaner-core. */
-function cleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }, who: ConsentWho = GROK_WHO): string {
+function cleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }, who: ConsentWho): string {
   const decision = p.hosted
     ? `${p.firstClaim ? `<p>Approving this first connection will make ${who.owner} the owner of this Cleaner Core.</p>` : ""}
           <p><button type="button" class="primary" id="oauth-allow" data-code="${escape(p.matchCode)}">Allow</button></p>`
@@ -115,11 +106,6 @@ function cleanerConsentPage(p: { requestId: string; matchCode: string; clientNam
         <button type="button" id="oauth-deny">Deny</button>`,
     `\n    <script type="module" src="/oauth.js"></script>`,
   );
-}
-
-/** Cleaner Core's approval for a Claude deployment. Only the names differ. */
-function claudeCleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }): string {
-  return cleanerConsentPage(p, CLAUDE_WHO);
 }
 
 export function problemPage(title: string, message: string): string {

@@ -1,11 +1,11 @@
-import { cleanerAssistant } from "./assistant";
+import { assistantProfile, cleanerAssistant } from "./assistant";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import type { SaveSecrets } from "./mcp";
 
 /**
- * The private page behind a one-time upload link, for a Claude deployment. Claude has no secure
- * card and no computer of its own to post from, so the host opens the link and types the value
+ * The private page behind a one-time upload link, for a Claude or ChatGPT deployment. Neither has a
+ * secure card or a computer of its own to post from, so the host opens the link and types the value
  * here. The form posts back to the same link, through the same checks as a JSON upload. Nothing
  * typed is ever shown back, logged, or put in the reply.
  */
@@ -23,12 +23,12 @@ const HEADERS: Record<string, string> = {
 };
 
 const GONE_TITLE = "This link isn't valid anymore";
-const GONE_TEXT = "It was already used, or it expired after 10 minutes. Go back to Claude and ask for a new link.";
-const ONCE = "This private page works once and expires 10 minutes after Claude made it. Cleaner Core never shows what you type back to anyone, Claude included.";
+const goneText = (chat: string) => `It was already used, or it expired after 10 minutes. Go back to ${chat} and ask for a new link.`;
+const once = (chat: string) => `This private page works once and expires 10 minutes after ${chat} made it. Cleaner Core never shows what you type back to anyone, ${chat} included.`;
 
 interface PageCopy {
   title: string;
-  lead: (name?: string) => string;
+  lead: (chat: string, name?: string) => string;
   fields: string;
   refused: string;
 }
@@ -36,7 +36,7 @@ interface PageCopy {
 const COPY: Record<UploadPageKind, PageCopy> = {
   "door-code": {
     title: "Save the door code",
-    lead: () => "Type the door code the cleaner uses. It goes to the cleaner only after you tell Claude the guests have left.",
+    lead: (chat) => `Type the door code the cleaner uses. It goes to the cleaner only after you tell ${chat} the guests have left.`,
     fields: `<label for="code">Door code</label>
         <input id="code" name="code" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required>
         <p class="hint">4 to 8 digits.</p>`,
@@ -44,7 +44,7 @@ const COPY: Record<UploadPageKind, PageCopy> = {
   },
   "calendar-link": {
     title: "Save a calendar link",
-    lead: (name) => `Paste the export link for ${name ? escape(name) : "the booking calendar"}. Cleaner Core reads bookings from it and never shares it.`,
+    lead: (_chat, name) => `Paste the export link for ${name ? escape(name) : "the booking calendar"}. Cleaner Core reads bookings from it and never shares it.`,
     fields: `<label for="url">Calendar export link</label>
         <input id="url" name="url" type="url" autocomplete="off" spellcheck="false" placeholder="https://" required>`,
     refused: "Paste the calendar's public https export link.",
@@ -73,15 +73,18 @@ export async function handleCleanerUploadPage(input: {
   saveSecrets: SaveSecrets;
 }): Promise<{ status: number; body: string; headers: Record<string, string> }> {
   const env = input.env();
-  if (!cleanerCoreEnabled(env) || cleanerAssistant(env) !== "claude") return { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
+  // A ChatGPT deployment has no Fire URL or token, so it has no alert page.
+  const notFound = !assistantProfile(env).privatePages || (input.kind === "alert-routine" && cleanerAssistant(env) === "chatgpt");
+  if (!cleanerCoreEnabled(env) || notFound) return { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
+  const chat = assistantProfile(env).helper;
   const copy = COPY[input.kind];
   const desk = liveDeskFor(input.root, input.env, input.now);
   const html = (status: number, body: string) => ({ status, body, headers: { "Content-Type": "text/html; charset=utf-8", ...HEADERS } });
   const link = await desk.uploadLinkOpen(input.kind, input.code);
-  if (!link.open) return html(404, page(GONE_TITLE, `<p>${GONE_TEXT}</p>`));
-  if (input.method === "GET") return html(200, formPage(copy, link.name));
+  if (!link.open) return html(404, page(GONE_TITLE, `<p>${goneText(chat)}</p>`));
+  if (input.method === "GET") return html(200, formPage(copy, chat, link.name));
   const raw = await input.readBody();
-  if (!raw) return html(413, formPage(copy, link.name, "That was too long. Try again."));
+  if (!raw) return html(413, formPage(copy, chat, link.name, "That was too long. Try again."));
   const form = Object.fromEntries(new URLSearchParams(raw.toString("utf8")));
   const result =
     input.kind === "door-code"
@@ -89,24 +92,24 @@ export async function handleCleanerUploadPage(input: {
       : input.kind === "calendar-link"
         ? await desk.uploadCalendarLink(input.code, { url: form.url ?? "" })
         : await desk.uploadAlertRoutine(input.code, { url: form.url ?? "", token: form.token ?? "" }, input.saveSecrets);
-  if (result.status === 200) return html(200, page("Saved", `<p>${escape(result.body.message ?? "Saved.")}</p>\n        <p>You can close this page and go back to Claude.</p>`));
-  if (result.status === 404) return html(404, page(GONE_TITLE, `<p>${GONE_TEXT}</p>`));
-  if (result.status === 409) return html(409, page("Not saved", "<p>Saving this link would call off upcoming cleanings, so it wasn't saved. Tell Claude, and it will ask you what to do.</p>"));
+  if (result.status === 200) return html(200, page("Saved", `<p>${escape(result.body.message ?? "Saved.")}</p>\n        <p>You can close this page and go back to ${chat}.</p>`));
+  if (result.status === 404) return html(404, page(GONE_TITLE, `<p>${goneText(chat)}</p>`));
+  if (result.status === 409) return html(409, page("Not saved", `<p>Saving this link would call off upcoming cleanings, so it wasn't saved. Tell ${chat}, and it will ask you what to do.</p>`));
   // A door code in the right shape that was still refused has a reason of its own, like a lock location.
   const reason = input.kind === "door-code" && /^\d{4,8}$/.test((form.code ?? "").trim()) && result.body.error ? result.body.error : copy.refused;
-  return html(400, formPage(copy, link.name, reason));
+  return html(400, formPage(copy, chat, link.name, reason));
 }
 
-function formPage(copy: PageCopy, name: string | undefined, error?: string): string {
+function formPage(copy: PageCopy, chat: string, name: string | undefined, error?: string): string {
   return page(
     copy.title,
-    `<p>${copy.lead(name)}</p>
+    `<p>${copy.lead(chat, name)}</p>
       ${error ? `<p class="error" role="alert">${escape(error)}</p>` : ""}
       <form method="post">
         ${copy.fields}
         <button type="submit">Save</button>
       </form>
-      <p class="hint">${ONCE}</p>`,
+      <p class="hint">${once(chat)}</p>`,
   );
 }
 

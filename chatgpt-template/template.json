@@ -1,0 +1,54 @@
+{
+  "name": "Cleaner Core for ChatGPT",
+  "version": "0.1.0",
+  "readme": "README.md",
+  "hostedCleanerCoreUrl": null,
+  "hostedCleanerCoreUrlNote": "The ChatGPT deployment's https address, once it has its own service. It is separate from the Grok and Claude services, because a hosted Cleaner Core has one owner.",
+  "repository": {
+    "url": "https://github.com/saadvz/TourCore",
+    "note": "ChatGPT never clones or runs Cleaner Core. The connector's own instructions carry the guide."
+  },
+  "deployment": {
+    "mode": "HOSTED_RAILWAY_P0",
+    "env": {
+      "CLEANER_CORE_ENABLED": "1",
+      "CLEANER_CORE_ASSISTANT": "chatgpt"
+    },
+    "note": "Same build and the same variables as the Grok deployment, plus CLEANER_CORE_ASSISTANT=chatgpt. OAuth stays on (TOURCORE_MCP_AUTH_MODE unset or oauth). ChatGPT's connector callback on chatgpt.com is allowed automatically on this deployment."
+  },
+  "integrations": [
+    {
+      "name": "Cleaner Core",
+      "type": "custom-mcp-server",
+      "url": "hostedCleanerCoreUrl/mcp/cleaner-core",
+      "auth": "OAuth 2.1 discovered from the Cleaner Core service. ChatGPT registers its own client. The host clicks Allow on the Cleaner Core page. ChatGPT cannot approve itself.",
+      "where": "chatgpt.com Settings → Apps & Connectors → Advanced → Developer Mode on, then create the connector. Web only. Never add it a second way.",
+      "plans": "Plus or above. The Free plan has no custom connectors. See README.md, Which ChatGPT plans work."
+    },
+    {
+      "name": "Google Calendar",
+      "type": "first-party-app",
+      "auth": "The host connects their own Google account to ChatGPT's Google Calendar app. ChatGPT reads the events and passes them to Cleaner Core. Cleaner Core never gets a Google approval."
+    }
+  ],
+  "routines": [
+    {
+      "name": "Cleaner Core",
+      "doc": "routines/cleaner-core-task.md",
+      "where": "ChatGPT scheduled tasks, created by ChatGPT in the setup chat",
+      "triggers": ["schedule (hourly)"],
+      "credentialsTravelWithTemplate": false
+    }
+  ],
+  "secretsGoTo": "Cleaner Core's private page behind each one-time upload link. Never chat, never a tool argument.",
+  "suggestedPrompts": ["Set up Cleaner Core", "Check my calendars", "Show the upcoming cleanings", "The guests have left", "Maria texted, draft a reply", "Show the last cleaning's photos"],
+  "neverIncluded": [
+    "the door code",
+    "Cleaner Core connector or OAuth tokens",
+    "Google OAuth access or refresh tokens",
+    "Twilio account details or keys",
+    "host, cleaner, or contact phone numbers",
+    "calendar links",
+    "live booking, cleaning, message, or photo records"
+  ]
+}
