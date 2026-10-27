@@ -4,6 +4,15 @@
  * the pages can't be framed or leak their URL through a referrer.
  */
 import { ASSISTANT_PROFILES, type CleanerAssistant, type ConsentWho } from "../../cleaner-core/assistant";
+import type { InviteRefusal } from "../../cleaner-core/hosted/registry";
+
+/** What the multi-tenant Cleaner Core's Allow page says when an invite code is refused. */
+export const INVITE_REFUSALS: Record<InviteRefusal, string> = {
+  invalid: "That invite code isn't right. Check it with Saad and try again.",
+  expired: "That invite code has expired. Ask Saad for a new one.",
+  used: "That invite code was already used. Ask Saad for a new one.",
+  disabled: "This Cleaner Core account is turned off. Ask Saad.",
+};
 
 export const PAGE_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
@@ -35,7 +44,7 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; label?: "Tour Core" | "Cleaner Core"; assistant?: CleanerAssistant }): string {
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; label?: "Tour Core" | "Cleaner Core"; assistant?: CleanerAssistant; invite?: boolean }): string {
   if (p.label === "Cleaner Core") return cleanerConsentPage(p, ASSISTANT_PROFILES[p.assistant ?? "grok"].consent);
   const requestId = escape(p.requestId);
   const decision = p.hosted
@@ -74,9 +83,13 @@ export function consentPage(p: { requestId: string; matchCode: string; clientNam
 }
 
 /** The same approval, worded for Cleaner Core. Its scope opens only /mcp/cleaner-core. */
-function cleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }, who: ConsentWho): string {
+function cleanerConsentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean; invite?: boolean }, who: ConsentWho): string {
+  // A multi-tenant Cleaner Core: the invite code says whose Cleaner Core this connection joins.
+  const invite = p.invite
+    ? `<p><label for="oauth-invite">Invite code from Saad</label><br /><input id="oauth-invite" autocomplete="off" autocapitalize="characters" spellcheck="false" /></p>`
+    : "";
   const decision = p.hosted
-    ? `${p.firstClaim ? `<p>Approving this first connection will make ${who.owner} the owner of this Cleaner Core.</p>` : ""}
+    ? `${p.firstClaim && !p.invite ? `<p>Approving this first connection will make ${who.owner} the owner of this Cleaner Core.</p>` : ""}${invite}
           <p><button type="button" class="primary" id="oauth-allow" data-code="${escape(p.matchCode)}">Allow</button></p>`
     : `<p><strong>Approve on the Cleaner Core computer.</strong> Open <em>${who.connect}</em> there, check it shows this code, then choose Allow:</p>`;
   return shell(

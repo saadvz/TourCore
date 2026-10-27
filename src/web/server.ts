@@ -17,8 +17,10 @@ import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
-import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { assistantProfile, cleanerAssistant } from "../cleaner-core/assistant";
+import { cleanerCoreEnabled, cleanerMultiTenant } from "../cleaner-core/flag";
+import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cleaner-core/assistant";
+import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
+import { INVITE_REFUSALS } from "../mcp/oauth/pages";
 import { handleCleanerUploadPage, isFormPost } from "../cleaner-core/uploadPage";
 import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, uploadPageOf, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { drainCleanerAlerts } from "../cleaner-core/liveDesk";
@@ -330,6 +332,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     if (!result.ok) log(result.summary);
     return storageGate;
   })();
+  // One Cleaner Core service for many hosts: the invite code on the Allow page picks the tenant.
+  const multiTenant = () => cleanerMultiTenant(installation.env());
+  const tenants = new TenantRegistry(installation.root, () => options.now?.() ?? new Date());
   const oauth =
     authMode === "oauth"
       ? new McpOAuth({
@@ -351,6 +356,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           fetchClientMetadata: options.fetchClientMetadata,
           // Each resource has its own hosted owner. Cleaner Core's never touches Tour Core's hostedTenant.
           tenantPolicy: (clientId, resourcePath) => {
+            if (multiTenant()) return resourcePath === CLEANER_MCP_PATH ? { allowed: true } : { allowed: false, message: "This service runs Cleaner Core only." };
             if (!hostedMode()) return { allowed: true };
             const state = installation.files.state();
             if (resourcePath !== CLEANER_MCP_PATH) return hostedTenantDecision(state, clientId);
@@ -359,7 +365,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             return !decision.allowed && secondOwner ? { allowed: false, message: secondOwner } : decision;
           },
           onOwnerApproved: (clientId, resourcePath) => {
-            if (!hostedMode()) return;
+            if (!hostedMode() || multiTenant()) return;
             const now = new Date(installation.now());
             if (resourcePath === CLEANER_MCP_PATH) bindHostedCleanerTenant(installation.files, clientId, now);
             else bindHostedTenant(installation.files, clientId, now);
@@ -367,15 +373,27 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
           cleanerAssistant: () => cleanerAssistant(installation.env()),
           // A Claude or ChatGPT deployment has the chat register its own client, so its owner is that one connection.
-          metadataDocuments: () => assistantProfile(installation.env()).metadataDocuments,
+          // Grants bind per approval on a multi-tenant service, so a shared client_id is harmless there.
+          metadataDocuments: () => multiTenant() || assistantProfile(installation.env()).metadataDocuments,
+          ...(cleanerMultiTenant(installation.env())
+            ? {
+                invites: {
+                  claim: (code: string) => tenants.claimInvite(code),
+                  connected: (tenantId: string, grantId: string, assistant: CleanerAssistant) =>
+                    tenants.connect(tenantId, { grantId, assistant, connectedAt: (options.now?.() ?? new Date()).toISOString() }),
+                  refusal: (reason: InviteRefusal) => INVITE_REFUSALS[reason],
+                },
+              }
+            : {}),
           publicApproval: (clientId, resourcePath) => {
+            if (multiTenant()) return true;
             if (!hostedMode()) return false;
             const state = installation.files.state();
             const bound = resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId;
             return !bound || bound === clientId;
           },
           hostedClaimed: (resourcePath) => {
-            if (!hostedMode()) return false;
+            if (!hostedMode() || multiTenant()) return false;
             const state = installation.files.state();
             return !!(resourcePath === CLEANER_MCP_PATH ? state.hostedCleanerTenant?.clientId : state.hostedTenant?.clientId);
           },

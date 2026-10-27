@@ -2,7 +2,8 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { DeploymentMode } from "../../install/deployment";
-import { assistantProfile } from "../../cleaner-core/assistant";
+import { assistantProfile, CHATGPT_REDIRECT_HOST, CLAUDE_REDIRECT_HOST } from "../../cleaner-core/assistant";
+import { cleanerMultiTenant } from "../../cleaner-core/flag";
 
 /**
  * Which OAuth clients may be sent an authorization code, and where. Grok
@@ -72,7 +73,9 @@ export function redirectHostsFromEnv(env: NodeJS.ProcessEnv = process.env): stri
     .filter((h) => /^[a-z0-9.-]+$/.test(h) && h.includes("."));
   // A Cleaner Core deployment set to Claude or ChatGPT takes that chat's connector callback without extra config.
   const own = assistantProfile(env).redirectHost;
-  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...(own ? [own] : []), ...extra])];
+  // A multi-tenant Cleaner Core serves every chat at once.
+  const all = cleanerMultiTenant(env) ? [CLAUDE_REDIRECT_HOST, CHATGPT_REDIRECT_HOST] : [];
+  return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...(own ? [own] : []), ...all, ...extra])];
 }
 
 export function redirectPolicyFor(env: NodeJS.ProcessEnv = process.env, mode?: DeploymentMode): RedirectPolicy {

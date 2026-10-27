@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { RuntimeStore } from "../../storage/runtimeStore";
+import type { CleanerAssistant } from "../../cleaner-core/assistant";
 
 /**
  * Who may call Tour Core's operator tools over OAuth: the registered clients
@@ -39,6 +40,10 @@ export interface Grant {
   /** Refresh tokens already rotated out. Seeing one again means it leaked: the grant is revoked. */
   retiredRefreshHashes: string[];
   refreshedAt?: number;
+  /** Multi-tenant Cleaner Core: the tenant this approval belongs to, from the invite code. */
+  tenantId?: string;
+  /** Multi-tenant Cleaner Core: which chat connected, from its callback host. */
+  assistant?: CleanerAssistant;
 }
 
 interface Doc {
@@ -130,6 +135,14 @@ export class OAuthGrantStore {
     doc.grants.push(full);
     this.write(doc);
     return full;
+  }
+
+  get(grantId: string): Grant | undefined {
+    return this.read().grants.find((g) => g.id === grantId);
+  }
+
+  list(): Grant[] {
+    return this.read().grants;
   }
 
   findByAccessHash(hash: string): Grant | undefined {

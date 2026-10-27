@@ -11,7 +11,7 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { RuntimeStore } from "../../storage/runtimeStore";
 import { checkClientMetadata, ClientMetadataError, GROK_LEGACY_REDIRECT_URIS, type RedirectPolicy } from "./clients";
 import { PAGE_HEADERS, problemPage } from "./pages";
-import { TourCoreOAuthProvider, type ApprovalRequestView, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
+import { TourCoreOAuthProvider, type ApprovalRequestView, type InviteBook, type OAuthEndpoints, type OAuthResource, type ResourceEndpoints } from "./provider";
 import { hashSecret, OAuthGrantStore } from "./store";
 import type { CleanerAssistant } from "../../cleaner-core/assistant";
 
@@ -67,6 +67,8 @@ export interface McpOAuthOptions {
    * hosted owner is bound by client_id, so Claude registers its own client instead.
    */
   metadataDocuments?: () => boolean;
+  /** Multi-tenant Cleaner Core: Cleaner Core approvals need an invite code. */
+  invites?: InviteBook;
   /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
   legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
@@ -142,6 +144,7 @@ export class McpOAuth {
       hostedClaimed: options.hostedClaimed,
       ...(options.cleanerAssistant ? { cleanerAssistant: options.cleanerAssistant } : {}),
       ...(options.metadataDocuments ? { metadataDocuments: options.metadataDocuments } : {}),
+      ...(options.invites ? { invites: options.invites } : {}),
       log: this.log,
     });
     this.local = this.buildLocal();
@@ -244,6 +247,15 @@ export class McpOAuth {
         return;
       }
       const matchCode = typeof req.body?.matchCode === "string" ? req.body.matchCode : "";
+      if (typeof req.body?.inviteCode === "string") {
+        const result = provider.approveWithInvite(String(req.params.id), matchCode, req.body.inviteCode);
+        if (!result.ok) {
+          res.status(403).set("Cache-Control", "no-store").json({ ok: false, error: { message: result.message } });
+          return;
+        }
+        res.set("Cache-Control", "no-store").json({ ok: true });
+        return;
+      }
       if (!provider.approveFromBrowser(String(req.params.id), matchCode)) {
         res.status(403).set("Cache-Control", "no-store").json({ ok: false, error: { message: "That connection can't be approved from here." } });
         return;
