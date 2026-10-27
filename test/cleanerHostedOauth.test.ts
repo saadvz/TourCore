@@ -159,4 +159,28 @@ describe("the invite code on the Allow page", () => {
       expect(() => checkClientMetadata({ redirect_uris: [CLAUDE_REDIRECT], grant_types, token_endpoint_auth_method: "none" }, policy, new Set(["none"])), JSON.stringify(grant_types)).toThrow(/grant_types/);
     }
   });
+
+  it("accepts ChatGPT's published identity as a public client, since it says it supports none", () => {
+    // ChatGPT's document as published at its client_id URL on 2026-10-27.
+    const chatgpt = {
+      client_id: "https://chatgpt.com/oauth/client.json",
+      client_uri: "https://chatgpt.com/",
+      redirect_uris: [CHATGPT_REDIRECT],
+      token_endpoint_auth_method: "private_key_jwt",
+      token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      client_name: "ChatGPT",
+      token_endpoint_auth_signing_alg: "RS256",
+      jwks_uri: "https://chatgpt.com/oauth/jwks.json",
+    };
+    const policy = redirectPolicyFor({ CLEANER_CORE_MULTI_TENANT: "1" }, "HOSTED_RAILWAY_P0");
+    const client = parseMetadataDocument(chatgpt.client_id, chatgpt, policy);
+    expect(client.token_endpoint_auth_method).toBe("none");
+    expect(client.redirect_uris).toEqual([CHATGPT_REDIRECT]);
+    const keyOnly = { ...chatgpt, token_endpoint_auth_methods_supported: ["private_key_jwt"] };
+    expect(() => parseMetadataDocument(chatgpt.client_id, keyOnly, policy)).toThrow(/token_endpoint_auth_method/);
+    const { token_endpoint_auth_methods_supported: _supported, ...declaredOnly } = chatgpt;
+    expect(() => parseMetadataDocument(chatgpt.client_id, declaredOnly, policy)).toThrow(/token_endpoint_auth_method/);
+  });
 });

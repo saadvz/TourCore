@@ -262,7 +262,11 @@ export function parseMetadataDocument(clientId: string, document: unknown, polic
   if (doc.client_secret !== undefined || doc.client_secret_expires_at !== undefined) {
     throw new ClientMetadataError("invalid_client_metadata", "A client metadata document can't carry a client secret.");
   }
-  const checked = checkClientMetadata({ token_endpoint_auth_method: "none", ...doc }, policy, new Set(["none"]));
+  // A client may prefer a stronger method but list "none" among those it supports (ChatGPT's does).
+  // This server advertises only "none", so that is the method such a client uses here.
+  const supported = (doc as { token_endpoint_auth_methods_supported?: unknown }).token_endpoint_auth_methods_supported;
+  const publicToo = Array.isArray(supported) && supported.includes("none");
+  const checked = checkClientMetadata({ ...doc, token_endpoint_auth_method: publicToo ? "none" : (doc.token_endpoint_auth_method ?? "none") }, policy, new Set(["none"]));
   return {
     client_id: clientId,
     client_name: typeof doc.client_name === "string" ? doc.client_name : undefined,
