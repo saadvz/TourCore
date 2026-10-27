@@ -16,7 +16,7 @@
 ## Global Constraints
 
 - Multi-tenant mode is on only when `CLEANER_CORE_MULTI_TENANT=1` and `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0`. With it off, every route keeps today's code path and every existing test stays green unchanged.
-- Tests use only 555 numbers and made-up door codes (Scratch `4821`, `7392`; wiring `8088`). Never Saad's phones or the real Twilio number.
+- Tests use only 555 numbers and made-up door codes (the Scratch pins in `src/cleaner-core/tenants.ts` and `DOOR_CODE` in `test/wiringProof.ts`; never spell a code out in docs, since `scripts/scan-cleaner-secrets.mjs` fails CI on one). Never Saad's phones or the real Twilio number.
 - No live text to a real person. Twilio REST is faked with an injected `fetch` in every test.
 - Secrets never appear in logs, tool replies, the registry, or the admin page:
   - door codes
@@ -506,8 +506,8 @@ it("never renders a door code, routine key, or cleaner phone", async () => { /* 
   - `.env.example`: add `CLEANER_CORE_MULTI_TENANT` and `CLEANER_CORE_ADMIN_PASSWORD`, commented, with no values
 
 **The gate test.** Two tenants on one running server:
-- **Lane:** Twilio number `+15555550150`, host `+15555550100`, cleaner `+15555550101`, door code `4821`, Grok.
-- **Court:** Twilio number `+15555550151`, host `+15555550110`, cleaner `+15555550111`, door code `7392`, Claude.
+- **Lane:** Twilio number `+15555550150`, host `+15555550100`, cleaner `+15555550101`, the Scratch Lane pin, Grok.
+- **Court:** Twilio number `+15555550151`, host `+15555550110`, cleaner `+15555550111`, the Scratch Court pin, Claude.
 
 Each is set up through MCP to the point where the door code is sent (follow `test/cleanerFullSetup.test.ts`'s flow), then:
 
@@ -519,7 +519,7 @@ it("a photo link and an upload link with the tenant id swapped are 404", …);
 it("each door code goes once to its own approved cleaner, and neither code is in any file under the data root", () => {
   expect(pinSends.filter((s) => s.to === "+15555550101")).toHaveLength(1);
   expect(pinSends.filter((s) => s.to === "+15555550111")).toHaveLength(1);
-  for (const file of filesUnder(root)) expect(readFileSync(file, "utf8")).not.toMatch(/4821|7392/);
+  for (const file of filesUnder(root)) expect(readFileSync(file, "utf8")).not.toMatch(new RegExp(`${lanePin}|${courtPin}`));
 });
 it("the process env's per-tenant values reach neither desk", …);
 it("each tenant's desk and engine store are under its own folder, and nothing is at the data root", () => {
