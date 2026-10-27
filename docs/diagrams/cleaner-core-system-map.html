@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cleaner Core System Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one diagram per screen, plain black ink on white. Deliberately single-theme. */
+:root{--paper:#ffffff;--ink:#111111;--grey:#6b6b6b;--f:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:light}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--f)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 40px}
+nav{display:flex;flex-wrap:wrap;gap:4px 20px;border-bottom:1.5px solid var(--ink);padding-bottom:10px;margin-bottom:22px}
+nav a{color:var(--grey);text-decoration:none;font-weight:600;padding:4px 0}
+nav a[aria-current="page"]{color:var(--ink);text-decoration:underline;text-underline-offset:6px;text-decoration-thickness:2px}
+nav a:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--grey);margin:0 0 18px}
+.fig{overflow-x:auto}
+.fig svg{display:block;width:100%;min-width:760px;height:auto}
+.key{display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:18px;font-size:13px;color:var(--grey);align-items:center}
+.key svg{vertical-align:middle;margin-right:6px}
+svg text{font-family:var(--f);fill:var(--ink)}
+svg .who{font:500 10.5px var(--m);letter-spacing:.08em;fill:var(--grey)}
+svg .act{font-size:15px;font-weight:600}
+svg .note{font-size:12px;fill:var(--grey)}
+svg .lab{font:500 11px var(--m);letter-spacing:.08em;fill:var(--grey)}
+svg .big{font-size:17px;font-weight:600}
+svg .tool{font:500 11.5px var(--m);fill:var(--grey)}
+details.guide{border-top:1.5px solid var(--ink);margin-top:26px;padding-top:12px}
+details.guide summary{cursor:pointer;font-weight:600;font-size:16px;list-style:none;padding:4px 0}
+details.guide summary::-webkit-details-marker{display:none}
+details.guide summary::before{content:"+";display:inline-block;width:22px;height:22px;line-height:19px;text-align:center;border:1.5px solid var(--ink);margin-right:10px;font-weight:400}
+details.guide[open] summary::before{content:"−"}
+details.guide summary:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.gsrc{font:500 12px var(--m);color:var(--grey);margin:4px 0 14px 32px}
+.gsub{font-weight:600;margin:22px 0 8px}
+</style>
+
+<div class="wrap">
+  <nav id="nav" aria-label="Diagrams"></nav>
+  <section id="page"></section>
+  <div class="key">
+    <span><svg width="34" height="18"><rect x="1" y="1" width="32" height="16" fill="none" stroke="#111" stroke-width="1.5"/></svg>Works today</span>
+    <span><svg width="34" height="18"><rect x="1" y="1" width="32" height="16" fill="none" stroke="#111" stroke-width="1.5" stroke-dasharray="4 3"/></svg>Demo or not real yet</span>
+    <span><svg width="34" height="18"><path d="M6 1H28L33 6V12L28 17H6L1 12V6Z" fill="none" stroke="#111" stroke-width="1.5"/></svg>A check that can stop the flow</span>
+  </div>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function wrap(t,max){const w=t.split(" "),out=[];let l="";w.forEach(x=>{if((l+" "+x).trim().length>max){out.push(l);l=x}else l=(l+" "+x).trim()});out.push(l);return out}
+const DEFS=`<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#111"/></marker></defs>`;
+
+function shape(x,y,w,h,{dashed,check}={}){
+  const st=`fill="#fff" stroke="#111" stroke-width="1.6"${dashed?' stroke-dasharray="6 4"':''}`;
+  if(check){const c=12;return `<path d="M${x+c} ${y}H${x+w-c}L${x+w} ${y+c}V${y+h-c}L${x+w-c} ${y+h}H${x+c}L${x} ${y+h-c}V${y+c}Z" ${st}/>`}
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${st}/>`;
+}
+function textLines(x,y,lines,cls,lh){return lines.map((l,i)=>`<text x="${x}" y="${y+i*lh}" class="${cls}">${esc(l)}</text>`).join("")}
+
+/* a step flow: boxes left to right, rows read like text */
+function flowSVG(steps){
+  const per=4,W=226,H=92,gx=36,gy=78,m=20;
+  const rows=Math.ceil(steps.length/per);
+  const VW=m*2+per*W+(per-1)*gx, VH=m*2+rows*H+(rows-1)*gy+20;
+  let s=`<svg xmlns="${NS}" viewBox="0 0 ${VW} ${VH}" role="img">${DEFS}`;
+  const pos=steps.map((_,i)=>({x:m+(i%per)*(W+gx),y:m+Math.floor(i/per)*(H+gy)}));
+  for(let i=0;i<steps.length-1;i++){
+    const a=pos[i],b=pos[i+1];
+    if(a.y===b.y) s+=`<line x1="${a.x+W}" y1="${a.y+H/2}" x2="${b.x-2}" y2="${b.y+H/2}" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/>`;
+    else {const my=a.y+H+gy-24;s+=`<path d="M${a.x+W+18} ${a.y+H/2}H${a.x+W+18}V${my}H${b.x+W/2}V${b.y-2}" fill="none" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/><line x1="${a.x+W}" y1="${a.y+H/2}" x2="${a.x+W+18}" y2="${a.y+H/2}" stroke="#111" stroke-width="1.6"/>`;}
+  }
+  steps.forEach((st,i)=>{
+    const {x,y}=pos[i];
+    s+=shape(x,y,W,H,st);
+    s+=st.tool?`<text x="${x+14}" y="${y+22}" class="tool">${String(i+1).padStart(2,"0")} · ${esc(st.tool)}</text>`:`<text x="${x+14}" y="${y+22}" class="who">${String(i+1).padStart(2,"0")} · ${esc(st.who.toUpperCase())}</text>`;
+    s+=textLines(x+14,y+46,wrap(st.t,24),"act",19);
+    if(st.note) s+=`<text x="${x+W/2}" y="${y+H+18}" class="note" text-anchor="middle">${esc(st.note)}</text>`;
+  });
+  return s+"</svg>";
+}
+
+/* shared drawing helpers for the hand-drawn pages */
+const BOX=(x,y,w,h,title,sub,o={})=>shape(x,y,w,h,o)+`<text x="${x+w/2}" y="${y+(sub?h/2-3:h/2+6)}" class="${o.small?"act":"big"}" text-anchor="middle">${esc(title)}</text>`+(sub?`<text x="${x+w/2}" y="${y+h/2+16}" class="note" text-anchor="middle">${esc(sub)}</text>`:"");
+const ARROW=(x1,y1,x2,y2,label,side)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/>`+(label?`<text x="${side==="l"?x1-8:x1+8}" y="${(y1+y2)/2+4}" class="note" text-anchor="${side==="l"?"end":"start"}">${esc(label)}</text>`:"");
+const LAB=(x,y,t)=>`<text x="${x}" y="${y}" class="lab">${t}</text>`;
+
+/* the overview, drawn by hand */
+function overviewSVG(){
+  let s=`<svg xmlns="${NS}" viewBox="0 0 1040 680" role="img">${DEFS}`;
+  s+=LAB(20,48,"WHO, IN ORDER");
+  s+=BOX(150,20,220,56,"1 · Saad","adds the host, sends a code");
+  s+=BOX(470,20,220,56,"2 · Host","connects AI, adds the cleaner");
+  s+=BOX(790,20,220,56,"3 · Cleaner","texted once the host activates");
+  s+=`<line x1="370" y1="48" x2="468" y2="48" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/><text x="420" y="40" class="note" text-anchor="middle">invite code</text>`;
+  s+=`<line x1="690" y1="48" x2="788" y2="48" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/><text x="740" y="40" class="note" text-anchor="middle">in setup</text>`;
+  s+=LAB(20,158,"REACH VIA");
+  s+=BOX(150,128,220,64,"Admin page","host · number · invite code");
+  s+=BOX(470,128,220,64,"AI assistant","Grok · Claude · ChatGPT");
+  s+=BOX(790,128,220,64,"Texts","from the host's own number");
+  s+=ARROW(260,76,260,126);
+  s+=ARROW(560,76,560,126,"chat","l");
+  s+=ARROW(600,126,600,78,"tells the host");
+  s+=ARROW(880,76,880,126,"replies","l");
+  s+=ARROW(920,126,920,78,"texts");
+  s+=LAB(20,380,"THE SERVICE");
+  s+=`<rect x="150" y="262" width="860" height="250" fill="none" stroke="#111" stroke-width="2.4"/>`;
+  s+=`<text x="580" y="290" class="big" text-anchor="middle">Cleaner Core service</text>`;
+  s+=`<text x="580" y="308" class="note" text-anchor="middle">one address on Railway · many hosts · sends every text</text>`;
+  s+=shape(170,322,820,46,{check:true})+`<text x="580" y="344" class="act" text-anchor="middle">Tenant router</text><text x="580" y="360" class="note" text-anchor="middle">finds the host by sign-in, phone number or link</text>`;
+  s+=ARROW(580,368,580,384);
+  [["Host A",170],["Host B",450],["Host C …",730]].forEach(([n,x])=>{s+=BOX(x,386,260,62,n,"jobs · texts · photos · door-code key",{small:true});});
+  s+=BOX(170,460,820,36,"Registry and invite codes","",{small:true});
+  s+=ARROW(260,192,260,260,"creates the host");
+  s+=ARROW(560,192,560,260,"check_now","l");
+  s+=ARROW(600,260,600,194,"wakes the AI");
+  s+=ARROW(880,192,880,260,"replies","l");
+  s+=ARROW(920,260,920,194,"sends");
+  s+=LAB(20,596,"OUTSIDE");
+  s+=BOX(150,566,860,64,"Booking calendars","Guesty Lite · iCal links · Google Calendar");
+  s+=ARROW(580,512,580,564,"read on each check");
+  s+=`<text x="1010" y="660" class="note" text-anchor="end">The two loops below show how bookings and texts move between the service, the AI and the host.</text>`;
+  return s+"</svg>";
+}
+
+/* the hourly loop */
+function loopSVG(){
+  let s=`<svg xmlns="${NS}" viewBox="0 0 1040 380" role="img">${DEFS}`;
+  const card=(x,y,who,t,sub,o={})=>shape(x,y,280,92,o)+`<text x="${x+14}" y="${y+22}" class="who">${esc(who)}</text><text x="${x+14}" y="${y+48}" class="act">${esc(t)}</text><text x="${x+14}" y="${y+72}" class="note">${esc(sub)}</text>`;
+  s+=card(30,30,"1 · AI ASSISTANT","Hourly check wakes it","Grok routine, Claude or ChatGPT task");
+  s+=card(380,30,"2 · AI ASSISTANT","Reads Google Calendar","only if the host keeps bookings there");
+  s+=card(730,30,"3 · AI → SERVICE","Calls check_now","passes the Google events along");
+  s+=card(730,240,"4 · SERVICE","Reads the calendar links","Guesty Lite, iCal; stale over 3h → hold",{check:true});
+  s+=card(380,240,"5 · SERVICE","Returns what's new","bookings, cleaner replies, nudges");
+  s+=card(30,240,"6 · AI → HOST","Tells or asks the host","e.g. \"Have the guests left?\"");
+  s+=ARROW(310,76,378,76);s+=ARROW(660,76,728,76);
+  s+=ARROW(870,122,870,238);
+  s+=ARROW(730,286,662,286);s+=ARROW(380,286,312,286);
+  s+=`<path d="M170 240V124" fill="none" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/><text x="180" y="186" class="note">next hour</text>`;
+  s+=`<text x="520" y="368" class="note" text-anchor="middle">Shortcut: when the cleaner texts, the service wakes the primary AI at once (Grok, Claude). ChatGPT can't be woken and waits for its next hourly run.</text>`;
+  return s+"</svg>";
+}
+
+/* the texting loop */
+function textLoopSVG(){
+  let s=`<svg xmlns="${NS}" viewBox="0 0 1040 380" role="img">${DEFS}`;
+  const card=(x,y,who,t,sub,o={})=>shape(x,y,280,92,o)+`<text x="${x+14}" y="${y+22}" class="who">${esc(who)}</text><text x="${x+14}" y="${y+48}" class="act">${esc(t)}</text><text x="${x+14}" y="${y+72}" class="note">${esc(sub)}</text>`;
+  s+=card(30,30,"1 · SERVICE → CLEANER","Texts the cleaner","offer, reminder, door code");
+  s+=card(380,30,"2 · CLEANER","Replies by text","YES, DONE, photos, or a question");
+  s+=card(730,30,"3 · SERVICE","Handles simple replies itself","YES, NO, START, DONE, STOP, HELP",{check:true});
+  s+=card(730,240,"4 · SERVICE → AI","Anything else wakes the AI","Grok, Claude now · ChatGPT next hour");
+  s+=card(380,240,"5 · AI → HOST","Reads it, drafts a reply","asks the host before sending");
+  s+=card(30,240,"6 · HOST → AI → SERVICE","Host says yes","AI calls send_message");
+  s+=ARROW(310,76,378,76);s+=ARROW(660,76,728,76);
+  s+=ARROW(870,122,870,238,"needs a person");
+  s+=ARROW(730,286,662,286);s+=ARROW(380,286,312,286);
+  s+=`<path d="M170 240V124" fill="none" stroke="#111" stroke-width="1.6" marker-end="url(#ah)"/><text x="180" y="186" class="note">service sends it</text>`;
+  s+=`<text x="520" y="368" class="note" text-anchor="middle">Injury words skip the loop: the service sends one call-911 text to the cleaner and host at once. In a group text, the host sees every reply right away.</text>`;
+  return s+"</svg>";
+}
+
+/* how Cleaner Core keeps hosts apart */
+function tenantsSVG(){
+  let s=`<svg xmlns="${NS}" viewBox="0 0 1040 600" role="img">${DEFS}`;
+  s+=LAB(20,14,"THREE WAYS IN");
+  s+=BOX(20,24,310,64,"A chat calls a tool","its sign-in was linked by an invite code");
+  s+=BOX(365,24,310,64,"A text arrives","the host's own Twilio number");
+  s+=BOX(710,24,310,64,"A link it handed out","upload, photo, group: /t/<host>/");
+  s+=ARROW(175,88,175,148);s+=ARROW(520,88,520,148);s+=ARROW(865,88,865,148);
+  s+=shape(20,150,1000,56,{check:true})+`<text x="520" y="176" class="big" text-anchor="middle">Tenant router</text><text x="520" y="195" class="note" text-anchor="middle">no host, unknown host or turned-off host → the request stops here</text>`;
+  s+=ARROW(270,206,270,252);s+=ARROW(770,206,770,252);
+  const host=(x,name,lines)=>{let t=`<rect x="${x}" y="254" width="480" height="170" fill="#fff" stroke="#111" stroke-width="2"/><text x="${x+18}" y="284" class="big">${esc(name)}</text>`;
+    lines.forEach((l,i)=>{t+=`<text x="${x+18}" y="${314+i*24}" class="act" style="font-weight:400">${esc(l)}</text>`;});return t;};
+  s+=host(20,"Host A",["Own folder: jobs, texts, photos","Own Twilio number","Own keys for the door code and photos","Chats: Grok (primary) and Claude","Alerts wake Grok only"]);
+  s+=host(540,"Host B",["Own folder: jobs, texts, photos","Own Twilio number","Own keys for the door code and photos","Chats: ChatGPT (primary)","Alerts wait for ChatGPT's hourly run"]);
+  s+=`<text x="520" y="456" class="note" text-anchor="middle">A tool reply answers the chat that called. Texts to the host and alert wake-ups follow the primary chat.</text>`;
+  s+=LAB(20,500,"RUN BY SAAD");
+  s+=BOX(20,512,480,64,"Admin page","add host · invite code · pick primary · turn off · delete");
+  s+=BOX(540,512,480,64,"Registry","hosts, numbers, chats, invite codes (hashed)");
+  s+=ARROW(500,544,538,544);
+  return s+"</svg>";
+}
+
+/* assistants side by side */
+function matrixSVG(){
+  const cols=["Grok Bot","Claude","ChatGPT"];
+  const rows=[
+    ["HOW IT JOINS",[["Team template","shared service + invite code"],["Custom connector + skill","shared service + invite code"],["Custom connector","Developer Mode + invite code"]]],
+    ["SETUP GUIDE",[["Clones the repo","reads the bootstrap file"],["Connector's own instructions","+ optional skill"],["Connector's own instructions","no plugin or skill"]]],
+    ["SECRETS GO TO",[["Grok's secure card","posted from its computer"],["Cleaner Core's private page","one-time link, 10 min"],["Cleaner Core's private page","one-time link, 10 min"]]],
+    ["WAKE-UPS",[["Routines","hourly check + alert webhook"],["One scheduled task","made by hand, needs paid plan"],["One hourly task","ChatGPT makes it; can't be woken",1]]],
+    ["PLAN NEEDED",[["Not stated in the repo",""],["Pro, Max, Team or Enterprise","for the scheduled task"],["Plus or above","Plus tested; others not yet"]]]
+  ];
+  const L=150,CW=280,GX=16,CH=70,GY=14,top=50,m=10;
+  const VW=L+3*CW+2*GX+m*2, VH=top+rows.length*(CH+GY)+30;
+  let s=`<svg xmlns="${NS}" viewBox="0 0 ${VW} ${VH}" role="img">`;
+  cols.forEach((c,i)=>{const x=L+m+i*(CW+GX);s+=`<text x="${x+CW/2}" y="30" class="big" text-anchor="middle">${esc(c)}</text><line x1="${x}" y1="40" x2="${x+CW}" y2="40" stroke="#111" stroke-width="2"/>`;});
+  rows.forEach((r,ri)=>{const y=top+ri*(CH+GY);
+    s+=`<text x="${m}" y="${y+CH/2+4}" class="lab">${r[0]}</text>`;
+    r[1].forEach((c,ci)=>{const x=L+m+ci*(CW+GX);
+      s+=shape(x,y,CW,CH,{dashed:!!c[2]});
+      s+=`<text x="${x+CW/2}" y="${y+(c[1]?CH/2-3:CH/2+6)}" class="act" text-anchor="middle">${esc(c[0])}</text>`;
+      if(c[1])s+=`<text x="${x+CW/2}" y="${y+CH/2+17}" class="note" text-anchor="middle">${esc(c[1])}</text>`;});
+  });
+  s+=`<text x="${VW-m}" y="${VH-8}" class="note" text-anchor="end">All three reach the same Cleaner Core address. One host can connect several; alerts go to the primary chat.</text>`;
+  return s+"</svg>";
+}
+
+/* what each guide document tells the assistant to do */
+const EVERY_BOOKING={h:"After setup: every booking",steps:[
+  {tool:"check_now",t:"Wakes hourly or on \"check my calendars\"",note:"passes Google events if used"},
+  {tool:"confirm_times",t:"New booking: host confirms the times"},
+  {tool:"mark_guests_left",t:"Host says the guests left",check:true,note:"never guessed from the calendar"},
+  {tool:"retry_send",t:"Resends a text only if the host says yes"},
+  {tool:"hold_job",t:"Pauses a job if a message sounds wrong",note:"host decides"},
+  {tool:"get_job_photos",t:"Compares photos to checklist, summarizes"}
+]};
+const EVERY_BOOKING_CHATGPT={h:"After setup: every booking (no wake-ups, so the host's group text fills the gap)",steps:[
+  {tool:"check_now",t:"Hourly run, or when the host asks",note:"nothing can wake it sooner"},
+  {tool:"confirm_times",t:"New booking: host confirms the times"},
+  {tool:"send_message",t:"\"Maria texted, draft a reply\"",note:"reads first, sends after a yes"},
+  {tool:"mark_guests_left",t:"Host says the guests left",check:true,note:"never guessed from the calendar"},
+  {tool:"retry_send",t:"Resends a text only if the host says yes"},
+  {tool:"hold_job",t:"Pauses a job if a message sounds wrong",note:"host decides"},
+  {tool:"get_job_photos",t:"Photo links, compares to checklist"},
+  {tool:"get_state → warning",t:"Hourly task stopped?",check:true,note:"warns after 2½ hours with no check"}
+]};
+const CLEAN_GUIDE=(claude,gpt)=>[{h:"Setup",steps:[
+  gpt?{tool:"connector instructions",t:"Loads the guide from the connector",note:"no plugin or skill needed"}:claude?{tool:"connector instructions",t:"Loads the guide from the connector",note:"plus the skill, if added"}:{tool:"template.json",t:"Reads the one hosted address",note:"clone is for reading only"},
+  {tool:"get_state",t:"Asks the service what's next",note:"never asks for the invite code"},
+  {tool:"save_property",t:"Name, address, time zone, usual times"},
+  {tool:"save_sources",t:"Calendar links, one at a time",note:(claude||gpt)?"host types each on a private page":"posted to a one-time upload link"},
+  {tool:"save_people",t:"Host, cleaner, contacts, group chat",note:gpt?"group text recommended":"code to group or cleaner only"},
+  {tool:"save_schedule",t:"Offer lead time, reminder, quiet hours"},
+  {tool:"save_door_code",t:"Locks first, then the code",note:(claude||gpt)?"private page, once, 10 min":"secure card → upload link"},
+  {tool:"save_preferences",t:"Checklist, photos, supplies"},
+  {tool:"save_alert_routine",t:gpt?"Creates the hourly task in the chat":claude?"Walks host through the scheduled task":"Creates the Check and Alerts routines",check:true,note:"becomes primary if primary has none"},
+  {tool:"get_state → setup",t:"Reads the whole setup back"},
+  {tool:"activate",t:"Host replies Activate",check:true,note:"refused if numbers not approved"},
+  {tool:"confirm_times",t:"First booking's times",note:"always 24-hour HH:MM"}
+]},gpt?EVERY_BOOKING_CHATGPT:EVERY_BOOKING];
+
+const PAGES=[
+  {id:"overview",nav:"Overview",title:"The whole system",extra:()=>`<h2 style="font-size:20px;margin:34px 0 4px">The hourly loop</h2><p class="sub">Calendar changes reach the host through the AI: it checks in, the service reports, the AI tells the host.</p><div class="fig">${loopSVG()}</div><h2 style="font-size:20px;margin:34px 0 4px">The texting loop</h2><p class="sub">The service does all the texting. When a reply needs a person, it hands it to the AI, and nothing goes back without the host’s yes.</p><div class="fig">${textLoopSVG()}</div>`,sub:"Scheduling cleaners for short-term rentals. One service serves every host, each kept apart as a tenant.",svg:overviewSVG},
+  {id:"tenants",nav:"Hosts kept apart",title:"How Cleaner Core keeps hosts apart",sub:"Every request is matched to exactly one host before anything is read or written.",svg:tenantsSVG},
+  {id:"add-host",nav:"Adding a host",title:"Adding a host to Cleaner Core",sub:"Saad adds every host by hand for now. Self-serve signup comes later.",steps:[
+    {who:"Saad",t:"Signs in to the admin page",note:"password, 12-hour session"},
+    {who:"Saad",t:"Adds the host and a Twilio number",check:true,note:"number must be free and on the account"},
+    {who:"Cleaner Core",t:"Points that number's texts at the service"},
+    {who:"Saad",t:"Gets a one-time invite code",note:"shown once, works 7 days"},
+    {who:"Saad",t:"Sends the code to the host",note:"one code per chat"},
+    {who:"Host",t:"Connects a chat, types the code, clicks Allow",check:true,note:"wrong, used or expired → no access"},
+    {who:"Cleaner Core",t:"Links that chat to the host",note:"first chat becomes primary"},
+    {who:"Host",t:"Runs setup in that chat",note:"see the setup pages"}
+  ]},
+  {id:"clean",nav:"A cleaning",title:"A turnover cleaning",sub:"Inside one host's tenant, between one guest leaving and the next arriving.",steps:[
+    {who:"Primary chat",t:"Wakes on its hourly check"},
+    {who:"Cleaner Core",t:"Reads the host's booking calendars",check:true,note:"stale over 3h → hold"},
+    {who:"Cleaner Core",t:"Finds a turnover, makes a job"},
+    {who:"Host",t:"Confirms checkout and check-in times"},
+    {who:"Cleaner Core",t:"Texts the offer from the host's number"},
+    {who:"Cleaner",t:"Replies YES",note:"matched to the host by the number"},
+    {who:"Cleaner Core",t:"Sends a reminder"},
+    {who:"Primary chat",t:"Asks host: have the guests left?"},
+    {who:"Host",t:"Confirms the guests left"},
+    {who:"Cleaner Core",t:"Sends the door code",check:true,note:"only to this host's approved cleaner"},
+    {who:"Cleaner",t:"Cleans, sends photos, texts DONE"},
+    {who:"AI",t:"Checks photos, sends host a summary"}
+  ]},
+  {id:"clean-setup",nav:"Cleaning setup",title:"Setting up a property for cleanings",sub:"Done once, after the host's chat joins their tenant with an invite code.",steps:[
+    {who:"AI",t:"Asks the service what's next"},
+    {who:"Host",t:"Property and usual times"},
+    {who:"Host",t:"Booking calendar links"},
+    {who:"Host",t:"Cleaner and group contacts"},
+    {who:"Host",t:"Text schedule and quiet hours"},
+    {who:"Host",t:"Locks and door code",note:"entered on a secure page"},
+    {who:"AI",t:"Creates the check and alert routines"},
+    {who:"Host",t:"Says Activate",dashed:true,note:"numbers still approved by hand"}
+  ]},
+  {id:"assistants",nav:"Assistants compared",title:"Grok, Claude and ChatGPT side by side",sub:"How each assistant gets connected, and what it can do once connected.",svg:matrixSVG},
+  {id:"grok-setup",nav:"Setup with Grok",title:"Cleaner Core setup with Grok Bot",sub:"Through a team template. The host never leaves the chat except to type the invite code.",
+  guide:{label:"Show the guide flow Grok follows (steps 6–8 in detail)",src:"CLEANER_CORE_BOOTSTRAP.md · cleaner-template/routines/",parts:CLEAN_GUIDE(false,false)},
+  steps:[
+    {who:"Host",t:"Gets an invite code from Saad"},
+    {who:"Host",t:"Adds the bot from the team template"},
+    {who:"Host",t:"Says \"Set up Cleaner Core\""},
+    {who:"Grok",t:"Clones the repo to read the guide",note:"reads only, never runs it"},
+    {who:"Host",t:"Types the invite code, clicks Allow",check:true,note:"links Grok to the host's tenant"},
+    {who:"Grok",t:"Asks the setup questions, one at a time",note:"secrets on Grok's secure card"},
+    {who:"Grok",t:"Creates the check and alert routines",note:"host pastes the webhook key"},
+    {who:"Host",t:"Says Activate"}
+  ]},
+  {id:"claude-setup",nav:"Setup with Claude",title:"Cleaner Core setup with Claude",sub:"No template. The host adds the connector and the scheduled task by hand, about 15 minutes.",
+  guide:{label:"Show the guide flow Claude follows (steps 6–8 in detail)",src:"Connector instructions · claude-template/plugin/skills/cleaner-core/SKILL.md · routines/cleaner-core-task.md",parts:CLEAN_GUIDE(true,false)},
+  steps:[
+    {who:"Host",t:"Gets an invite code from Saad"},
+    {who:"Host",t:"Settings → Connectors → Add custom connector",note:"same address for every host"},
+    {who:"Host",t:"Types the invite code, clicks Allow",check:true,note:"any OAuth client Claude picks works"},
+    {who:"Host",t:"Connects Google Calendar, adds the skill",note:"both optional"},
+    {who:"Host",t:"Says \"Set up Cleaner Core\" in a new chat"},
+    {who:"Claude",t:"Asks the setup questions, one at a time",note:"secrets typed on Cleaner Core's own page"},
+    {who:"Host",t:"Makes one scheduled task by hand",note:"hourly + API trigger, paid plan"},
+    {who:"Host",t:"Says Activate"}
+  ]},
+  {id:"chatgpt-setup",nav:"Setup with ChatGPT",title:"Cleaner Core setup with ChatGPT",sub:"No template. The host adds the connector; ChatGPT makes the hourly task itself. About 15 minutes, Plus plan or above.",
+  guide:{label:"Show the guide flow ChatGPT follows (steps 6–8 in detail)",src:"Connector instructions · chatgpt-template/SETUP_GUIDE.md · routines/cleaner-core-task.md",parts:CLEAN_GUIDE(false,true)},
+  steps:[
+    {who:"Host",t:"Gets an invite code from Saad"},
+    {who:"Host",t:"Turns on Developer Mode",note:"chatgpt.com on the web only"},
+    {who:"Host",t:"Creates a custom MCP connector",note:"same address for every host"},
+    {who:"Host",t:"Types the invite code, clicks Allow",check:true,note:"links ChatGPT to the host's tenant"},
+    {who:"Host",t:"Adds Cleaner Core to a new chat with +",note:"and Google Calendar, if used"},
+    {who:"ChatGPT",t:"Asks the setup questions, one at a time",note:"secrets typed on Cleaner Core's own page"},
+    {who:"ChatGPT",t:"Creates the hourly scheduled task",note:"nothing to paste; can't be woken"},
+    {who:"Host",t:"Says Activate"}
+  ]}
+];
+
+const nav=document.getElementById("nav"),page=document.getElementById("page");
+nav.innerHTML=PAGES.map(p=>`<a href="#${p.id}" data-id="${p.id}">${p.nav}</a>`).join("");
+function show(){
+  const id=location.hash.slice(1);const p=PAGES.find(x=>x.id===id)||PAGES[0];
+  nav.querySelectorAll("a").forEach(a=>{if(a.dataset.id===p.id)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");});
+  const g=p.guide?`<details class="guide"><summary>${esc(p.guide.label)}</summary><div class="gsrc">Reads: ${esc(p.guide.src)}</div>${p.guide.parts.map(pt=>(pt.h?`<div class="gsub">${esc(pt.h)}</div>`:"")+`<div class="fig">${flowSVG(pt.steps)}</div>`).join("")}</details>`:"";
+  page.innerHTML=`<h1>${esc(p.title)}</h1><p class="sub">${esc(p.sub)}</p><div class="fig">${p.svg?p.svg():flowSVG(p.steps)}</div>${p.extra?p.extra():""}${g}`;
+}
+window.addEventListener("hashchange",show);show();
+</script>
