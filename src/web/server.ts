@@ -20,6 +20,8 @@ import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider
 import { cleanerCoreEnabled, cleanerMultiTenant } from "../cleaner-core/flag";
 import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cleaner-core/assistant";
 import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
+import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath } from "../cleaner-core/hosted/router";
+import { TenantSecrets } from "../cleaner-core/hosted/tenantSecrets";
 import { INVITE_REFUSALS } from "../mcp/oauth/pages";
 import { handleCleanerUploadPage, isFormPost } from "../cleaner-core/uploadPage";
 import { ALERT_UPLOAD_MAX_BYTES, alertUploadCode, calendarUploadCode, doorCodeUploadCode, uploadPageOf, CLEANER_MCP_PATH, CLEANER_TWILIO_GROUP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerAlertUpload, handleCleanerCalendarUpload, handleCleanerDoorCodeUpload, handleCleanerGroupWebhook, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
@@ -156,7 +158,9 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * page where the owner approves a connection. `uploadPages` is a Claude or ChatGPT
  * deployment, where the host also opens an upload link in a browser.
  */
-function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean, uploadPages = false): boolean {
+function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean, uploadPages = false, multiTenant = false): boolean {
+  // A multi-tenant Cleaner Core's per-tenant links. The router checks the tenant and the route.
+  if (multiTenant && splitTenantPath(path)) return true;
   if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH || path === CLEANER_MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
@@ -335,6 +339,19 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   // One Cleaner Core service for many hosts: the invite code on the Allow page picks the tenant.
   const multiTenant = () => cleanerMultiTenant(installation.env());
   const tenants = new TenantRegistry(installation.root, () => options.now?.() ?? new Date());
+  const hostedCleanerService = hostedCleaner({
+    registry: tenants,
+    secrets: new TenantSecrets(installation.root),
+    dataRoot: installation.root,
+    origin: () => {
+      const base = installation.publicBaseUrl();
+      return base ? new URL(base).origin : undefined;
+    },
+    baseEnv: () => installation.env(),
+    grantLive: (grantId) => Boolean(new OAuthGrantStore(installation.runtime).get(grantId)),
+    now: () => options.now?.() ?? new Date(),
+    log,
+  });
   const oauth =
     authMode === "oauth"
       ? new McpOAuth({
@@ -512,7 +529,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
       return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
     }
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages))) {
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages, multiTenant()))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
@@ -586,6 +603,19 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.json), { "Referrer-Policy": "no-referrer" });
       }
       if (oauth && isOAuthPublicPath(url.pathname, OAUTH_RESOURCE_PATHS)) return await oauth.handle(req, res);
+      if (multiTenant()) {
+        const handled = await handleHostedCleaner(hostedCleanerService, {
+          req,
+          res,
+          url,
+          method,
+          send,
+          readRaw: () => readRaw(req),
+          readCapped: (max) => readCapped(req, max),
+          ...(oauth ? { authenticate: () => oauth.authenticate(req, res, CLEANER_MCP_PATH) } : {}),
+        });
+        if (handled) return;
+      }
       if (isOAuthLocalPath(url.pathname)) {
         if (!isLocal) return send(404, "text/plain", "Not found");
         if (oauth) return await oauth.handleLocal(req, res);
@@ -935,7 +965,11 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     // Off Tour Core's chain, so a slow cleaning routine never delays the landlord's alerts.
     // The cleaner outbox's own guard keeps two drains from overlapping. A throw stays inside the promise.
     void Promise.resolve()
-      .then(() => (cleanerCoreEnabled(installation.env()) ? drainCleanerAlerts(installation.root, () => installation.env(), () => options.now?.() ?? new Date()) : undefined))
+      .then(() => {
+        if (!cleanerCoreEnabled(installation.env())) return undefined;
+        if (multiTenant()) return drainAllTenants(hostedCleanerService);
+        return drainCleanerAlerts(installation.root, () => installation.env(), () => options.now?.() ?? new Date());
+      })
       .catch(() => undefined);
   }, options.alertRetryMs ?? 15_000);
   retry.unref();

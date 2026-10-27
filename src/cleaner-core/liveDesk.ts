@@ -445,6 +445,11 @@ export function resetLiveDesks(): void {
   desks.clear();
 }
 
+/** Drops one state folder's desk, so nothing keeps working on a folder that is being removed. */
+export function forgetLiveDesk(root: string): void {
+  desks.delete(root);
+}
+
 function statedClock(text: string): boolean {
   return Boolean(spokenTimes(normalize(text))[0]?.meridiem);
 }
