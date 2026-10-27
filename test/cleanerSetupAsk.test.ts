@@ -370,7 +370,8 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     expect(ask.questions[0]?.options?.[0]).toEqual({ value: "all", label: "Use 10:00 AM checkout and 4:00 PM check-in for all 2" });
 
     const all = ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
-    expect(all.next).toBe("Times saved for 2 turnovers. The cleaner gets one cleaning offer at a time, starting with the first.");
+    // The reply says what went out: here the group invite.
+    expect(all.next).toBe("Times saved for 2 turnovers. The cleaner got one text asking them to reply YES. Offers start after they do, one at a time.");
     const turns = all.turns as { checkoutTime?: string; nextCheckInDate: string | null; nextCheckInTime?: string }[];
     expect(turns).toHaveLength(2);
     for (const turn of turns) {
@@ -423,7 +424,8 @@ describe("Cleaner Core times: the usual times for every turnover", () => {
     const { desk } = await activatedGroup();
     ok(await desk.confirmTimes({ checkout: "09:00", checkIn: "15:00" }));
     const all = ok(await desk.confirmTimes({ checkout: "10:00", checkIn: "16:00", all: true }));
-    expect(all.next).toBe("Times saved for 1 turnover. The cleaner gets one cleaning offer at a time, starting with the first.");
+    // The invite went with the first turnover's times, so this call sent nothing.
+    expect(all.next).toBe("Times saved for 1 turnover. Nothing was sent yet. The cleaner gets one cleaning offer at a time, starting with the first.");
     const turns = all.turns as { checkoutTime?: string }[];
     expect(turns.map((turn) => turn.checkoutTime?.replace(/[  ]/g, " "))).toEqual(["9:00 AM", "10:00 AM"]);
   });

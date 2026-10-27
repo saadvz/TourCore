@@ -1628,19 +1628,27 @@ export class LiveDesk {
     this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
     this.persist();
     await engine.releaseCleanerTexts();
-    // Only the texts this call sent, so an opt-in from an earlier job is not reported again.
-    const sentNow = engine.outbox().filter((item) => item.status === "sent" && !sentBefore.has(item.id) && item.to === this.file.cleaner);
-    const sent = (kind: TextKind) => sentNow.some((item) => item.kind === kind);
+    const sent = this.cleanerSent(engine, sentBefore);
     return this.reply({
-      next: sent("opt-in")
-        ? "Times saved. The cleaner got one text asking them to reply YES. Nothing else goes to them until they do."
-        : sent("offer")
-          ? "Times saved. I sent the cleaner the cleaning offer. They reply YES to take it."
-          : sent("corrected")
-            ? "Times saved. I sent the cleaner the new time."
-            : "Times saved. Nothing was sent.",
+      next:
+        sent === "opt-in"
+          ? "Times saved. The cleaner got one text asking them to reply YES. Nothing else goes to them until they do."
+          : sent === "offer"
+            ? "Times saved. I sent the cleaner the cleaning offer. They reply YES to take it."
+            : sent === "corrected"
+              ? "Times saved. I sent the cleaner the new time."
+              : "Times saved. Nothing was sent.",
       turns: this.turns(),
     });
+  }
+
+  /**
+   * The text this call sent the cleaner, one-to-one or in the group. Only texts sent since `before`,
+   * so an opt-in from an earlier job is not reported again.
+   */
+  private cleanerSent(engine: CleanerCore, before: Set<string>): "opt-in" | "offer" | "corrected" | undefined {
+    const sentNow = engine.outbox().filter((item) => item.status === "sent" && !before.has(item.id) && item.to === this.file.cleaner);
+    return (["opt-in", "offer", "corrected"] as const).find((kind) => sentNow.some((item) => item.kind === kind));
   }
 
   /**
@@ -1649,14 +1657,23 @@ export class LiveDesk {
    */
   private async confirmAllTimes(engine: CleanerCore, times: { checkout: number; checkIn: number }): Promise<ToolReply> {
     if (!this.groupOn()) return this.fail("I can only time one turnover at a time here. Tell me the first turnover's times.");
+    const sentBefore = new Set(engine.outbox().filter((item) => item.status === "sent").map((item) => item.id));
     const { timed } = await engine.setOpenTimes(times);
     if (timed === 0) return this.fail("Every upcoming turnover already has times.");
     this.file.released = true;
     this.file.timedJobs = [...new Set([...(this.file.timedJobs ?? []), ...engine.jobs().filter(hasTimes).map((item) => item.id)])];
     this.persist();
     await engine.releaseCleanerTexts();
+    // Says whether a text went out, so a texting setup that sends nothing shows up here.
+    const saved = `Times saved for ${timed} ${timed === 1 ? "turnover" : "turnovers"}.`;
+    const sent = this.cleanerSent(engine, sentBefore);
     return this.reply({
-      next: `Times saved for ${timed} ${timed === 1 ? "turnover" : "turnovers"}. The cleaner gets one cleaning offer at a time, starting with the first.`,
+      next:
+        sent === "opt-in"
+          ? `${saved} The cleaner got one text asking them to reply YES. Offers start after they do, one at a time.`
+          : sent === "offer"
+            ? `${saved} I sent the cleaner the first cleaning offer. They reply YES to take it, and the next offer comes after.`
+            : `${saved} Nothing was sent yet. The cleaner gets one cleaning offer at a time, starting with the first.`,
       turns: this.turns(),
     });
   }
