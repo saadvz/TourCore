@@ -74,7 +74,7 @@ export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.P
       body: JSON.stringify({ jsonrpc: "2.0", id: ++rpc, method: "tools/call", params: { name, arguments: args } }),
     });
     const raw = await res.text();
-    const parsed = (raw ? JSON.parse(raw) : {}) as { result?: { isError?: boolean; structuredContent?: Record<string, unknown>; content?: { text?: string }[] }; error?: { message?: string } };
+    const parsed = (raw.startsWith("{") ? JSON.parse(raw) : {}) as { result?: { isError?: boolean; structuredContent?: Record<string, unknown>; content?: { text?: string }[] }; error?: { message?: string } };
     return { status: res.status, raw, isError: parsed.result?.isError === true || Boolean(parsed.error), structured: parsed.result?.structuredContent, text: parsed.result?.content?.[0]?.text ?? parsed.error?.message ?? "" };
   };
 
