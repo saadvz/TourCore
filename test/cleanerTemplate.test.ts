@@ -52,7 +52,7 @@ interface Manifest {
 const manifest = (): Manifest => JSON.parse(read(join(TEMPLATE, "template.json"))) as Manifest;
 
 /** SHA-256 of cleaner-template/SETUP_PROMPT.md with LF line endings. Change the prompt only on purpose. */
-const SETUP_PROMPT_SHA256 = "fa5b5908e4715bff9c57ea138aa3a25fa2c67360c1af1367283e11fb4674a869";
+const SETUP_PROMPT_SHA256 = "6c23392e133f6ffe7cb11d949477a3d06337df64784e0ac936832fd062b23ead";
 
 describe("Cleaner Core paste-in prompt", () => {
   it("is pinned, names the repository and the bootstrap, and uses the secure card", () => {
@@ -64,6 +64,10 @@ describe("Cleaner Core paste-in prompt", () => {
     expect(prompt).toMatch(/hosted Cleaner Core service/);
     expect(prompt).toMatch(/Never ask me to paste API keys, passwords, tokens, or door codes into chat/);
     expect(prompt).toMatch(/Allow/);
+    // The multi-tenant service: the host types Saad's invite code on the Allow page, never in chat.
+    expect(prompt).toMatch(/invite code/);
+    expect(prompt).toMatch(/Never ask me for the invite code in chat\./);
+    expect(prompt).not.toMatch(/ask me only to click Allow/);
     expect(prompt).toContain("get_state");
     expect(prompt).toMatch(/Start now\./);
   });
@@ -73,6 +77,9 @@ describe("Cleaner Core template manifest", () => {
   it("points at the hosted Cleaner Core and its one connector", () => {
     const m = manifest();
     expect(m.hostedCleanerCoreUrl).toBe(HOSTED);
+    const activation = (JSON.parse(read(join(TEMPLATE, "template.json"))) as { marketplace: { activation: string } }).marketplace.activation;
+    expect(activation).toMatch(/invite code/);
+    expect(activation).not.toMatch(/clicks Allow once/);
     expect(m.repository).toEqual(expect.objectContaining({ url: REPO, bootstrap: "CLEANER_CORE_BOOTSTRAP.md" }));
     const connectors = m.integrations.filter((i) => i.type === "custom-mcp-server");
     expect(connectors).toEqual([
