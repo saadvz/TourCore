@@ -1,7 +1,7 @@
 {
   "name": "Cleaner Core for Muse",
   "version": "0.1.0",
-  "status": "draft: needs the server's Muse profile and the live probe in README.md before a host uses it",
+  "status": "draft: the server's Muse profile is built; needs the live re-test in README.md before a host uses it",
   "readme": "README.md",
   "setupPrompt": "SETUP_PROMPT.md",
   "skill": "skills/cleaner-core/SKILL.md",

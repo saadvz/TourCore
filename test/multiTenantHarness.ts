@@ -17,6 +17,7 @@ export const REDIRECTS: Record<CleanerAssistant, string> = {
   grok: "https://grok.com/connectors/oauth/callback",
   claude: "https://claude.ai/api/mcp/auth_callback",
   chatgpt: "https://chatgpt.com/connector_platform_oauth_redirect",
+  muse: "https://agent.meta.ai/api/hatch/oauth/callback",
 };
 
 export interface Wake {

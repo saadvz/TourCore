@@ -14,9 +14,9 @@ Host ─► Muse ─► hosted Cleaner Core (/mcp/cleaner-core) ─► the clean
          └─ Muse's Google Calendar connector, an hourly recurring task, and its browser
 ```
 
-**Status: draft.** The guide and the task are written, but a host can't use
-them yet. The server doesn't know Muse, and the open questions below need a
-live test first. See [Before a host uses this](#before-a-host-uses-this).
+**Status: draft.** The guide, the task, and the server's Muse profile are
+built. The open questions below need a live re-test on the deployed server
+before a host uses it. See [Before a host uses this](#before-a-host-uses-this).
 
 ## How a host starts
 
@@ -90,32 +90,26 @@ checking for this connector.
 
 ## Before a host uses this
 
-### Server work
+### Server work (built)
 
-Today the service refuses Muse's sign-in, because `DEFAULT_REDIRECT_HOSTS` in
-[`src/mcp/oauth/clients.ts`](../src/mcp/oauth/clients.ts) allows only Grok's
-hosts. If Muse's host were added there, `assistantForRedirect` in
-[`src/cleaner-core/assistant.ts`](../src/cleaner-core/assistant.ts) would still
-treat Muse as Grok: Grok's words, no private pages, and a webhook Muse can't
-receive. The Muse version needs:
+A sign-in from `agent.meta.ai` is Muse (`assistantForRedirect` in
+[`src/cleaner-core/assistant.ts`](../src/cleaner-core/assistant.ts)), and the
+multi-tenant service allows that host with no extra config, so
+`TOURCORE_OAUTH_REDIRECT_HOSTS` doesn't need it. Muse's profile:
 
-1. `"muse"` as a `CleanerAssistant`, with a profile: helper `Muse`, Muse's
-   redirect host `agent.meta.ai`, `privatePages: true`, `photoImages: false`,
-   and consent wording "Connect Muse".
-2. Muse's MCP initialize instructions, short like ChatGPT's, pointing at the
-   skill. The upload replies carry only `uploadUrl` and `expiresInMinutes`
-   and a neutral `next` such as "This is the host's private page for the
-   door code. Call get_state once it's saved." Never an instruction to send,
-   post, or fill a value: Muse's safety check refuses that from a tool.
-3. The hourly task in `get_state`'s `routine`, connected with
-   `save_alert_routine` and no values, with the same no-wake-up alert sink and
-   2.5-hour check warning as ChatGPT. That code path is shared, not copied.
-4. The cleaner-only group option's hourly note, as ChatGPT has.
-5. On Muse, the calendar-link field on the private page as a password field,
-   so Muse treats a pasted link as a secret.
-6. `test/cleanerMuse.test.ts` grown into an end-to-end test like
-   `test/cleanerChatGpt.test.ts`, with Grok's, Claude's, and ChatGPT's tests
-   unchanged.
+- Helper `Muse` and the approval page "Connect Muse".
+- Private pages, which Muse opens in its own browser for the host. On Muse the
+  calendar-link field is a password field too.
+- Choice cards, as on Grok.
+- Upload replies that only describe the host's private page. Muse's safety
+  check refuses a tool that tells it to send, post, or fill a value.
+- The hourly task, connected with `save_alert_routine` and no values, with
+  ChatGPT's no-wake-up alert sink and 2.5-hour check warning, in Muse's words.
+- Photos as links. Muse opens them in its browser.
+
+`test/cleanerMuseDeployment.test.ts` drives it end to end, on one deployment
+and on the multi-tenant service. Grok's, Claude's, and ChatGPT's tests are
+unchanged.
 
 ### Live probe
 
@@ -132,9 +126,10 @@ sends no texts.
       registers as "Muse", the host types the invite code on the Cleaner Core
       page, and the connector connects (probe, 2026-10-29). The page still says
       Grok until the server has the Muse profile.
-- [ ] The sign-in page opens where the host can type the invite code, in the
-      app or in Muse's browser.
-- [ ] Muse saves `skills/cleaner-core` from the clone, and a new chat loads it.
+- [x] The sign-in opens Muse's own connect page, then the Cleaner Core page,
+      where the host types the invite code (probe, 2026-10-29).
+- [x] Muse saves `skills/cleaner-core` from the clone (probe, 2026-10-29).
+- [ ] A new Muse chat loads the saved skill.
 - [x] Muse shows choice cards for `options`, and asks one question at a time
       (probe, 2026-10-29).
 - [x] Muse's safety check refuses a tool reply that tells it to send a secret

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SettingName } from "../install/secretStore";
-import { ASSISTANT_PROFILES, CHATGPT_INSTRUCTIONS, CLAUDE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
+import { ASSISTANT_PROFILES, CHATGPT_INSTRUCTIONS, CLAUDE_INSTRUCTIONS, MUSE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
@@ -303,7 +303,7 @@ export async function handleCleanerMcpMessage(
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
       // A Claude deployment has its own words. A Grok deployment's stay exactly as they were.
-      instructions: { grok: GROK_INSTRUCTIONS, claude: CLAUDE_INSTRUCTIONS, chatgpt: CHATGPT_INSTRUCTIONS }[assistant],
+      instructions: { grok: GROK_INSTRUCTIONS, claude: CLAUDE_INSTRUCTIONS, chatgpt: CHATGPT_INSTRUCTIONS, muse: MUSE_INSTRUCTIONS }[assistant],
     });
   }
   if (method === "ping") return rpcResult(id, {});
