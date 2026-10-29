@@ -99,7 +99,7 @@ function overviewSVG(){
   s+=BOX(850,20,160,56,"Cleaner");
   s+=LAB(20,158,"REACH VIA");
   s+=BOX(150,128,180,64,"Texts","Sendblue · Twilio");
-  s+=BOX(350,128,300,64,"AI assistant","Grok · Claude · ChatGPT");
+  s+=BOX(350,128,300,64,"AI assistant","Grok · Claude · ChatGPT · Muse");
   s+=BOX(670,128,160,64,"Admin page","password");
   s+=BOX(850,128,160,64,"Texts","Twilio, one number per host");
   s+=ARROW(240,76,240,126,"SMS");
@@ -163,27 +163,27 @@ function tenantsSVG(){
 
 /* assistants side by side */
 function matrixSVG(){
-  const cols=["Grok Bot","Claude","ChatGPT"];
+  const cols=["Grok Bot","Claude","ChatGPT","Muse"];
   const rows=[
-    ["TOUR CORE",[["Team template","say \"Set up Tour Core\""],["Add the connector yourself","no setup guide yet",1],["Add the connector yourself","basic tools, no guide",1]]],
-    ["CLEANER CORE",[["Team template","shared service + invite code"],["Custom connector + skill","shared service + invite code"],["Custom connector","Developer Mode + invite code"]]],
-    ["SETUP GUIDE",[["Clones the repo","reads the bootstrap file"],["Connector's own instructions","+ optional skill"],["Connector's own instructions","no plugin or skill"]]],
-    ["SECRETS GO TO",[["Grok's secure card","posted from its computer"],["Cleaner Core's private page","one-time link, 10 min"],["Cleaner Core's private page","one-time link, 10 min"]]],
-    ["WAKE-UPS",[["Routines","hourly check + alert webhook"],["One scheduled task","made by hand, needs paid plan"],["One hourly task","ChatGPT makes it; can't be woken",1]]],
-    ["PLAN NEEDED",[["Not stated in the repo",""],["Pro, Max, Team or Enterprise","for the scheduled task"],["Plus or above","Plus tested; others not yet"]]]
+    ["TOUR CORE",[["Team template","say \"Set up Tour Core\""],["Add the connector yourself","no setup guide yet",1],["Add the connector yourself","basic tools, no guide",1],["Not set up","",1]]],
+    ["CLEANER CORE",[["Team template","shared service + invite code"],["Custom connector + skill","shared service + invite code"],["Custom connector","Developer Mode + invite code"],["Paste-in prompt (draft)","Muse makes the connector",1]]],
+    ["SETUP GUIDE",[["Clones the repo","reads the bootstrap file"],["Connector's instructions","+ optional skill"],["Connector's instructions","no plugin or skill"],["Saves a skill","from the repo clone"]]],
+    ["SECRETS GO TO",[["Grok's secure card","posted from its computer"],["Cleaner Core's page","one-time link, 10 min"],["Cleaner Core's page","one-time link, 10 min"],["Cleaner Core's page","typed in Muse's browser"]]],
+    ["WAKE-UPS",[["Routines","hourly check + webhook"],["One scheduled task","by hand, paid plan"],["One hourly task","can't be woken",1],["One recurring task","1–60 min; can't be woken",1]]],
+    ["PLAN NEEDED",[["Not stated in the repo",""],["Pro, Max, Team, Enterprise","for the scheduled task"],["Plus or above","Plus tested"],["US only for now","each check uses usage"]]]
   ];
-  const L=150,CW=280,GX=16,CH=70,GY=14,top=50,m=10;
-  const VW=L+3*CW+2*GX+m*2, VH=top+rows.length*(CH+GY)+30;
+  const L=130,CW=214,GX=12,CH=66,GY=12,top=50,m=10;
+  const VW=L+4*CW+3*GX+m*2, VH=top+rows.length*(CH+GY)+30;
   let s=`<svg xmlns="${NS}" viewBox="0 0 ${VW} ${VH}" role="img">`;
   cols.forEach((c,i)=>{const x=L+m+i*(CW+GX);s+=`<text x="${x+CW/2}" y="30" class="big" text-anchor="middle">${esc(c)}</text><line x1="${x}" y1="40" x2="${x+CW}" y2="40" stroke="#111" stroke-width="2"/>`;});
   rows.forEach((r,ri)=>{const y=top+ri*(CH+GY);
     s+=`<text x="${m}" y="${y+CH/2+4}" class="lab">${r[0]}</text>`;
     r[1].forEach((c,ci)=>{const x=L+m+ci*(CW+GX);
       s+=shape(x,y,CW,CH,{dashed:!!c[2]});
-      s+=`<text x="${x+CW/2}" y="${y+(c[1]?CH/2-3:CH/2+6)}" class="act" text-anchor="middle">${esc(c[0])}</text>`;
-      if(c[1])s+=`<text x="${x+CW/2}" y="${y+CH/2+17}" class="note" text-anchor="middle">${esc(c[1])}</text>`;});
+      s+=`<text x="${x+CW/2}" y="${y+(c[1]?CH/2-3:CH/2+5)}" class="act" style="font-size:13.5px" text-anchor="middle">${esc(c[0])}</text>`;
+      if(c[1])s+=`<text x="${x+CW/2}" y="${y+CH/2+15}" class="note" style="font-size:11.5px" text-anchor="middle">${esc(c[1])}</text>`;});
   });
-  s+=`<text x="${VW-m}" y="${VH-8}" class="note" text-anchor="end">All three reach the same Cleaner Core address. One host can connect several; alerts go to the primary chat.</text>`;
+  s+=`<text x="${VW-m}" y="${VH-8}" class="note" text-anchor="end">All four reach the same Cleaner Core address. One host can connect several; alerts go to the primary chat.</text>`;
   return s+"</svg>";
 }
 
@@ -206,20 +206,30 @@ const EVERY_BOOKING_CHATGPT={h:"After setup: every booking (no wake-ups, so the 
   {tool:"get_job_photos",t:"Photo links, compares to checklist"},
   {tool:"get_state → warning",t:"Hourly task stopped?",check:true,note:"warns after 2½ hours with no check"}
 ]};
-const CLEAN_GUIDE=(claude,gpt)=>[{h:"Setup",steps:[
-  gpt?{tool:"connector instructions",t:"Loads the guide from the connector",note:"no plugin or skill needed"}:claude?{tool:"connector instructions",t:"Loads the guide from the connector",note:"plus the skill, if added"}:{tool:"template.json",t:"Reads the one hosted address",note:"clone is for reading only"},
+const EVERY_BOOKING_MUSE={h:"After setup: every booking (no wake-ups; the recurring task checks as often as the host picked)",steps:[
+  {tool:"check_now",t:"Each recurring run, or when the host asks",note:"every 1–60 min"},
+  {tool:"confirm_times",t:"New booking: host confirms the times"},
+  {tool:"send_message",t:"\"Maria texted, draft a reply\"",note:"reads first, sends after a yes"},
+  {tool:"mark_guests_left",t:"Host says the guests left",check:true,note:"never guessed from the calendar"},
+  {tool:"retry_send",t:"Resends a text only if the host says yes"},
+  {tool:"hold_job",t:"Pauses a job if a message sounds wrong",note:"host decides"},
+  {tool:"get_job_photos",t:"Opens photo links in its browser",note:"compares to the checklist"},
+  {tool:"get_state → warning",t:"Recurring task stopped?",check:true,note:"warns after 2½ hours with no check"}
+]};
+const CLEAN_GUIDE=(claude,gpt,muse)=>[{h:"Setup",steps:[
+  muse?{tool:"skill: Cleaner Core",t:"Follows the skill it saved",note:"saved from the repo clone"}:gpt?{tool:"connector instructions",t:"Loads the guide from the connector",note:"no plugin or skill needed"}:claude?{tool:"connector instructions",t:"Loads the guide from the connector",note:"plus the skill, if added"}:{tool:"template.json",t:"Reads the one hosted address",note:"clone is for reading only"},
   {tool:"get_state",t:"Asks the service what's next",note:"never asks for the invite code"},
   {tool:"save_property",t:"Name, address, time zone, usual times"},
-  {tool:"save_sources",t:"Calendar links, one at a time",note:(claude||gpt)?"host types each on a private page":"posted to a one-time upload link"},
-  {tool:"save_people",t:"Host, cleaner, contacts, group chat",note:gpt?"group text recommended":"code to group or cleaner only"},
+  {tool:"save_sources",t:"Calendar links, one at a time",note:muse?"host types it in Muse's browser, or Muse finds it":(claude||gpt)?"host types each on a private page":"posted to a one-time upload link"},
+  {tool:"save_people",t:"Host, cleaner, contacts, group chat",note:(gpt||muse)?"group text recommended":"code to group or cleaner only"},
   {tool:"save_schedule",t:"Offer lead time, reminder, quiet hours"},
-  {tool:"save_door_code",t:"Locks first, then the code",note:(claude||gpt)?"private page, once, 10 min":"secure card → upload link"},
+  {tool:"save_door_code",t:"Locks first, then the code",note:muse?"private page in Muse's browser":(claude||gpt)?"private page, once, 10 min":"secure card → upload link"},
   {tool:"save_preferences",t:"Checklist, photos, supplies"},
-  {tool:"save_alert_routine",t:gpt?"Creates the hourly task in the chat":claude?"Walks host through the scheduled task":"Creates the Check and Alerts routines",check:true,note:"becomes primary if primary has none"},
+  {tool:"save_alert_routine",t:muse?"Creates the recurring task in the chat":gpt?"Creates the hourly task in the chat":claude?"Walks host through the scheduled task":"Creates the Check and Alerts routines",check:true,note:"becomes primary if primary has none"},
   {tool:"get_state → setup",t:"Reads the whole setup back"},
   {tool:"activate",t:"Host replies Activate",check:true,note:"refused if numbers not approved"},
   {tool:"confirm_times",t:"First booking's times",note:"always 24-hour HH:MM"}
-]},gpt?EVERY_BOOKING_CHATGPT:EVERY_BOOKING];
+]},muse?EVERY_BOOKING_MUSE:gpt?EVERY_BOOKING_CHATGPT:EVERY_BOOKING];
 
 const PAGES=[
   {id:"overview",nav:"Overview",title:"The whole system",sub:"Two services on Railway. Tour Core serves one landlord. Cleaner Core serves every host, each kept apart as a tenant.",svg:overviewSVG},
@@ -297,7 +307,7 @@ const PAGES=[
     {who:"AI",t:"Creates the check and alert routines"},
     {who:"Host",t:"Says Activate",dashed:true,note:"numbers still approved by hand"}
   ]},
-  {id:"assistants",nav:"Assistants compared",title:"Grok, Claude and ChatGPT side by side",sub:"How each assistant gets connected, and what it can do once connected.",svg:matrixSVG},
+  {id:"assistants",nav:"Assistants compared",title:"Grok, Claude, ChatGPT and Muse side by side",sub:"How each assistant gets connected, and what it can do once connected.",svg:matrixSVG},
   {id:"grok-setup",nav:"Setup with Grok",title:"Cleaner Core setup with Grok Bot",sub:"Through a team template. The host never leaves the chat except to type the invite code.",
   guide:{label:"Show the guide flow Grok follows (steps 6–8 in detail)",src:"CLEANER_CORE_BOOTSTRAP.md · cleaner-template/routines/",parts:CLEAN_GUIDE(false,false)},
   steps:[
@@ -333,6 +343,18 @@ const PAGES=[
     {who:"ChatGPT",t:"Asks the setup questions, one at a time",note:"secrets typed on Cleaner Core's own page"},
     {who:"ChatGPT",t:"Creates the hourly scheduled task",note:"nothing to paste; can't be woken"},
     {who:"Host",t:"Says Activate"}
+  ]},
+  {id:"muse-setup",nav:"Setup with Muse",title:"Cleaner Core setup with Muse",sub:"Draft. One paste-in prompt; Muse sets up the connector, the guide and the recurring task itself.",
+  guide:{label:"Show the guide flow Muse follows (steps 6–8 in detail)",src:"muse-template/skills/cleaner-core/SKILL.md · references/cleaner-core-task.md",parts:CLEAN_GUIDE(false,false,true)},
+  steps:[
+    {who:"Host",t:"Gets an invite code from Saad"},
+    {who:"Host",t:"Pastes the setup prompt into a new Muse chat"},
+    {who:"Muse",t:"Clones the repo, saves the guide as a skill",note:"reads only, never runs it"},
+    {who:"Muse",t:"Creates the Cleaner Core connector itself"},
+    {who:"Host",t:"Types the invite code, clicks Allow",check:true,note:"Muse never clicks Allow"},
+    {who:"Muse",t:"Asks the setup questions on choice cards",note:"secrets typed in Muse's own browser"},
+    {who:"Muse",t:"Creates the recurring task",note:"host picks every 1, 5, 15 or 60 min"},
+    {who:"Host",t:"Lets the connector run, says Activate",dashed:true,note:"draft: not yet used by a real host"}
   ]}
 ];
 
