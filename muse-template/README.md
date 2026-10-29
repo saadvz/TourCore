@@ -40,7 +40,7 @@ the chat.
 | Entry | Team template, or a paste-in prompt | Add the connector in settings | A paste-in prompt. Muse creates the connector itself |
 | Guide | Cloned `CLEANER_CORE_BOOTSTRAP.md` | The connector's instructions (and Claude's skill) | The `cleaner-core` skill Muse saves from the clone |
 | Questions with options | Choice cards | A short list | Choice cards, or a short list if Muse can't show one |
-| Door code | Grok's secure card, posted from its cloud computer | The host types it on Cleaner Core's private page from a link | Muse opens the private page in its own browser. It fills the code from its secure credential prompt, or the host types it into that browser |
+| Door code | Grok's secure card, posted from its cloud computer | The host types it on Cleaner Core's private page from a link | Muse opens the private page in its own browser and hands it to the host, who types the code there |
 | Calendar links | Grok's secure card | The host pastes it on the private page | The host picks: they have the link (as above), or Muse finds it on the booking site in its browser after the host signs in |
 | Routines | Check (scheduled) and Alerts (webhook) | Claude: hourly plus API trigger. ChatGPT: hourly only | One hourly recurring task. Nothing can wake it |
 | When the cleaner texts | The webhook wakes the bot | Claude: the API trigger. ChatGPT: the next hourly run | The host sees it in the group text right away. Muse reads it on the next hourly run, or at once when the host asks |
@@ -59,12 +59,14 @@ lands in the conversation, where the model reads it. So the door code, the
 calendar links, and the invite code never go in a card.
 
 For those, Muse uses its computer use. It opens Cleaner Core's one-time page
-in its own cloud browser, so the host never has to open a link. Muse's secure
-credential prompt is a system dialog outside the chat, and Muse keeps the real
-value out of the model and fills it in at the boundary. A password typed by
-the host into Muse's browser is handled the same way. The door-code field on
-Cleaner Core's page is already a password field
+in its own cloud browser and hands the browser to the host, who types the
+value there. Meta says a password the host types into Muse's browser is kept
+from the model like one on its login screen. The door-code field on Cleaner
+Core's page is already a password field
 ([`src/cleaner-core/uploadPage.ts`](../src/cleaner-core/uploadPage.ts)).
+Muse's secure credential prompt isn't used: it holds only a sign-in
+(username and password) or an API key, so it can't take a door code or a
+link (probe, 2026-10-29).
 
 **Find it for me.** Finding a calendar's export link is the hardest step for
 most hosts. When the host doesn't have it, Muse opens the booking site in its
@@ -141,9 +143,13 @@ sends no texts.
       follow it (probe, 2026-10-29). So Muse's upload replies must carry only
       data, `uploadUrl` and `expiresInMinutes`, with no instruction to send
       anything. What to do with the page comes from the skill and the host.
-- [ ] The secure credential prompt fills the private page's door-code field,
-      and the model never sees the value. If not, the host can type it into
-      Muse's browser.
+- [x] Muse's secure credential prompt takes only a username and password or
+      an API key, so it can't hold a door code or a link (probe, 2026-10-29).
+- [x] Muse opens the private page in its browser, but with the Grok profile
+      the page is "Not found", because a Grok link has no page. Expected until
+      the Muse profile has `privatePages: true` (probe, 2026-10-29).
+- [ ] With the Muse profile, the host types the door code and a calendar link
+      into the page in Muse's browser, and the model never sees the code.
 - [ ] Find it for me reaches an Airbnb or Guesty Lite export link after the
       host signs in.
 - [ ] Muse creates an hourly recurring task, and the task runs with the

@@ -45,8 +45,8 @@
       "credentialsTravelWithTemplate": false
     }
   ],
-  "secretsGoTo": "Cleaner Core's private page behind each one-time upload link, opened in Muse's own browser and filled from Muse's secure credential prompt or by the host in that browser. Never chat, a card, or a tool argument.",
-  "calendarLinks": "The host picks: I have the link (filled like any secret), or Find it for me (the host signs in on Muse's browser, Muse finds the listing's export link, and pastes it into the private page).",
+  "secretsGoTo": "Cleaner Core's private page behind each one-time upload link, opened in Muse's own browser and typed there by the host. Muse's secure credential store holds only sign-ins and API keys, so it isn't used. Never chat, a card, or a tool argument.",
+  "calendarLinks": "The host picks: I have the link (the host pastes it on the private page in Muse's browser), or Find it for me (the host signs in on Muse's browser, Muse finds the listing's export link, and pastes it into the private page).",
   "suggestedPrompts": ["Set up Cleaner Core", "Check my calendars", "Show the upcoming cleanings", "The guests have left", "Maria texted, draft a reply", "Show the last cleaning's photos"],
   "neverIncluded": [
     "the door code",
