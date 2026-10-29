@@ -25,7 +25,7 @@ import { multiTenantApp, type MultiTenantApp } from "./multiTenantHarness";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, startWiredApp, type WiredApp } from "./wiringProof";
 
 /**
- * A Cleaner Core deployment for Meta's Muse. It is ChatGPT's hourly task with Muse's words, choice
+ * A Cleaner Core deployment for Meta's Muse. It is ChatGPT's polled task, at the frequency the host picks, with Muse's words, choice
  * cards as on Grok, and upload replies that only describe the host's private page: the live probe
  * showed Muse's safety check refuses a tool that tells it to send a value somewhere.
  */
@@ -120,7 +120,7 @@ describe("Cleaner Core for Muse", () => {
     expect(assistantForRedirect("https://agent.meta.ai.example.com/callback")).toBe("grok");
     expect(redirectHostsFromEnv({ CLEANER_CORE_ASSISTANT: "muse" })).toEqual([...DEFAULT_REDIRECT_HOSTS, "agent.meta.ai"]);
     expect(redirectHostsFromEnv({ CLEANER_CORE_MULTI_TENANT: "1" })).toContain("agent.meta.ai");
-    expect(ASSISTANT_PROFILES.muse).toMatchObject({ helper: "Muse", privatePages: true, photoImages: false, hourlyTask: true });
+    expect(ASSISTANT_PROFILES.muse).toMatchObject({ helper: "Muse", privatePages: true, photoImages: false, polledTask: true });
   });
 
   it("gives Muse its own instructions: the skill, choice cards, the private page in its browser, and no wake-up", async () => {
@@ -146,7 +146,7 @@ describe("Cleaner Core for Muse", () => {
     expect(page).not.toMatch(/Grok|Claude|ChatGPT/);
   });
 
-  it("asks with choice cards, and says on the cleaner-only option that messages can take up to an hour", async () => {
+  it("asks with choice cards, and says on the cleaner-only option that messages wait for Muse's next check", async () => {
     const wired = await app();
     await toSources(wired);
     await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
@@ -156,7 +156,7 @@ describe("Cleaner Core for Muse", () => {
     expect(ask.step).toBe("people");
     expect(state.next).toBe(askNext(ask.tool));
     const group = ask.questions.find((question) => question.field === "groupChat");
-    expect(group?.options?.find((option) => option.value === "cleaner-only")?.label).toBe("Texts to the cleaner alone (with Muse, the cleaner's messages can take up to an hour to reach you)");
+    expect(group?.options?.find((option) => option.value === "cleaner-only")?.label).toBe("Texts to the cleaner alone (with Muse, the cleaner's messages reach you only at Muse's next check)");
   });
 
   it("never tells Muse to move a value: each upload reply and ask only describes the host's private page", async () => {
@@ -206,9 +206,16 @@ describe("Cleaner Core for Muse", () => {
   });
 });
 
-describe("Muse's hourly recurring task", () => {
-  it("is the prompt the template ships", () => {
+describe("Muse's recurring task", () => {
+  it("is the prompt the template ships, at the frequency the host picks", () => {
     expect(MUSE_TASK.prompt).toBe(MUSE_TASK_PROMPT);
+    // The host trades speed for Muse usage: the ask offers each frequency and says what a check costs.
+    for (const choice of ["every minute", "every 5 minutes", "every 15 minutes", "every hour"]) {
+      expect(MUSE_DESK_WORDING.routineAsk).toContain(choice);
+      expect(MUSE_TASK.schedule).toContain(choice);
+    }
+    expect(MUSE_DESK_WORDING.routineAsk).toContain("every check uses Muse's usage");
+    expect(MUSE_TASK_PROMPT).not.toMatch(/hour's|hourly/);
     const doc = read("muse-template/skills/cleaner-core/references/cleaner-core-task.md");
     expect(doc).toContain(["```text", MUSE_TASK_PROMPT, "```"].join("\n"));
   });
@@ -243,7 +250,7 @@ describe("Muse's hourly recurring task", () => {
     expect((await call(wired, "activate")).isError).toBe(false);
     wired.advance(3 * HOUR);
     const stale = (await call(wired, "get_state")).structured ?? {};
-    expect(String(stale.warning)).toMatch(/^No check has reached Cleaner Core since .+\. The hourly Muse recurring task may be paused or cancelled\./);
+    expect(String(stale.warning)).toMatch(/^No check has reached Cleaner Core since .+\. The Muse recurring task may be paused or cancelled\./);
     expect(stale.routine).toEqual(json(MUSE_TASK));
   });
 });

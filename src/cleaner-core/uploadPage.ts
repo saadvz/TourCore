@@ -80,7 +80,7 @@ export async function handleCleanerUploadPage(input: {
   const env = input.env();
   const missing = { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
   // A ChatGPT or Muse chat has no Fire URL or token, so it has no alert page.
-  const noPage = (assistant: CleanerAssistant | undefined) => !assistant || !ASSISTANT_PROFILES[assistant].privatePages || (input.kind === "alert-routine" && ASSISTANT_PROFILES[assistant].hourlyTask);
+  const noPage = (assistant: CleanerAssistant | undefined) => !assistant || !ASSISTANT_PROFILES[assistant].privatePages || (input.kind === "alert-routine" && ASSISTANT_PROFILES[assistant].polledTask);
   if (!cleanerCoreEnabled(env) || (!input.multiTenant && noPage(cleanerAssistant(env)))) return missing;
   const desk = liveDeskFor(input.root, input.env, input.now);
   const html = (status: number, body: string) => ({ status, body, headers: { "Content-Type": "text/html; charset=utf-8", ...HEADERS } });

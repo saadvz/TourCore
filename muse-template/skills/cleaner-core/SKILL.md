@@ -1,6 +1,6 @@
 ---
 name: cleaner-core
-description: Set up and run Cleaner Core, the cleaning scheduler for a short-term rental, through the Cleaner Core custom connector. Use when the host says "set up Cleaner Core", "check my calendars", "the guests have left", "text the cleaner", asks about upcoming cleanings or the last cleaning's photos, or when the hourly Cleaner Core task runs.
+description: Set up and run Cleaner Core, the cleaning scheduler for a short-term rental, through the Cleaner Core custom connector. Use when the host says "set up Cleaner Core", "check my calendars", "the guests have left", "text the cleaner", asks about upcoming cleanings or the last cleaning's photos, or when the Cleaner Core recurring task runs.
 ---
 
 # Cleaner Core
@@ -66,7 +66,7 @@ you never ask for the invite code in chat. If the page says the code is wrong,
 expired, or already used, tell the host to ask Saad for a new one.
 
 Then, in **Settings → Connectors → Cleaner Core**, ask the host to let Muse use
-Cleaner Core without asking each time. The hourly task runs with nobody
+Cleaner Core without asking each time. The recurring task runs with nobody
 watching, so an approval prompt would stop it. Cleaner Core asks the host
 itself before anything that matters: the door code, a text, a pause, a reset.
 
@@ -127,7 +127,7 @@ with `choice: "cleaners"`, which picks scheduling cleaners.
    contacts, and the group chat choice. Cleaner Core can't wake you when the
    cleaner texts, so the group text is how the host hears from the cleaner
    right away. When you show the group chat options, say on the cleaner-only
-   one that the cleaner's messages can take up to an hour to reach the host.
+   one that the cleaner's messages reach the host only at your next check.
    With contacts in the group, also `doorCodeTo`: `group` or `cleaner`. Ask
    the host which.
 5. Schedule: `save_schedule`. How far ahead the cleaner is offered each
@@ -139,11 +139,14 @@ with `choice: "cleaners"`, which picks scheduling cleaners.
    private page. Then call `get_state` to confirm.
 7. Preferences: `save_preferences`. The checklist, photos, supply notes, and
    other instructions.
-8. Hourly task: create the **Cleaner Core** recurring task yourself, from
-   [`references/cleaner-core-task.md`](references/cleaner-core-task.md): every hour, a few minutes
-   past the hour, with its prompt word for word. Tell the host it checks once
-   an hour, because Cleaner Core can't wake Muse. Then call
-   `save_alert_routine` with no arguments to connect it, and call `get_state`.
+8. Recurring task: Cleaner Core can't wake you, so a recurring task checks.
+   Ask the host how often, on a choice card: every minute, every 5 minutes,
+   every 15 minutes, or every hour. Say a cleaner's text reaches you at the
+   next check, and every check uses Muse's usage. Then create the **Cleaner
+   Core** recurring task yourself at that frequency, from
+   [`references/cleaner-core-task.md`](references/cleaner-core-task.md), with
+   its prompt word for word. Then call `save_alert_routine` with no arguments
+   to connect it, and call `get_state`.
    Activate waits until the task is connected.
 9. Review and Activate: summarize `setup` in your own words. When the host
    replies Activate, call `activate`. Pass Google Calendar's events when the
@@ -196,12 +199,12 @@ all of them. If the host picks that, call `confirm_times` with those times and
 day the schedule sets.
 
 When `get_state` returns `warning`, tell the host first. A warning that no
-check has come in means the hourly task may be paused or deleted: ask the host
+check has come in means the recurring task may be paused or deleted: ask the host
 to turn it back on, or create it again.
 
 ## Every booking
 
-Call `check_now` when the hourly task runs or the host says "check my
+Call `check_now` when the recurring task runs or the host says "check my
 calendars". When the host uses Google Calendar, read only that calendar first
 with the Google Calendar connector, from 7 days ago to 60 days ahead, and pass
 the events as `googleEvents`. Never send an empty list for a failed read. Ask

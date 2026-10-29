@@ -618,7 +618,7 @@ export class LiveDesk {
         // A Claude deployment's routine is a scheduled task's API trigger, which takes { text }.
         if (this.primaryAssistant() === "claude") return new ClaudeRoutineFireSink(settings, options);
         // A ChatGPT or Muse task can't be woken. Its hourly run reads everything with check_now.
-        if (this.hourlyTask(this.primaryAssistant())) return new ChatGptTaskSink(() => this.routineReady());
+        if (this.polledTask(this.primaryAssistant())) return new ChatGptTaskSink(() => this.routineReady());
         return new GrokRoutineWebhookSink(settings, options);
       },
       { now: () => this.now().getTime() },
@@ -646,7 +646,7 @@ export class LiveDesk {
     const url = typeof input.url === "string" ? input.url.trim() : "";
     const token = typeof input.token === "string" ? input.token.trim() : "";
     // A ChatGPT or Muse task has no address or key: the chat made it, and no values connects it.
-    if (this.hourlyTask(this.assistant())) return url || token ? this.fail(this.words().routineNeeded) : this.connectTask();
+    if (this.polledTask(this.assistant())) return url || token ? this.fail(this.words().routineNeeded) : this.connectTask();
     // A Grok Bot's secure card can't fill a tool argument, so no values means: make an upload link.
     if (!url && !token) return this.issueUpload(pinKey);
     if (this.routineRefused(url, token, pinKey)) return this.fail(this.words().routineNeeded);
@@ -2394,7 +2394,7 @@ export class LiveDesk {
     // On a multi-tenant service, only the primary connection's own routine counts.
     const primary = this.env().CLEANER_CORE_PRIMARY_CONNECTION?.trim();
     if (primary && !(this.file.routineConnections ?? []).includes(primary)) return false;
-    if (this.hourlyTask(this.primaryAssistant())) return Boolean(this.file.routineConnected);
+    if (this.polledTask(this.primaryAssistant())) return Boolean(this.file.routineConnected);
     return Boolean(this.file.routineConnected && this.env().CLEANER_CORE_ROUTINE_URL?.trim());
   }
 
@@ -2403,14 +2403,14 @@ export class LiveDesk {
     return { grok: undefined, claude: CLAUDE_TASK, chatgpt: CHATGPT_TASK, muse: MUSE_TASK }[this.assistant()];
   }
 
-  /** True for a chat whose one hourly task nothing outside it can wake: ChatGPT and Muse. */
-  private hourlyTask(assistant: CleanerAssistant): boolean {
-    return ASSISTANT_PROFILES[assistant].hourlyTask;
+  /** True for a chat whose one recurring task nothing outside it can wake: ChatGPT and Muse. */
+  private polledTask(assistant: CleanerAssistant): boolean {
+    return ASSISTANT_PROFILES[assistant].polledTask;
   }
 
   /** Notes when a check ran, on a ChatGPT or Muse deployment only. The caller persists. */
   private noteCheck(): void {
-    if (this.hourlyTask(this.primaryAssistant())) this.file.lastCheckAt = this.now().toISOString();
+    if (this.polledTask(this.primaryAssistant())) this.file.lastCheckAt = this.now().toISOString();
   }
 
   /**
@@ -2418,7 +2418,7 @@ export class LiveDesk {
    * hourly run. The task can pause itself, and nothing else would tell the host.
    */
   private taskWarning(): string | undefined {
-    if (!this.hourlyTask(this.primaryAssistant()) || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
+    if (!this.polledTask(this.primaryAssistant()) || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
     const last = Date.parse(this.file.lastCheckAt);
     if (!Number.isFinite(last) || this.now().getTime() - last <= CHATGPT_CHECK_GAP_MS) return undefined;
     const when = formatWhen(this.file.lastCheckAt, this.file.timeZone ?? "UTC");

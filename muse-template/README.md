@@ -11,7 +11,7 @@ service.
 Host ─► Muse ─► hosted Cleaner Core (/mcp/cleaner-core) ─► the cleaner's phone
          │            ▲
          │            └─ private pages, opened and filled in Muse's own browser
-         └─ Muse's Google Calendar connector, an hourly recurring task, and its browser
+         └─ Muse's Google Calendar connector, a recurring task, and its browser
 ```
 
 **Status: draft.** The guide, the task, and the server's Muse profile are
@@ -25,12 +25,12 @@ before a host uses it. See [Before a host uses this](#before-a-host-uses-this).
 2. When the Cleaner Core page opens, type the invite code from Saad and click
    **Allow**.
 3. In **Settings → Connectors → Cleaner Core**, let Muse use it without asking
-   each time, so the hourly task can run.
+   each time, so the recurring task can run.
 
 Muse has no shareable bot templates like Grok's, so the paste-in prompt is the
 way in. Muse clones the repository on its cloud computer only to save
 [`skills/cleaner-core`](skills/cleaner-core/SKILL.md) as a skill, so later
-chats and the hourly task already know the guide. Everything else happens in
+chats and the recurring task already know the guide. Everything else happens in
 the chat.
 
 ## What's different from the other chats
@@ -42,8 +42,8 @@ the chat.
 | Questions with options | Choice cards | A short list | Choice cards, or a short list if Muse can't show one |
 | Door code | Grok's secure card, posted from its cloud computer | The host types it on Cleaner Core's private page from a link | Muse opens the private page in its own browser and hands it to the host, who types the code there |
 | Calendar links | Grok's secure card | The host pastes it on the private page | The host picks: they have the link (as above), or Muse finds it on the booking site in its browser after the host signs in |
-| Routines | Check (scheduled) and Alerts (webhook) | Claude: hourly plus API trigger. ChatGPT: hourly only | One hourly recurring task. Nothing can wake it |
-| When the cleaner texts | The webhook wakes the bot | Claude: the API trigger. ChatGPT: the next hourly run | The host sees it in the group text right away. Muse reads it on the next hourly run, or at once when the host asks |
+| Routines | Check (scheduled) and Alerts (webhook) | Claude: hourly plus API trigger. ChatGPT: hourly only | One recurring task, as often as the host picks (every minute to hourly). Nothing can wake it |
+| When the cleaner texts | The webhook wakes the bot | Claude: the API trigger. ChatGPT: the next hourly run | The host sees it in the group text right away. Muse reads it at its next check, or at once when the host asks |
 | Cleaning photos | Signed links | Claude: images. ChatGPT: links | Muse opens the signed links in its browser and looks at them |
 | Texts to the host | "Tell your Grok Bot…" | "Tell Claude…", "Tell ChatGPT…" | "Tell Muse…" |
 
@@ -84,7 +84,7 @@ knows, and never messages anyone itself. The skill spells this out under
 
 As of October 2026, Muse is US-only (some reports add Canada) and adults-only.
 It needs a payment card even on the free tier, and every run counts against
-usage, including the hourly check. Custom connectors and recurring tasks are
+usage, including every check, so the host picks how often it runs. Custom connectors and recurring tasks are
 reported on the web, the iOS and Android apps, and WhatsApp. That still needs
 checking for this connector.
 
@@ -103,7 +103,7 @@ multi-tenant service allows that host with no extra config, so
 - Choice cards, as on Grok.
 - Upload replies that only describe the host's private page. Muse's safety
   check refuses a tool that tells it to send, post, or fill a value.
-- The hourly task, connected with `save_alert_routine` and no values, with
+- The recurring task, at the frequency the host picks, connected with `save_alert_routine` and no values, with
   ChatGPT's no-wake-up alert sink and 2.5-hour check warning, in Muse's words.
 - Photos as links. Muse opens them in its browser.
 
@@ -164,7 +164,8 @@ sends no texts.
 
 ## What Muse does itself
 
-- Creates the Cleaner Core connector and the hourly task from the chat.
+- Creates the Cleaner Core connector and the recurring task from the chat, at
+  the frequency the host picks.
 - Fills each private page in its own browser, and confirms with `get_state`.
 - Finds a calendar's export link when the host doesn't have it.
 - Reads only the Google calendar the host says holds the bookings.
@@ -186,5 +187,5 @@ outside the 555 test range, or a door code shows up here.
 | --- | --- |
 | [`SETUP_PROMPT.md`](SETUP_PROMPT.md) | The paste-in prompt, pinned by `test/cleanerMuse.test.ts` |
 | [`skills/cleaner-core/SKILL.md`](skills/cleaner-core/SKILL.md) | The guide Muse saves as a skill: connect, private pages, calendar links, setup order, every booking, messages, the browser's limits, and rules |
-| [`skills/cleaner-core/references/cleaner-core-task.md`](skills/cleaner-core/references/cleaner-core-task.md) | The hourly recurring task: how Muse makes it and its prompt |
+| [`skills/cleaner-core/references/cleaner-core-task.md`](skills/cleaner-core/references/cleaner-core-task.md) | The recurring task: how Muse makes it and its prompt |
 | [`template.json`](template.json) | Manifest: the deployment, the connectors, the task, and what's never included |
