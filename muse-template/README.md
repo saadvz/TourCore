@@ -124,8 +124,10 @@ sends no texts.
       from a spec with our discovered addresses and registers itself. On the
       first try it mistyped the registration address, so the skill now lists
       the exact addresses.
-- [ ] With `agent.meta.ai` allowed, the registration goes through and the
-      Cleaner Core invite-code page opens.
+- [x] With `agent.meta.ai` in `TOURCORE_OAUTH_REDIRECT_HOSTS`, Muse
+      registers as "Muse", the host types the invite code on the Cleaner Core
+      page, and the connector connects (probe, 2026-10-29). The page still says
+      Grok until the server has the Muse profile.
 - [ ] The sign-in page opens where the host can type the invite code, in the
       app or in Muse's browser.
 - [ ] Muse saves `skills/cleaner-core` from the clone, and a new chat loads it.
