@@ -42,7 +42,19 @@ create it yourself from this chat:
 - URL: `https://tourcore-production-8b80.up.railway.app/mcp/cleaner-core`. If
   `muse-template/template.json` in https://github.com/saadvz/TourCore names a
   different `hostedCleanerCoreUrl`, use that one.
-- Auth: OAuth
+- Auth: OAuth, with no client secret (`token_endpoint_auth_method: none`)
+  and scope `cleanercore.operator`
+
+Copy these OAuth addresses exactly. Never build or shorten them. Each starts
+with the service address above, then:
+
+- registration: `/register`
+- authorization: `/authorize`, with `resource` set to the connector URL
+- token: `/token`
+- revoke: `/revoke`
+
+Before you hand the host the sign-in, check that every address starts with
+the full service address. If one doesn't, fix it first.
 
 If you can't create it from the chat, ask the host to add it once in
 **Settings → Connectors → Add custom connector** with the same name and URL.

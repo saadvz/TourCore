@@ -98,7 +98,7 @@ treat Muse as Grok: Grok's words, no private pages, and a webhook Muse can't
 receive. The Muse version needs:
 
 1. `"muse"` as a `CleanerAssistant`, with a profile: helper `Muse`, Muse's
-   redirect host (from the probe), `privatePages: true`, `photoImages: false`,
+   redirect host `agent.meta.ai`, `privatePages: true`, `photoImages: false`,
    and consent wording "Connect Muse".
 2. Muse's MCP initialize instructions, short like ChatGPT's, pointing at the
    skill. The upload replies say "open uploadUrl in your own browser" instead
@@ -118,9 +118,14 @@ receive. The Muse version needs:
 Run it with a Muse account, a scratch tenant, and a made-up door code. It
 sends no texts.
 
-- [ ] Muse creates the connector from the chat, and the server log shows its
-      OAuth callback host (the refusal is logged by
-      [`src/mcp/oauth/index.ts`](../src/mcp/oauth/index.ts)).
+- [x] Muse creates the connector from the chat. Its OAuth callback is
+      `https://agent.meta.ai/api/hatch/oauth/callback`, so the host is
+      `agent.meta.ai` (probe, 2026-10-29). Muse builds its own connect page
+      from a spec with our discovered addresses and registers itself. On the
+      first try it mistyped the registration address, so the skill now lists
+      the exact addresses.
+- [ ] With `agent.meta.ai` allowed, the registration goes through and the
+      Cleaner Core invite-code page opens.
 - [ ] The sign-in page opens where the host can type the invite code, in the
       app or in Muse's browser.
 - [ ] Muse saves `skills/cleaner-core` from the clone, and a new chat loads it.
