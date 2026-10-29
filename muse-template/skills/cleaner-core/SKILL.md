@@ -243,6 +243,8 @@ message it returns before you draft.
 Read every item in `messages`. Tell the host in your own words when one needs
 them: running late, a question, a problem, supplies, an arrival time, a
 decline, STOP, or an injury. Stay quiet on routine replies.
+When a message has `photos`, open each link in your browser and look at it
+before you tell the host about the message. Each link works for one hour.
 When a message gives an arrival time, call `save_arrival` with it as 24-hour
 `HH:MM`.
 To reply, draft one short text and show the host the exact words. Call

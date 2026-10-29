@@ -143,16 +143,24 @@ sends no texts.
 - [x] Muse opens the private page in its browser, but with the Grok profile
       the page is "Not found", because a Grok link has no page. Expected until
       the Muse profile has `privatePages: true` (probe, 2026-10-29).
-- [ ] With the Muse profile, the host types the door code and a calendar link
-      into the page in Muse's browser, and the model never sees the code.
+- [x] With the Muse profile deployed and Muse reconnected, setup ran to the
+      end: the host typed the calendar link and the door code into the private
+      page in Muse's browser, and the cleaner's texts and a group reply went
+      through (re-test, 2026-10-29).
+- [ ] Muse never sees what the host types on the private page. Meta says so;
+      not checked yet.
 - [ ] Find it for me reaches an Airbnb or Guesty Lite export link after the
       host signs in.
-- [ ] Muse creates an hourly recurring task, and the task runs with the
-      connector set to run without asking.
-- [ ] Muse opens a signed photo link in its browser and describes the photo.
-
-Update this README and the skill with what the probe finds, then build the
-server work.
+- [x] Muse creates the recurring task from the chat, and it can run as often
+      as every minute, so the cleaner's texts reach Muse in about a minute
+      instead of an hour. Each run uses Muse's usage meter (re-test,
+      2026-10-29).
+- [x] A photo the cleaner sent before a cleaning reached Muse only as
+      `[photo]`, in every chat: Cleaner Core kept photos only during a
+      cleaning. Fixed: a photo from the cleaner or a contact is now kept with
+      its message for 7 days, and `check_now` links it (re-test, 2026-10-29).
+- [ ] Muse opens a message's photo link in its browser and describes the
+      photo.
 
 ## What Muse does itself
 
