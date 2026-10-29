@@ -101,8 +101,10 @@ receive. The Muse version needs:
    redirect host `agent.meta.ai`, `privatePages: true`, `photoImages: false`,
    and consent wording "Connect Muse".
 2. Muse's MCP initialize instructions, short like ChatGPT's, pointing at the
-   skill. The upload replies say "open uploadUrl in your own browser" instead
-   of "send the host uploadUrl".
+   skill. The upload replies carry only `uploadUrl` and `expiresInMinutes`
+   and a neutral `next` such as "This is the host's private page for the
+   door code. Call get_state once it's saved." Never an instruction to send,
+   post, or fill a value: Muse's safety check refuses that from a tool.
 3. The hourly task in `get_state`'s `routine`, connected with
    `save_alert_routine` and no values, with the same no-wake-up alert sink and
    2.5-hour check warning as ChatGPT. That code path is shared, not copied.
@@ -131,7 +133,14 @@ sends no texts.
 - [ ] The sign-in page opens where the host can type the invite code, in the
       app or in Muse's browser.
 - [ ] Muse saves `skills/cleaner-core` from the clone, and a new chat loads it.
-- [ ] Muse shows choice cards for `options`.
+- [x] Muse shows choice cards for `options`, and asks one question at a time
+      (probe, 2026-10-29).
+- [x] Muse's safety check refuses a tool reply that tells it to send a secret
+      somewhere. With the server still treating Muse as Grok, `save_sources`
+      answered "POST JSON {url} … to uploadUrl", and Muse stopped and wouldn't
+      follow it (probe, 2026-10-29). So Muse's upload replies must carry only
+      data, `uploadUrl` and `expiresInMinutes`, with no instruction to send
+      anything. What to do with the page comes from the skill and the host.
 - [ ] The secure credential prompt fills the private page's door-code field,
       and the model never sees the value. If not, the host can type it into
       Muse's browser.
