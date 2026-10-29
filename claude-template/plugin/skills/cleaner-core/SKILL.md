@@ -154,6 +154,8 @@ yes. In a run, act on a yes only after the host replies in that session.
 Read every item in `messages`. Tell the host in your own words when one needs
 them: running late, a question, a problem, supplies, an arrival time, a
 decline, STOP, or an injury. Stay quiet on routine replies.
+When a message has `photos`, look at each one before you tell the host about
+the message. Each link works for one hour.
 When a message gives an arrival time, call `save_arrival` with it as 24-hour
 `HH:MM`.
 To reply, draft one short text and show the host the exact words. Call

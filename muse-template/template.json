@@ -28,7 +28,7 @@
       "transport": "remote streamable HTTP",
       "auth": "OAuth 2.1 discovered from the Cleaner Core service. The host types the invite code from Saad on the Cleaner Core page and clicks Allow. Muse cannot approve itself.",
       "where": "Muse creates it from the chat. Fallback: Settings → Connectors → Add custom connector.",
-      "approvals": "Set to run without asking each time, so the hourly task doesn't stop at a prompt nobody sees. Cleaner Core asks the host itself before the door code, a text, a pause, or a reset."
+      "approvals": "Set to run without asking each time, so the recurring task doesn't stop at a prompt nobody sees. Cleaner Core asks the host itself before the door code, a text, a pause, or a reset."
     },
     {
       "name": "Google Calendar",
@@ -41,7 +41,7 @@
       "name": "Cleaner Core",
       "doc": "skills/cleaner-core/references/cleaner-core-task.md",
       "where": "A Muse recurring task, created by Muse in the setup chat",
-      "triggers": ["schedule (hourly)"],
+      "triggers": ["schedule (the host picks: every minute, 5 minutes, 15 minutes, or hour)"],
       "credentialsTravelWithTemplate": false
     }
   ],

@@ -17,6 +17,8 @@ export const MAX_JOB_PHOTOS = 10;
 export const PHOTO_LINK_MS = 60 * 60_000;
 /** Photos are deleted this long after the cleaning is done. */
 export const PHOTO_KEEP_MS = 30 * 24 * 60 * 60_000;
+/** A photo that came with a message is deleted this long after it came in. */
+export const MESSAGE_PHOTO_KEEP_MS = 7 * 24 * 60 * 60_000;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_MS = 10_000;
 const MAX_REDIRECTS = 3;
@@ -222,6 +224,33 @@ export function storePhoto(root: string, jobId: string, photo: { bytes: Buffer; 
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${n}.${photo.ext}`), photo.bytes);
   return true;
+}
+
+/** Downloads one MMS's photos side by side, up to 10, in order. A photo that fails is left out. */
+export async function downloadPhotos(media: readonly InboundMedia[], fetchImpl: PhotoFetch, env: NodeJS.ProcessEnv): Promise<{ bytes: Buffer; ext: string }[]> {
+  const downloads = await Promise.all(media.slice(0, MAX_JOB_PHOTOS).map((item) => downloadPhoto(item, fetchImpl, env)));
+  return downloads.filter((photo): photo is { bytes: Buffer; ext: string } => Boolean(photo));
+}
+
+/** Keeps downloaded photos as the job's next numbers, while there is room. Returns how many were kept. */
+export function storePhotos(root: string, jobId: string, photos: readonly { bytes: Buffer; ext: string }[]): number {
+  let saved = 0;
+  for (const photo of photos) if (storePhoto(root, jobId, photo)) saved += 1;
+  return saved;
+}
+
+/**
+ * The folder key for the photos that came with one kept message. It goes through photoFolder like a
+ * job id, so its folder and links are letters only, and photoLinks and servePhoto work unchanged.
+ */
+export function messagePhotoId(messageId: string): string {
+  return `message:${messageId}`;
+}
+
+/** Deletes the photos kept under one id, a job's or a message's. */
+export function dropPhotos(root: string, id: string): void {
+  const dir = join(photosDir(root), photoFolder(id));
+  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
 }
 
 /** Downloads and keeps one MMS photo for a job. True when it was saved. */
