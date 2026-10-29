@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { ChatGptTaskSink, ClaudeRoutineFireSink, cleaningUpdateEvent, GrokRoutineWebhookSink, testEvent } from "../alerts/operatorEvents";
-import { CHATGPT_CHECK_GAP_MS, CHATGPT_DESK_WORDING, CHATGPT_TASK, CHATGPT_TASK_CONNECTED, chatGptAsk, chatGptTaskWarning, CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, type CleanerAssistant, type DeskWording } from "./assistant";
+import { ASSISTANT_PROFILES, CHATGPT_CHECK_GAP_MS, CHATGPT_DESK_WORDING, CHATGPT_TASK, CHATGPT_TASK_CONNECTED, chatGptAsk, CLAUDE_DESK_WORDING, CLAUDE_FIRE_URL, CLAUDE_IMAGE_TYPES, CLAUDE_MAX_IMAGE_BYTES, CLAUDE_MAX_IMAGES, CLAUDE_TASK, claudeAsk, claudeAskNext, cleanerAssistant, GROK_HELPER, MUSE_DESK_WORDING, MUSE_TASK, MUSE_TASK_CONNECTED, museAsk, taskWarning, type CleanerAssistant, type DeskWording } from "./assistant";
 import { currentCaller, withCaller, type CleanerCaller } from "./callerContext";
 import { OperatorEventOutbox } from "../alerts/outbox";
 import { parsePhone } from "../core/phone";
@@ -15,7 +15,7 @@ import { formatWhen, zonedInstant } from "./calendar";
 import { joinSplitDigits, openCleanerCore, redactDigitRuns, SAFETY, type CleanerCore, type CleanerText, type MessageHandled, type ReceiveResult, type SourceClaim, type TextKind } from "./core";
 import { groupChatEnabled } from "./flag";
 import { publicBaseUrl } from "../messaging/publicUrl";
-import { CLEANER_PHOTO_PREFIX, cleanerPhotoFetch, photoCount, photoKey, photoLinks, prunePhotos, savePhotos, servePhoto, type InboundMedia } from "./photos";
+import { CLEANER_PHOTO_PREFIX, cleanerPhotoFetch, downloadPhotos, dropPhotos, MESSAGE_PHOTO_KEEP_MS, messagePhotoId, photoCount, photoKey, photoLinks, prunePhotos, servePhoto, storePhotos, type InboundMedia } from "./photos";
 import { calendarUrlAllowed, readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { allTimesAsk, askNext, DOOR_CODE_STEP, moreSourcesAsk, peopleAsk, PREFERENCES_STEP, propertyAsk, SCHEDULE_STEP, sourcesAsk, START_ASK, type SetupAsk } from "./setupAsk";
 import { cleanerOptOutHold, hostStartReply, hostStopReply, isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
@@ -92,7 +92,7 @@ const MASKED_LINK =
 const UPLOAD_MINUTES = 10;
 const UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "token": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the webhook address and key you already hold. Never put them in chat or in a tool argument. Then call get_state to confirm.';
-/** A Grok deployment's wording. A Claude deployment uses CLAUDE_DESK_WORDING and a ChatGPT one CHATGPT_DESK_WORDING. */
+/** A Grok deployment's wording. Claude, ChatGPT, and Muse deployments use their own DeskWording. */
 const GROK_DESK_WORDING: DeskWording = {
   helper: GROK_HELPER,
   pinFailed: PIN_FAILED,
@@ -226,6 +226,10 @@ interface Message {
   handled: MessageHandled;
   /** Set when the text came in the group. */
   channel?: "group";
+  /** How many of its photos were kept, for check_now's links. Never returned as is. */
+  photos?: number;
+  /** When its photos were kept, so they are deleted 7 days later. */
+  photosAt?: string;
 }
 
 /** An inbound text or MMS. */
@@ -613,8 +617,8 @@ export class LiveDesk {
         const options = alertFetch ? { fetch: alertFetch } : {};
         // A Claude deployment's routine is a scheduled task's API trigger, which takes { text }.
         if (this.primaryAssistant() === "claude") return new ClaudeRoutineFireSink(settings, options);
-        // A ChatGPT task can't be woken. Its hourly run reads everything with check_now.
-        if (this.primaryAssistant() === "chatgpt") return new ChatGptTaskSink(() => this.routineReady());
+        // A ChatGPT or Muse task can't be woken. Its hourly run reads everything with check_now.
+        if (this.polledTask(this.primaryAssistant())) return new ChatGptTaskSink(() => this.routineReady());
         return new GrokRoutineWebhookSink(settings, options);
       },
       { now: () => this.now().getTime() },
@@ -641,8 +645,8 @@ export class LiveDesk {
   ): ToolReply {
     const url = typeof input.url === "string" ? input.url.trim() : "";
     const token = typeof input.token === "string" ? input.token.trim() : "";
-    // A ChatGPT task has no address or key: ChatGPT made it in the chat, and no values connects it.
-    if (this.assistant() === "chatgpt") return url || token ? this.fail(CHATGPT_DESK_WORDING.routineNeeded) : this.connectTask();
+    // A ChatGPT or Muse task has no address or key: the chat made it, and no values connects it.
+    if (this.polledTask(this.assistant())) return url || token ? this.fail(this.words().routineNeeded) : this.connectTask();
     // A Grok Bot's secure card can't fill a tool argument, so no values means: make an upload link.
     if (!url && !token) return this.issueUpload(pinKey);
     if (this.routineRefused(url, token, pinKey)) return this.fail(this.words().routineNeeded);
@@ -650,13 +654,14 @@ export class LiveDesk {
     return this.reply({ next: this.cleaningState().next === REVIEW_ASK ? ROUTINE_SAVED_IN_SETUP : ROUTINE_SAVED });
   }
 
-  /** Connects a ChatGPT deployment's hourly task. There is no test wake-up: nothing can wake it. */
+  /** Connects a ChatGPT or Muse deployment's hourly task. There is no test wake-up: nothing can wake it. */
   private connectTask(): ToolReply {
     this.file.routineConnected = true;
     this.noteRoutineConnection();
     this.persist();
     const inSetup = this.cleaningState().next === REVIEW_ASK;
-    return this.reply({ next: inSetup ? `${CHATGPT_TASK_CONNECTED} Then call get_state for the review.` : CHATGPT_TASK_CONNECTED });
+    const connected = this.assistant() === "muse" ? MUSE_TASK_CONNECTED : CHATGPT_TASK_CONNECTED;
+    return this.reply({ next: inSetup ? `${connected} Then call get_state for the review.` : connected });
   }
 
   /**
@@ -1364,11 +1369,11 @@ export class LiveDesk {
    * Re-reads the saved calendars, sends reminders that are due, and returns the host alerts
    * that are new since the last call. Google events are applied only when Grok passes them.
    */
-  checkNow(input: { googleEvents?: GoogleEventList } = {}): Promise<ToolReply> {
-    return this.serial(() => this.checkNowSerial(input));
+  checkNow(input: { googleEvents?: GoogleEventList } = {}, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): Promise<ToolReply> {
+    return this.serial(() => this.checkNowSerial(input, save));
   }
 
-  private async checkNowSerial(input: { googleEvents?: GoogleEventList }): Promise<ToolReply> {
+  private async checkNowSerial(input: { googleEvents?: GoogleEventList }, save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): Promise<ToolReply> {
     this.resume();
     const engine = this.engine;
     // The routines are created before Activate, so the Check routine can wake first.
@@ -1391,11 +1396,12 @@ export class LiveDesk {
     const finished = jobs.filter((job) => job.doneAt && !shownDone.has(job.id));
     this.file.completedShown = [...shownDone, ...finished.map((job) => job.id)];
     prunePhotos(this.root, jobs, this.now());
+    this.pruneMessagePhotos();
     this.noteCheck();
     this.persist();
     return this.reply({
       alerts: fresh.map((note) => note.body),
-      messages: newMessages,
+      messages: this.messagesOut(newMessages, save),
       ...(finished.length > 0 ? { completed: finished.map((job) => this.completedFacts(job)) } : {}),
       turns: this.turns(),
       ...(this.needsTimes(engine) ? { needsTimes: true as const } : {}),
@@ -1442,7 +1448,7 @@ export class LiveDesk {
     const turns = this.turns();
     this.noteCheck();
     this.persist();
-    // Claude and ChatGPT follow this reply, not get_state, so there the scheduled task comes first, as in get_state.
+    // Claude, ChatGPT, and Muse follow this reply, not get_state, so there the scheduled task comes first, as in get_state.
     const task = this.task();
     if (task && !this.routineReady()) return this.reply({ next: this.words().routineAsk, routine: task, turns });
     return this.reply({
@@ -2142,8 +2148,11 @@ export class LiveDesk {
     }
     this.claiming.add(input.id);
     try {
-      const routed = await this.routeInbound(input, from);
-      if (routed.handled) this.keepMessage(from, input, routed.handled);
+      // A photo from the cleaner or a contact is downloaded once: for the cleaning in progress, and for its message.
+      const media = input.media ?? [];
+      const downloads = media.length > 0 && this.keepsPhotos(from, input.channel) ? await downloadPhotos(media, cleanerPhotoFetch(), this.env()) : [];
+      const routed = await this.routeInbound(input, from, downloads);
+      if (routed.handled) this.keepMessage(from, input, routed.handled, downloads);
       return { sent: routed.sent };
     } finally {
       this.claiming.delete(input.id);
@@ -2151,7 +2160,7 @@ export class LiveDesk {
   }
 
   /** Handles one inbound text. `handled` is what Cleaner Core did, or undefined when the text was not taken. */
-  private async routeInbound(input: Inbound, from: string): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
+  private async routeInbound(input: Inbound, from: string, downloads: readonly { bytes: Buffer; ext: string }[]): Promise<{ sent: CleanerText[]; handled?: MessageHandled }> {
     if (from === this.file.host) return this.hostText(input.id, from, input.text, input.channel);
     this.resume();
     const keyword = messagingKeyword(input.text);
@@ -2164,7 +2173,7 @@ export class LiveDesk {
     const offered = new Set(engine.jobs().filter((job) => job.status === "offered").map((job) => job.id));
     const media = input.media ?? [];
     const photoJob = media.length > 0 ? engine.photoJobFor({ id: input.id, from }) : undefined;
-    const photos = photoJob ? await savePhotos(this.root, photoJob, media, cleanerPhotoFetch(), this.env()) : 0;
+    const photos = photoJob ? storePhotos(this.root, photoJob, downloads) : 0;
     const result = await engine.receive({
       id: input.id,
       from,
@@ -2194,15 +2203,54 @@ export class LiveDesk {
    * read. Every run of 4 or more digits is redacted, even split like "80-88", so the door code never
    * reaches a message even when this desk doesn't hold it in memory. The last 200 are kept.
    */
-  private keepMessage(from: string, input: Inbound, handled: MessageHandled): void {
+  private keepMessage(from: string, input: Inbound, handled: MessageHandled, downloads: readonly { bytes: Buffer; ext: string }[] = []): void {
     const who = this.speaker(from, input.channel);
     if (!who) return;
     const words = this.messageText(input.text);
     // An MMS shows as [photo], after its words when it has any. Its media URL is never kept.
     const text = (input.media?.length ?? 0) > 0 ? (words ? `${words} ${PHOTO_MARK}` : PHOTO_MARK).slice(0, MAX_MESSAGE_TEXT) : words;
     const message: Message = { id: messageId(), from: who.from, name: who.name, text, at: this.messageAt(), handled, ...(input.channel ? { channel: input.channel } : {}) };
-    this.file.messages = [...(this.file.messages ?? []), message].slice(-MAX_MESSAGES);
+    // Its photos are kept under the message, so check_now can link them even outside a cleaning.
+    const kept = downloads.length > 0 && who.from !== "host" ? storePhotos(this.root, messagePhotoId(message.id), downloads) : 0;
+    if (kept > 0) Object.assign(message, { photos: kept, photosAt: this.now().toISOString() });
+    const all = [...(this.file.messages ?? []), message];
+    // A message that falls off the list takes its photos with it.
+    for (const dropped of all.slice(0, Math.max(0, all.length - MAX_MESSAGES))) if (dropped.photos) dropPhotos(this.root, messagePhotoId(dropped.id));
+    this.file.messages = all.slice(-MAX_MESSAGES);
+    this.pruneMessagePhotos();
     this.persist();
+  }
+
+  /** True when a text's photos are kept: from the cleaner or a saved contact. The host's own photos are not. */
+  private keepsPhotos(from: string, channel: "group" | undefined): boolean {
+    const who = this.speaker(from, channel);
+    return who?.from === "cleaner" || who?.from === "contact";
+  }
+
+  /** Deletes a message's photos 7 days after they came in. Its text keeps the [photo] mark. The caller persists. */
+  private pruneMessagePhotos(): void {
+    const now = this.now().getTime();
+    for (const message of this.file.messages ?? []) {
+      if (!message.photosAt || now - Date.parse(message.photosAt) < MESSAGE_PHOTO_KEEP_MS) continue;
+      dropPhotos(this.root, messagePhotoId(message.id));
+      delete message.photos;
+      delete message.photosAt;
+    }
+  }
+
+  /**
+   * Messages as check_now returns them. A message with kept photos gets a link to each, good for one
+   * hour, like get_job_photos. Without a public address or a key, it keeps only its [photo] mark.
+   */
+  private messagesOut(messages: readonly Message[], save?: (values: { CLEANER_CORE_PHOTO_KEY: string }) => void): Record<string, unknown>[] {
+    const withPhotos = messages.some((message) => message.photos);
+    const base = withPhotos ? publicBaseUrl(this.env()) : undefined;
+    const key = base ? photoKey(this.env(), save) : undefined;
+    return messages.map(({ photos, photosAt: _photosAt, ...message }) => {
+      if (!photos || !base || !key) return message;
+      const links = photoLinks(this.root, messagePhotoId(message.id), base, key, this.now());
+      return links.length > 0 ? { ...message, photos: links } : message;
+    });
   }
 
   /** A kept message's text: every run of 4 or more digits redacted, split or not, trimmed to 300 characters. */
@@ -2325,13 +2373,14 @@ export class LiveDesk {
     if (!this.held && this.privateCodeWaiting()) next = this.words().pinFailed;
     const asking = ask && next === askNext(ask.tool);
     const assistant = this.assistant();
-    if (ask && asking && assistant !== "grok") next = claudeAskNext(ask.tool);
+    // Muse shows choice cards, as Grok does. Claude and ChatGPT show a short list.
+    if (ask && asking && (assistant === "claude" || assistant === "chatgpt")) next = claudeAskNext(ask.tool);
     const task = this.task();
     const warning = this.taskWarning();
     return {
       done,
       next,
-      ...(ask && asking ? { ask: assistant === "chatgpt" ? chatGptAsk(ask) : assistant === "claude" ? claudeAsk(ask) : ask } : {}),
+      ...(ask && asking ? { ask: assistant === "muse" ? museAsk(ask) : assistant === "chatgpt" ? chatGptAsk(ask) : assistant === "claude" ? claudeAsk(ask) : ask } : {}),
       ...(task && (next === this.words().routineAsk || warning) ? { routine: task } : {}),
       ...(warning ? { warning } : {}),
       ...(review && next === REVIEW_ASK ? { setup: this.reviewSetup() } : {}),
@@ -2340,36 +2389,40 @@ export class LiveDesk {
     };
   }
 
-  /** True when this setup connected the alert routine and its address is still saved. A ChatGPT task has no address. */
+  /** True when this setup connected the alert routine and its address is still saved. A ChatGPT or Muse task has no address. */
   private routineReady(): boolean {
     // On a multi-tenant service, only the primary connection's own routine counts.
     const primary = this.env().CLEANER_CORE_PRIMARY_CONNECTION?.trim();
     if (primary && !(this.file.routineConnections ?? []).includes(primary)) return false;
-    if (this.primaryAssistant() === "chatgpt") return Boolean(this.file.routineConnected);
+    if (this.polledTask(this.primaryAssistant())) return Boolean(this.file.routineConnected);
     return Boolean(this.file.routineConnected && this.env().CLEANER_CORE_ROUTINE_URL?.trim());
   }
 
-  /** The scheduled task get_state hands Claude or ChatGPT. A Grok Bot's routines are in its own guide. */
-  private task(): typeof CLAUDE_TASK | typeof CHATGPT_TASK | undefined {
-    const assistant = this.assistant();
-    return assistant === "claude" ? CLAUDE_TASK : assistant === "chatgpt" ? CHATGPT_TASK : undefined;
+  /** The scheduled task get_state hands Claude, ChatGPT, or Muse. A Grok Bot's routines are in its own guide. */
+  private task(): typeof CLAUDE_TASK | typeof CHATGPT_TASK | typeof MUSE_TASK | undefined {
+    return { grok: undefined, claude: CLAUDE_TASK, chatgpt: CHATGPT_TASK, muse: MUSE_TASK }[this.assistant()];
   }
 
-  /** Notes when a check ran, on a ChatGPT deployment only. The caller persists. */
+  /** True for a chat whose one recurring task nothing outside it can wake: ChatGPT and Muse. */
+  private polledTask(assistant: CleanerAssistant): boolean {
+    return ASSISTANT_PROFILES[assistant].polledTask;
+  }
+
+  /** Notes when a check ran, on a ChatGPT or Muse deployment only. The caller persists. */
   private noteCheck(): void {
-    if (this.primaryAssistant() === "chatgpt") this.file.lastCheckAt = this.now().toISOString();
+    if (this.polledTask(this.primaryAssistant())) this.file.lastCheckAt = this.now().toISOString();
   }
 
   /**
-   * On a live ChatGPT deployment, the warning when no check has come in for longer than one missed
+   * On a live ChatGPT or Muse deployment, the warning when no check has come in for longer than one missed
    * hourly run. The task can pause itself, and nothing else would tell the host.
    */
   private taskWarning(): string | undefined {
-    if (this.primaryAssistant() !== "chatgpt" || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
+    if (!this.polledTask(this.primaryAssistant()) || !this.file.texting || !this.file.checked || !this.routineReady() || !this.file.lastCheckAt) return undefined;
     const last = Date.parse(this.file.lastCheckAt);
     if (!Number.isFinite(last) || this.now().getTime() - last <= CHATGPT_CHECK_GAP_MS) return undefined;
     const when = formatWhen(this.file.lastCheckAt, this.file.timeZone ?? "UTC");
-    return chatGptTaskWarning(`${when.day} at ${when.time}`);
+    return taskWarning(this.primaryAssistant(), `${when.day} at ${when.time}`);
   }
 
   /** The saved booking sources by name, Google Calendar last. Never a link. */
@@ -2754,12 +2807,12 @@ export class LiveDesk {
 
   /** The replies that name the chat or its tools, for this deployment. */
   private words(): DeskWording {
-    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING }[this.assistant()];
+    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING, muse: MUSE_DESK_WORDING }[this.assistant()];
   }
 
   /** The words in texts to the host and cleaner, which always name the primary chat. */
   private hostWords(): DeskWording {
-    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING }[this.primaryAssistant()];
+    return { grok: GROK_DESK_WORDING, claude: CLAUDE_DESK_WORDING, chatgpt: CHATGPT_DESK_WORDING, muse: MUSE_DESK_WORDING }[this.primaryAssistant()];
   }
 
   /**

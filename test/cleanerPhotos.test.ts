@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { setCleanerAlertFetch } from "../src/cleaner-core/liveDesk";
-import { setCleanerPhotoFetch } from "../src/cleaner-core/photos";
+import { messagePhotoId, photoFolder, setCleanerPhotoFetch } from "../src/cleaner-core/photos";
 import { ADDRESS, BUSINESS, CALENDAR_URL, CLEANER, CLEANER_AUTH, CLEANER_LINE, CLEANER_TOKEN, DOOR_CODE, FROZEN, HOST, startWiredApp, type WiredApp } from "./wiringProof";
 
 const PATH = "/mcp/cleaner-core";
@@ -96,6 +96,19 @@ function jpegs(count: number, prefix: string): { url: string; type: string }[] {
   return Array.from({ length: count }, (_, index) => ({ url: media(`${prefix}${index}`), type: "image/jpeg" }));
 }
 
+/** The folders that hold photos kept with a message, from the desk's saved messages. */
+function messageFolders(root: string): Set<string> {
+  const path = join(root, "cleaner-live.json");
+  const saved = existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as { messages?: { id: string }[] }) : {};
+  return new Set((saved.messages ?? []).map((message) => photoFolder(messagePhotoId(message.id))));
+}
+
+/** The photo files kept for cleanings, without the copies kept with their messages. */
+function jobPhotoFiles(root: string): string[] {
+  const skip = messageFolders(root);
+  return photoFiles(root).filter((file) => !skip.has(relative(join(root, "cleaner-job", "photos"), file).split(/[\\/]/)[0] ?? ""));
+}
+
 function photoFiles(root: string): string[] {
   const dir = join(root, "cleaner-job", "photos");
   if (!existsSync(dir)) return [];
@@ -129,8 +142,10 @@ describe("Cleaner Core photos: saving an MMS", () => {
     const posted = await mms(wired, "MM-one", [{ url: media("one"), type: "image/jpeg" }]);
     expect(posted.status).toBe(200);
     expect(calls).toEqual([{ url: media("one"), auth: BASIC }]);
-    const files = photoFiles(wired.root);
+    const files = jobPhotoFiles(wired.root);
     expect(files).toHaveLength(1);
+    // Downloaded once. A copy is also kept with the message, for check_now's link.
+    expect(photoFiles(wired.root)).toHaveLength(2);
     expect(readFileSync(files[0] ?? "").equals(JPEG)).toBe(true);
 
     const listed = await links(wired);
@@ -161,7 +176,7 @@ describe("Cleaner Core photos: saving an MMS", () => {
     const wired = await cleaning();
     await mms(wired, "MM-ten", jpegs(10, "ten"));
     await mms(wired, "MM-more", jpegs(2, "more"));
-    expect(photoFiles(wired.root)).toHaveLength(10);
+    expect(jobPhotoFiles(wired.root)).toHaveLength(10);
     expect(await links(wired)).toHaveLength(10);
   });
 
@@ -182,7 +197,7 @@ describe("Cleaner Core photos: saving an MMS", () => {
       { url: media("cdn"), auth: BASIC },
       { url: "https://media.cdn.example/photo", auth: undefined },
     ]);
-    expect(photoFiles(wired.root)).toHaveLength(1);
+    expect(jobPhotoFiles(wired.root)).toHaveLength(1);
   });
 
   it("follows a redirect only to https", async () => {
@@ -193,6 +208,76 @@ describe("Cleaner Core photos: saving an MMS", () => {
     await mms(wired, "MM-plain", [{ url: media("plain"), type: "image/jpeg" }]);
     expect(calls.map((item) => item.url)).toEqual([media("plain")]);
     expect(photoFiles(wired.root)).toEqual([]);
+  });
+});
+
+/** Sets up Lake House and opts the cleaner in, with no cleaning started yet. */
+async function optedIn(clock = testClock(), assistant?: string): Promise<WiredApp> {
+  const wired = await app(clock);
+  if (assistant) wired.setEnv({ CLEANER_CORE_ASSISTANT: assistant });
+  await call(wired, "get_state", { choice: "cleaners" });
+  await call(wired, "save_property", { business: BUSINESS, nickname: "Lake House", address: ADDRESS, timeZone: "America/New_York" });
+  await call(wired, "save_sources", { calendars: [{ name: "Airbnb", url: CALENDAR_URL }] });
+  await call(wired, "save_people", { host: HOST, cleaner: CLEANER, cleanerName: "Ana", groupChat: "cleaner-only" });
+  await call(wired, "save_door_code", { code: DOOR_CODE, lockLocation: "back door lockbox" });
+  await call(wired, "save_preferences", { checklist: ["Strip the beds"], photosRequired: true });
+  setCleanerAlertFetch(async () => ({ status: 200 }));
+  if (assistant === "claude") {
+    await call(wired, "save_alert_routine", { url: "https://api.anthropic.com/v1/claude_code/routines/trig_photos/fire", token: "k-test-routine-key" });
+  } else await call(wired, "save_alert_routine", { url: "https://routine.example/hook", token: "k-test-routine-key" });
+  await call(wired, "activate");
+  await call(wired, "confirm_times", { checkout: "11:00", checkIn: "16:00" });
+  await wired.postTwilio(HOOK, { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-opt-in", token: CLEANER_AUTH });
+  return wired;
+}
+
+describe("Cleaner Core photos: with a message", () => {
+  it("links a photo the cleaner sends outside a cleaning on its check_now message, and keeps it out of get_job_photos", async () => {
+    const calls = stubMedia();
+    const wired = await optedIn();
+    await call(wired, "check_now");
+    await mms(wired, "MM-cups", [{ url: media("cups"), type: "image/jpeg" }], "We ran out of these cups");
+    // Downloaded once, with the Cleaner Core login, and kept only with the message.
+    expect(calls).toEqual([{ url: media("cups"), auth: BASIC }]);
+    expect(jobPhotoFiles(wired.root)).toEqual([]);
+    expect(photoFiles(wired.root)).toHaveLength(1);
+    expect(await links(wired)).toEqual([]);
+
+    const check = await call(wired, "check_now");
+    const message = (check.structured?.messages as { text: string; photos?: { url: string; expiresAt: string }[]; photosAt?: string }[]).at(-1);
+    expect(message?.text).toBe("We ran out of these cups [photo]");
+    expect(message?.photosAt).toBeUndefined();
+    expect(message?.photos).toHaveLength(1);
+    expect(message?.photos?.[0]?.url).toMatch(/^https:\/\/tour\.example\/cleaner-core\/photos\/[a-p]+$/);
+    expect(message?.photos?.[0]?.expiresAt).toBe("2026-10-14T16:00:00.000Z");
+    const served = await get(wired, message?.photos?.[0]?.url ?? "");
+    expect(served.status).toBe(200);
+    expect(served.bytes.equals(JPEG)).toBe(true);
+    expect(check.raw).not.toContain(media("cups"));
+  });
+
+  it("deletes a message's photos 7 days after they came in, and keeps its [photo] mark", async () => {
+    stubMedia();
+    const clock = testClock();
+    const wired = await optedIn(clock);
+    await mms(wired, "MM-old", [{ url: media("old"), type: "image/jpeg" }]);
+    expect(photoFiles(wired.root)).toHaveLength(1);
+    clock.later(6 * 24 * 60);
+    await call(wired, "check_now");
+    expect(photoFiles(wired.root)).toHaveLength(1);
+    clock.later(7 * 24 * 60 + 1);
+    await call(wired, "check_now");
+    expect(photoFiles(wired.root)).toEqual([]);
+  });
+
+  it("hands Claude the photo itself on check_now, as it does for get_job_photos", async () => {
+    stubMedia();
+    const wired = await optedIn(testClock(), "claude");
+    await call(wired, "check_now");
+    await mms(wired, "MM-claude", [{ url: media("claude"), type: "image/jpeg" }]);
+    const check = await call(wired, "check_now");
+    const content = (JSON.parse(check.raw) as { result: { content: { type: string; data?: string; mimeType?: string }[] } }).result.content;
+    expect(content.filter((item) => item.type === "image")).toEqual([{ type: "image", data: JPEG.toString("base64"), mimeType: "image/jpeg" }]);
   });
 });
 

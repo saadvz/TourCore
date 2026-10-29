@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SettingName } from "../install/secretStore";
-import { ASSISTANT_PROFILES, CHATGPT_INSTRUCTIONS, CLAUDE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
+import { ASSISTANT_PROFILES, CHATGPT_INSTRUCTIONS, CLAUDE_INSTRUCTIONS, MUSE_INSTRUCTIONS, type CleanerAssistant } from "./assistant";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 import type { GoogleEventList } from "./sources";
 import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
@@ -148,7 +148,7 @@ const TOOLS = [
     name: "check_now",
     title: "Check the calendars now",
     description:
-      "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar. unread names any calendar link that didn't read; its saved bookings are kept.",
+      "Re-reads the booking calendars, sends any reminders that are due, and returns new alerts for the host. Pass googleEvents only when you just read Google Calendar. unread names any calendar link that didn't read; its saved bookings are kept. A message with photos has photos: links good for one hour. Look at them before you tell the host about the message.",
     input: z.object({ googleEvents: z.object({ timeZone: z.string().optional(), items: z.array(z.unknown()) }).optional() }),
   },
   {
@@ -303,7 +303,7 @@ export async function handleCleanerMcpMessage(
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
       // A Claude deployment has its own words. A Grok deployment's stay exactly as they were.
-      instructions: { grok: GROK_INSTRUCTIONS, claude: CLAUDE_INSTRUCTIONS, chatgpt: CHATGPT_INSTRUCTIONS }[assistant],
+      instructions: { grok: GROK_INSTRUCTIONS, claude: CLAUDE_INSTRUCTIONS, chatgpt: CHATGPT_INSTRUCTIONS, muse: MUSE_INSTRUCTIONS }[assistant],
     });
   }
   if (method === "ping") return rpcResult(id, {});
@@ -337,10 +337,17 @@ export async function handleCleanerMcpMessage(
     const text = JSON.stringify(reply.result);
     if (desk.leaks(text)) return rpcResult(id, { content: [{ type: "text", text: "That didn't work. Try again." }], isError: true });
     // Claude can't open a signed photo link from a chat, so a Claude deployment sends the photos too.
-    const images = tool.name === "get_job_photos" && ASSISTANT_PROFILES[assistant].photoImages ? desk.photoImages(photoLinksOf(reply.result)) : [];
+    const links = tool.name === "get_job_photos" ? photoLinksOf(reply.result) : tool.name === "check_now" ? messagePhotoLinksOf(reply.result) : [];
+    const images = links.length > 0 && ASSISTANT_PROFILES[assistant].photoImages ? desk.photoImages(links) : [];
     return rpcResult(id, { content: [{ type: "text", text }, ...images], structuredContent: reply.result, isError: false });
   }
   return rpcError(id, -32601, "I don't support that.");
+}
+
+/** The signed links on check_now's messages, in order. */
+function messagePhotoLinksOf(result: Record<string, unknown>): { url: string }[] {
+  const messages = result.messages;
+  return Array.isArray(messages) ? messages.flatMap((message) => photoLinksOf(message as Record<string, unknown>)) : [];
 }
 
 /** The signed links in a get_job_photos result. */
@@ -405,7 +412,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
     case "run_checks":
       return desk.runChecks(args as { googleEvents?: GoogleEventList });
     case "check_now":
-      return desk.checkNow(args as { googleEvents?: GoogleEventList });
+      return desk.checkNow(args as { googleEvents?: GoogleEventList }, saveSecrets);
     case "save_arrival":
       return desk.saveArrival(args as { time?: string });
     case "get_job_photos":

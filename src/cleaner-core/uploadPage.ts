@@ -4,10 +4,10 @@ import { liveDeskFor } from "./liveDesk";
 import type { SaveSecrets } from "./mcp";
 
 /**
- * The private page behind a one-time upload link, for a Claude or ChatGPT deployment. Neither has a
- * secure card or a computer of its own to post from, so the host opens the link and types the value
- * here. The form posts back to the same link, through the same checks as a JSON upload. Nothing
- * typed is ever shown back, logged, or put in the reply.
+ * The private page behind a one-time upload link, for a Claude, ChatGPT, or Muse deployment. None
+ * has a secure card that can hold the value, so the host opens the link (on Muse, in Muse's own
+ * browser) and types the value here. The form posts back to the same link, through the same checks
+ * as a JSON upload. Nothing typed is ever shown back, logged, or put in the reply.
  */
 export type UploadPageKind = "door-code" | "calendar-link" | "alert-routine";
 
@@ -79,8 +79,8 @@ export async function handleCleanerUploadPage(input: {
 }): Promise<{ status: number; body: string; headers: Record<string, string> }> {
   const env = input.env();
   const missing = { status: 404, body: "Not found", headers: { "Content-Type": "text/plain" } };
-  // A ChatGPT chat has no Fire URL or token, so it has no alert page.
-  const noPage = (assistant: CleanerAssistant | undefined) => !assistant || !ASSISTANT_PROFILES[assistant].privatePages || (input.kind === "alert-routine" && assistant === "chatgpt");
+  // A ChatGPT or Muse chat has no Fire URL or token, so it has no alert page.
+  const noPage = (assistant: CleanerAssistant | undefined) => !assistant || !ASSISTANT_PROFILES[assistant].privatePages || (input.kind === "alert-routine" && ASSISTANT_PROFILES[assistant].polledTask);
   if (!cleanerCoreEnabled(env) || (!input.multiTenant && noPage(cleanerAssistant(env)))) return missing;
   const desk = liveDeskFor(input.root, input.env, input.now);
   const html = (status: number, body: string) => ({ status, body, headers: { "Content-Type": "text/html; charset=utf-8", ...HEADERS } });
@@ -90,9 +90,10 @@ export async function handleCleanerUploadPage(input: {
   const chat = ASSISTANT_PROFILES[assistant!].helper;
   const copy = COPY[input.kind];
   if (!link.open) return html(404, page(GONE_TITLE, `<p>${goneText(chat)}</p>`));
-  if (input.method === "GET") return html(200, formPage(copy, chat, link.name));
+  const shown = assistant === "muse" ? museCopy(copy, input.kind) : copy;
+  if (input.method === "GET") return html(200, formPage(shown, chat, link.name));
   const raw = await input.readBody();
-  if (!raw) return html(413, formPage(copy, chat, link.name, "That was too long. Try again."));
+  if (!raw) return html(413, formPage(shown, chat, link.name, "That was too long. Try again."));
   const form = Object.fromEntries(new URLSearchParams(raw.toString("utf8")));
   const result =
     input.kind === "door-code"
@@ -105,7 +106,16 @@ export async function handleCleanerUploadPage(input: {
   if (result.status === 409) return html(409, page("Not saved", `<p>Saving this link would call off upcoming cleanings, so it wasn't saved. Tell ${chat}, and it will ask you what to do.</p>`));
   // A door code in the right shape that was still refused has a reason of its own, like a lock location.
   const reason = input.kind === "door-code" && /^\d{4,8}$/.test((form.code ?? "").trim()) && result.body.error ? result.body.error : copy.refused;
-  return html(400, formPage(copy, chat, link.name, reason));
+  return html(400, formPage(shown, chat, link.name, reason));
+}
+
+/**
+ * On Muse the calendar link is a password field too: Meta keeps what the host types in a password
+ * field of Muse's browser away from the model, so the link stays out of it like the door code.
+ */
+function museCopy(copy: PageCopy, kind: UploadPageKind): PageCopy {
+  if (kind !== "calendar-link") return copy;
+  return { ...copy, fields: copy.fields.replace('type="url"', 'type="password"') };
 }
 
 function formPage(copy: PageCopy, chat: string, name: string | undefined, error?: string): string {

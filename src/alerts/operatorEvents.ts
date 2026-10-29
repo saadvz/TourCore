@@ -230,9 +230,10 @@ export class ClaudeRoutineFireSink implements OperatorNotificationSink {
 }
 
 /**
- * A ChatGPT scheduled task can't be started from outside ChatGPT, so there is nothing to wake. Once
- * the hourly task is connected, a wake-up counts as delivered: the task reads every note and
- * message with check_now on its next run. Used only by a Cleaner Core deployment set to ChatGPT.
+ * A ChatGPT scheduled task or a Muse recurring task can't be started from outside the chat, so there
+ * is nothing to wake. Once the hourly task is connected, a wake-up counts as delivered: the task
+ * reads every note and message with check_now on its next run. Used only by a Cleaner Core
+ * deployment set to ChatGPT or Muse.
  */
 export class ChatGptTaskSink implements OperatorNotificationSink {
   readonly kind = "CHATGPT_TASK" as const;

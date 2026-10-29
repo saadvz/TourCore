@@ -64,7 +64,9 @@ Setup:
   MCP server. If `cleaner-template/template.json` in the repository names a
   different address, use that one. The host types the invite code from Saad on
   the Cleaner Core page and clicks Allow; you can't approve it yourself, and you
-  never ask for the invite code in chat. Never run Cleaner Core on your computer, and never start a tunnel.
+  never ask for the invite code in chat. If the page says the code is wrong,
+  expired, or already used, tell the host to ask Saad for a new one. Never run
+  Cleaner Core on your computer, and never start a tunnel.
 - Ask the host nothing about the property until `get_state` answers: no
   address, no calendar link, not even in your greeting. If you aren't
   connected yet, connect first.
