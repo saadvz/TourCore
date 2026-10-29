@@ -253,14 +253,14 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
       <p>Saad sends it to you. It only works once, and only for 7 days, so do the setup soon after you get it.</p>
     </div>
     <div class="need-item">
-      <span class="from">Saad does this</span>
-      <h3>Both phones approved</h3>
-      <p>Saad needs your mobile number and your cleaner's mobile number on his list. Just check with him that this is done.</p>
+      <span class="from">You type these in step 2</span>
+      <h3>Two phone numbers</h3>
+      <p>Your mobile number and your cleaner's. With both, you get a group chat with your cleaner. Only have one number? Enter it as the cleaner's number too, and you get a chat with the assistant instead.</p>
     </div>
     <div class="need-item">
       <span class="from">Your own details</span>
       <h3>Property basics at hand</h3>
-      <p>Your property's address, usual checkout and check-in times, your cleaner's name and number, and your door code.</p>
+      <p>Your property's address, usual checkout and check-in times, your cleaner's name, and your door code.</p>
     </div>
   </div>
 </section>
@@ -277,51 +277,6 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     <div class="word"><dt>Fire URL and token</dt><dd>Two long codes Claude shows you in step 3. Think of them as a key. You copy them and paste them into a private link. That's all.</dd></div>
   </dl>
 </section>
-
-<section aria-labelledby="map-h">
-  <div class="sec-head">
-    <h2 id="map-h">The whole setup at a glance</h2>
-    <p>You'll move between four screens. Each step below has a colored tag that matches this picture, so you always know where you should be.</p>
-  </div>
-  <div class="map">
-    <div class="map-scroll">
-      <div class="lanes" role="img" aria-label="Step 1 in Claude settings: add Cleaner Core. Step 2 in a Claude chat: answer questions, typing secrets on private links. Step 3 on the scheduled task page: make the helper, then paste two codes on a private link. Step 4 back in the chat: say Activate and confirm times.">
-        <div class="lane-label"><span class="place pl-settings">Claude settings</span></div>
-        <div class="cell"><div class="node n-settings">1 · Add Cleaner Core<small>type invite code</small></div></div>
-        <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-
-        <div class="lane-label"><span class="place pl-chat">Chat with Claude</span></div>
-        <div class="cell"></div>
-        <div class="cell"><div class="node n-chat">2 · Answer questions</div></div>
-        <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-        <div class="cell"><div class="node n-chat">4 · Say "Activate"</div></div>
-        <div class="cell"><div class="node n-chat final">Confirm times<small>you're live</small></div></div>
-
-        <div class="lane-label"><span class="place pl-private">Private link</span></div>
-        <div class="cell"></div><div class="cell"></div>
-        <div class="cell"><div class="node n-private">Door code<small>&amp; calendar</small></div></div>
-        <div class="cell"></div>
-        <div class="cell"><div class="node n-private">Paste the two codes</div></div>
-        <div class="cell"></div><div class="cell"></div>
-
-        <div class="lane-label"><span class="place pl-task">Scheduled task page</span></div>
-        <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-        <div class="cell"><div class="node n-task">3 · Make the helper</div></div>
-        <div class="cell"></div><div class="cell"></div><div class="cell"></div>
-      </div>
-    </div>
-    <p class="map-note">Read it left to right. On a phone, swipe the picture sideways to see all of it.</p>
-  </div>
-</section>
-
-<div class="rule" role="note">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.4" fill="currentColor"/></svg>
-  <div>
-    <h3>The one rule: never type a secret into the chat</h3>
-    <p>Secrets are your door code, a calendar link, and the two codes from step 3. When Claude needs one, it sends you a <b>private link</b> instead. Click the link, type the secret there, click <span class="btn-label">Save</span>, then go back to the chat and type <b>"saved"</b>.</p>
-    <p>Each private link works once and stops working after 10 minutes. If one stops working, just ask Claude: "Can I have a new link?"</p>
-  </div>
-</div>
 
 <section aria-labelledby="steps-h">
   <div class="sec-head">
@@ -397,7 +352,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
                 <li>What you want help with. Say <b>scheduling cleaners</b>.</li>
                 <li>Your property: its name, address, and usual checkout and check-in times.</li>
                 <li>Where your bookings are (Guesty, Google Calendar, Airbnb and so on).</li>
-                <li>Who's involved: you and your cleaner, and whether you want a group text.</li>
+                <li>Who's involved: your mobile number and your cleaner's number. Two numbers set up a group chat with your cleaner. If you only have one number, give it as the cleaner's number too, and you'll get a chat with the assistant.</li>
                 <li>Timing: how early to offer each cleaning, when to remind, and hours not to text.</li>
                 <li>Your lock, then your door code.</li>
                 <li>Your cleaning checklist and anything else you prefer.</li>
@@ -527,7 +482,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
             <li><div>Claude asks about times for your next booking. Say <b>"use my usual times"</b>, or give the times for that booking.</div></li>
             <li><div>Your cleaner gets one text: <i>"Reply YES to get cleaning texts, or STOP to opt out."</i> You might let them know it's coming.</div></li>
           </ol>
-          <p class="note">If Claude says it can't activate yet, it will explain why. Usually a phone number isn't approved yet (text Saad), or step 3 didn't finish.</p>
+          <p class="note">If Claude says it can't activate yet, it will explain why. Usually step 3 didn't finish. If you're not sure, text Saad.</p>
           <p class="tip"><b>You're done!</b> 🎉 That's the whole setup.</p>
         </div>
         <div class="see">
@@ -571,7 +526,6 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--li
     <details><summary>A private link says it has expired</summary><div><p>Private links stop working after 10 minutes, or once they've been used.</p><p><b>What to do:</b> in the chat, ask Claude "Can I have a new link?"</p></div></details>
     <details><summary>I can't find Cleaner Core when I click + in the chat</summary><div><p>Step 1 may not have finished.</p><p><b>What to do:</b> go back to <a href="https://claude.ai/customize/connectors" target="_blank" rel="noopener">claude.ai/customize/connectors</a>. If Cleaner Core is listed but has a <b>Connect</b> button, click it and type your invite code. If it isn't listed, text Saad before adding it again.</p></div></details>
     <details><summary>Claude says it can't connect to Cleaner Core</summary><div><p><b>What to do:</b> start a new chat and try again. If it still fails, text Saad.</p></div></details>
-    <details><summary>Claude says the phone numbers aren't approved</summary><div><p><b>What to do:</b> text Saad and ask him to approve your number and your cleaner's number. When he says it's done, type "run the checks" in the chat.</p></div></details>
     <details><summary>The helper says something about "check_now" not being available</summary><div><p>The helper is missing Cleaner Core in its connectors.</p><p><b>What to do:</b> open <a href="https://claude.ai/code/routines" target="_blank" rel="noopener">claude.ai/code/routines</a>, click your Cleaner Core task, edit it, and add <b>Cleaner Core</b> under Connectors.</p></div></details>
     <details><summary>Setup is finished but my cleaner never got a text</summary><div><p>Usually the times for the next booking haven't been confirmed yet.</p><p><b>What to do:</b> tell Claude "confirm the times for the next booking". If Claude says nothing was sent, text Saad.</p></div></details>
     <details><summary>Anything else</summary><div><p><b>What to do:</b> type "I'm stuck" in the chat and describe what you see, or text Saad the step number and what the screen says.</p></div></details>
