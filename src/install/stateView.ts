@@ -156,7 +156,8 @@ function presentNext(status: InstallationStatus): InstallationStep {
 }
 
 function stepFor(action: string, picture: Picture): StepId {
-  if (action === "START_RUNTIME" || action === "ESTABLISH_PUBLIC_ENDPOINT" || action === "CHECK_PUBLIC_ENDPOINT") return "starting";
+  // WAIT_FOR_HOST_NUMBER: a touring host on the shared service waits for the admin to add their number.
+  if (action === "START_RUNTIME" || action === "ESTABLISH_PUBLIC_ENDPOINT" || action === "CHECK_PUBLIC_ENDPOINT" || action === "WAIT_FOR_HOST_NUMBER") return "starting";
   if (action === "CONNECT_GROK" || action === "RECONNECT_GROK" || action === "FIX_GROK_CONNECTOR") return "connect";
   if (action === "CHOOSE_MESSAGING_PROVIDER") return "texting-choose";
   if (action === "CONNECT_VISITOR_MESSAGING" || action === "FIX_VISITOR_MESSAGING") return "texting-keys";

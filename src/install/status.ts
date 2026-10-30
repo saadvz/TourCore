@@ -12,7 +12,7 @@ import { publishGuards, visitorTexting } from "../operator/setupFlow";
 import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
-import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
+import { DEPLOYMENT_MODE_LABELS, isTenantWorker, type DeploymentMode } from "./deployment";
 import type { Installation } from "./installation";
 import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, MESSAGING_PROVIDER_CATALOG, selectionFromInstallation } from "../messaging/registry";
 
@@ -124,6 +124,7 @@ export type InstallationAction =
   | "TEST_VISITOR_MESSAGING"
   | "RECONNECT_VISITOR_MESSAGING"
   | "FIX_VISITOR_MESSAGING"
+  | "WAIT_FOR_HOST_NUMBER"
   | "CHECK_STORAGE"
   | "CONNECT_GOOGLE_DRIVE"
   | "CONFIRM_BACKUP_DESTINATION"
@@ -549,6 +550,23 @@ function hostedVolumeStatus(inst: Installation, messagingReady: boolean, summary
   });
 }
 
+// On the shared service the service gives each touring host its address, its sign-in, and its number.
+const SHARED_ENDPOINT = component("PUBLIC_ENDPOINT", "READY", "The shared service gives Tour Core its public address.");
+const SHARED_CONNECTOR = component("GROK_OPERATOR", "READY", "Connected through the shared service.");
+export const HOST_NUMBER_MISSING = "This host's texting number isn't set up yet. The service's admin adds it, and I'll pick it up from there.";
+
+/** The host's Twilio number, from the shared service. Nothing to choose and no keys to enter. */
+function hostNumberStatus(inst: Installation): ComponentStatus {
+  const provider = createMessagingProvider("twilio", { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
+  if (provider.validateConfiguration().ok) return component("VISITOR_MESSAGING", "READY", "Texting is on this host's number.", { provider: "twilio" });
+  return component("VISITOR_MESSAGING", "ERROR", HOST_NUMBER_MISSING, {
+    provider: "twilio",
+    next: step("VISITOR_MESSAGING", "WAIT_FOR_HOST_NUMBER", "GROK", HOST_NUMBER_MISSING, {
+      grokInstructions: "Do not ask for a number, a provider, or keys. Tell the host the admin is adding their number, then call get_state later.",
+    }),
+  });
+}
+
 function accessStatus(): ComponentStatus {
   return component("ACCESS", "READY", "Demo. No real doors open.", { provider: "DURIN_DEMO" });
 }
@@ -779,8 +797,11 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   const deployment = inst.deployment();
   const mode = deployment.mode;
   const readOnly = options.readOnly === true;
-  const messaging = messagingStatus(inst, readOnly);
-  const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messaging, storageStatus(inst, messaging.state === "READY", readOnly), accessStatus()];
+  const worker = isTenantWorker(mode);
+  const messaging = worker ? hostNumberStatus(inst) : messagingStatus(inst, readOnly);
+  const infra = worker
+    ? [runtimeStatus(options), SHARED_ENDPOINT, SHARED_CONNECTOR, messaging, storageStatus(inst, messaging.state === "READY", readOnly), accessStatus()]
+    : [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messaging, storageStatus(inst, messaging.state === "READY", readOnly), accessStatus()];
   if (deployment.invalid) infra[0]!.technical = [...(infra[0]!.technical ?? []), `TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized; using ${mode}.`];
   const infrastructureReady = infra.every((c) => c.state === "READY");
   const installed = installedMessaging(inst, { readOnly });

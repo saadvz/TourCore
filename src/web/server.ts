@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
@@ -50,7 +50,7 @@ import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRou
 import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
-import { isHostedRailway, resolveDeploymentMode } from "../install/deployment";
+import { isHostedRailway, isTenantWorker, resolveDeploymentMode } from "../install/deployment";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
@@ -151,6 +151,32 @@ const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 const OAUTH_RESOURCE_PATHS = [MCP_PATH, CLEANER_MCP_PATH];
 
 export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.trim() || undefined;
+
+/** The header that carries a touring process's key. The shared service sets it on every request it forwards. */
+export const WORKER_KEY_HEADER = "x-tourcore-worker-key";
+
+function workerKeyMatches(given: string | string[] | undefined, key: string | undefined): boolean {
+  const value = Array.isArray(given) ? given[0] : given;
+  if (!key || !value) return false;
+  const a = Buffer.from(value);
+  const b = Buffer.from(key);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * What a touring process answers, even with its key: the landlord connector, the texting webhooks,
+ * the visitor identity form, compliance pages, portable backups, and audit export links. Never the
+ * operator app, setup pages, OAuth, or the ops and QA connectors: the shared service owns those.
+ */
+function workerRouteAllowed(method: string, path: string): boolean {
+  if (path === MCP_PATH || path === HEALTH_PATH) return true;
+  if (method === "POST" && (path === TWILIO_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
+  if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) return true;
+  if (method === "GET" && isPublicCompliancePath(path)) return true;
+  if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
+  if (method === "GET" && AuditExportLinks.parsePath(path)) return true;
+  return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
+}
 
 /**
  * What the public (tunnel) address may reach: the webhook, the identity form,
@@ -320,11 +346,14 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   };
   const alerts = new OperatorUpdates({ services: api, outbox: installation.outbox, preferences: () => installation.files.state().operatorUpdates, log });
   installation.setRelevanceCheck((event) => alerts.stillRelevant(event));
-  const operatorToken = options.operatorToken ?? operatorTokenFromEnv;
-  const opsToken = options.opsToken ?? (() => installation.env().TOURCORE_OPS_TOKEN?.trim() || undefined);
-  const qaToken = options.qaToken ?? (() => installation.env().TOURCORE_QA_TOKEN?.trim() || undefined);
+  // A touring process on the shared service: the service signed the caller in, and the key is the bearer.
+  const workerMode = isTenantWorker(installation.deploymentMode());
+  const workerKey = () => installation.env().TOURCORE_WORKER_KEY?.trim() || undefined;
+  const operatorToken = workerMode ? workerKey : (options.operatorToken ?? operatorTokenFromEnv);
+  const opsToken = workerMode ? () => undefined : (options.opsToken ?? (() => installation.env().TOURCORE_OPS_TOKEN?.trim() || undefined));
+  const qaToken = workerMode ? () => undefined : (options.qaToken ?? (() => installation.env().TOURCORE_QA_TOKEN?.trim() || undefined));
   const toolSurface = options.toolSurface ?? "landlord";
-  const authMode = options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv());
+  const authMode = workerMode ? "static" : (options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv()));
   let server: Server;
   const approvalPage = () => `${tools.localUrl?.() ?? "http://localhost:4321"}/grok`;
   let lastApprovalWindow = 0;
@@ -521,6 +550,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     const method = req.method ?? "GET";
     const isLocal = LOCAL_HOSTS.includes(host);
     const hosted = hostedMode();
+    if (workerMode && (!workerKeyMatches(req.headers[WORKER_KEY_HEADER], workerKey()) || !workerRouteAllowed(method, url.pathname))) {
+      return send(404, "text/plain", "Not found");
+    }
     const railwayHealth = host === RAILWAY_HEALTHCHECK_HOST && method === "GET" && url.pathname === HEALTH_PATH;
     if (method === "GET" && url.pathname === HEALTH_PATH && (isLocal || railwayHealth || (publicHost && host === publicHost))) {
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
