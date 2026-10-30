@@ -169,6 +169,55 @@ describe("texts to a touring process", () => {
   });
 });
 
+describe("the saved-text queue", () => {
+  async function refusingStub(refuse: (body: string) => boolean) {
+    const received: string[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        received.push(body);
+        res.writeHead(refuse(body) ? 400 : 200);
+        res.end();
+      });
+    });
+    const port = await listen(server);
+    cleanups.push(() => server.close());
+    return { target: { port, key: KEY }, received };
+  }
+
+  function inboxWith(...bodies: string[]) {
+    const root = mkdtempSync(join(tmpdir(), "tourcore-inbox-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    let at = Date.parse("2026-10-30T12:00:00Z");
+    const inbox = new TouringInbox(root, () => new Date((at += 1000)));
+    const paths = bodies.map((body, i) => inbox.save(LANE, form({ MessageSid: `SMq${i}`, From: "+15555550177", To: LANE_NUMBER, Body: body })));
+    return { inbox, paths };
+  }
+
+  it("moves a text the process refuses aside and hands over the ones behind it", async () => {
+    const { inbox } = inboxWith("bad", "good");
+    const stub = await refusingStub((body) => new URLSearchParams(body).get("Body") === "bad");
+    await replayInbox(inbox, stub.target, ORIGIN, LANE, AUTH);
+    expect(stub.received.map((b) => new URLSearchParams(b).get("Body"))).toEqual(["bad", "good"]);
+    expect(inbox.pending(LANE)).toEqual([]);
+  });
+
+  it("drops a saved text the screen turns away, without handing it over", async () => {
+    const { inbox } = inboxWith("from someone who opted out", "fine");
+    const stub = await refusingStub(() => false);
+    await replayInbox(inbox, stub.target, ORIGIN, LANE, AUTH, { screen: async (raw) => new URLSearchParams(raw.toString()).get("Body") === "fine" });
+    expect(stub.received.map((b) => new URLSearchParams(b).get("Body"))).toEqual(["fine"]);
+    expect(inbox.pending(LANE)).toEqual([]);
+  });
+
+  it("empties a tenant's queue on request", () => {
+    const { inbox } = inboxWith("one", "two");
+    expect(inbox.clear(LANE)).toBe(2);
+    expect(inbox.pending(LANE)).toEqual([]);
+  });
+});
+
 describe("links and calls to a touring process", () => {
   it("forwards a visitor identity link under /t/<id>/ to the worker's own path", async () => {
     const w = await realWorker();

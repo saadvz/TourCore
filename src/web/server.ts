@@ -24,11 +24,15 @@ import { DeliveryError } from "../alerts/operatorEvents";
 import { touringAlertsConnected, touringSinkFor } from "../hosted/touringAlerts";
 import { buildTouringEnv, touringScratch } from "../hosted/touringEnv";
 import { standDownTouring, TOURING_LIVE_PATH, TOURING_STAND_DOWN_PATH, touringLiveWork } from "../hosted/touringLive";
+import { screenText } from "../hosted/crossService";
 import { replayInbox, TouringInbox } from "../hosted/touringForward";
+import { recordScratchText } from "../hosted/touringScratch";
+import { formParams } from "../messaging/twilio/signature";
 import { forkTouringWorker, TouringSupervisor } from "../hosted/touringSupervisor";
 import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cleaner-core/assistant";
 import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
 import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath, type HostedCleaner } from "../cleaner-core/hosted/router";
+import type { Tenant } from "../cleaner-core/hosted/registry";
 import { TenantSecrets } from "../cleaner-core/hosted/tenantSecrets";
 import { handleAdmin } from "../cleaner-core/hosted/admin";
 import { INVITE_REFUSALS } from "../mcp/oauth/pages";
@@ -408,20 +412,46 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             }
           },
           log,
+          // Every time a process is ready, a crash restart included, the texts that waited go out.
+          onReady: (tenantId) => {
+            const tenant = tenants.get(tenantId);
+            if (tenant) void handOver(tenant).catch(() => undefined);
+          },
           now: () => installation.now(),
         });
+        // One hand-over at a time per tenant, oldest text first, each checked again against opt-outs.
+        const handing = new Map<string, Promise<void>>();
+        const handOver = (tenant: Tenant): Promise<void> => {
+          const run = async () => {
+            const target = supervisor.target(tenant.id);
+            const token = authToken();
+            if (!target || !token) return;
+            const current = tenants.get(tenant.id) ?? tenant;
+            if (current.service !== "touring") return;
+            await replayInbox(inbox, target, serviceOrigin() ?? "", tenant.id, token, {
+              scratch: touringScratch(current),
+              screen: async (raw) => (await screenText(hostedCleanerService, current, formParams(raw))) === "route",
+              taken: (raw) => {
+                const fields = formParams(raw);
+                if (touringScratch(current) && fields.Body !== undefined && !fields.MessageStatus) recordScratchText(hostedCleanerService, tenant.id, fields.From ?? "", fields.Body);
+              },
+            });
+          };
+          const next = (handing.get(tenant.id) ?? Promise.resolve()).then(run, run);
+          handing.set(tenant.id, next);
+          return next;
+        };
         const front: TouringFront = {
           supervisor,
           inbox,
           enabled: () => tourCoreTenants(installation.env()),
           authToken,
+          handOver,
           start: async (tenant) => {
             const ready = supervisor.ensure(tenant);
             supervisor.setAlerts(tenant.id, touringAlertsConnected(hostedCleanerService, tenant));
             await ready;
-            const target = supervisor.target(tenant.id);
-            const token = authToken();
-            if (target && token) await replayInbox(inbox, target, serviceOrigin() ?? "", tenant.id, token, { scratch: touringScratch(tenant) });
+            await handOver(tenant);
           },
         };
         return front;

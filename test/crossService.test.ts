@@ -125,4 +125,20 @@ describe("across a switch", () => {
     await m.text(LANE, CLEANER, "I fell and I'm bleeding, call 911", "SMh3");
     expect(m.app.logs.slice(before).join("\n")).not.toContain("Nothing was sent.");
   });
+
+  it("doesn't hand over a waiting text from a phone that opted out while it waited", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1", CLEANER_CORE_SCRATCH_TOOLS: "1" } }));
+    const { tenant } = m.registry.create({ label: "Lane", twilioNumber: LANE });
+    const token = await m.joinAt(tenant.id, "grok", "/mcp");
+    await m.toolAt("/mcp", token, "choose_service", { service: "touring" });
+    const touring = m.touring()!;
+    touring.supervisor.stop(tenant.id);
+    await m.text(LANE, VISITOR, "TOUR", "SMwait1");
+    expect(touring.inbox.pending(tenant.id)).toHaveLength(1);
+    new TenantOptOuts(m.app.root).stop(tenant.id, VISITOR);
+    await touring.start(m.registry.get(tenant.id)!);
+    expect(touring.inbox.pending(tenant.id)).toEqual([]);
+    // The touring process logs each text it takes by its MessageSid. This one never reached it.
+    expect(m.app.logs.join("\n")).not.toContain("SMwait1");
+  });
 });

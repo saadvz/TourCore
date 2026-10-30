@@ -74,6 +74,8 @@ export class TouringSupervisor {
       env: (tenant: Tenant, key: string) => NodeJS.ProcessEnv;
       onEvent: (tenantId: string, id: string, event: OperatorEvent) => Promise<ToWorker>;
       log: (line: string) => void;
+      /** A process for the tenant is ready, after a start or a restart: texts that waited can go out. */
+      onReady?: (tenantId: string) => void;
       now: () => number;
       setTimer?: (run: () => void, ms: number) => { unref?(): void };
     },
@@ -151,6 +153,7 @@ export class TouringSupervisor {
         entry.port = message.port;
         if (entry.alerts) handle.send({ type: "alerts", connected: true });
         for (const resolve of entry.waiting.splice(0)) resolve();
+        this.opts.onReady?.(id);
       } else if (message.type === "log") {
         this.opts.log(`[${id}] ${message.line}`);
       } else if (message.type === "event") {

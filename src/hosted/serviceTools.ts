@@ -125,6 +125,8 @@ export interface TouringFront {
   authToken(): string | undefined;
   /** Starts the tenant's process and hands it any texts that waited. */
   start(tenant: Tenant): Promise<void>;
+  /** Hands the tenant's waiting texts to its process, oldest first, if it's up. */
+  handOver(tenant: Tenant): Promise<void>;
 }
 
 export interface FrontContext {

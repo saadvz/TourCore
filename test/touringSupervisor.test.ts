@@ -26,6 +26,7 @@ function harness() {
   const workers: FakeWorker[] = [];
   const logs: string[] = [];
   const events: { tenantId: string; id: string }[] = [];
+  const readies: string[] = [];
   const spawn: SpawnWorker = (env) => {
     let onMessage: (m: ToParent) => void = () => {};
     let onExit: (code: number | null) => void = () => {};
@@ -48,6 +49,7 @@ function harness() {
     env: (tenant, key) => ({ TENANT: tenant.id, KEY: key }),
     onEvent: async (tenantId, id) => (events.push({ tenantId, id }), { type: "event-ack", id, ok: true }),
     log: (line) => void logs.push(line),
+    onReady: (tenantId) => void readies.push(tenantId),
     now: () => at,
     setTimer: (run, ms) => (timers.push({ at: at + ms, run }), { unref() {} }) as never,
   });
@@ -69,7 +71,7 @@ function harness() {
     workers.at(-1)!.emit({ type: "ready", port: 40000 + workers.length });
     await started;
   };
-  return { supervisor, workers, logs, events, advance, startReady, now: () => at };
+  return { supervisor, workers, logs, events, readies, advance, startReady, now: () => at };
 }
 
 describe("buildTouringEnv", () => {
@@ -155,6 +157,15 @@ describe("TouringSupervisor", () => {
     h.workers.at(-1)!.emit({ type: "ready", port: 40999 });
     expect(h.supervisor.target(lane.id)!.key).not.toBe(firstKey);
     expect(h.supervisor.health(lane.id)).toEqual({ up: true, restartsLastDay: 3 });
+  });
+
+  it("tells the service each time a worker is ready, a restart included, so waiting texts go out", async () => {
+    const h = harness();
+    await h.startReady(lane);
+    h.workers[0]!.exit(1);
+    h.advance(SECOND);
+    h.workers[1]!.emit({ type: "ready", port: 40002 });
+    expect(h.readies).toEqual([lane.id, lane.id]);
   });
 
   it("never waits more than a minute between restarts", async () => {

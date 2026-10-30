@@ -125,6 +125,22 @@ export class TouringInbox {
     rmSync(path, { force: true });
   }
 
+  /** A text the process refused: kept beside the queue as `.refused`, so it never blocks the texts behind it. */
+  refuse(path: string): void {
+    try {
+      renameSync(path, `${path}.refused`);
+    } catch {
+      rmSync(path, { force: true });
+    }
+  }
+
+  /** Drops every waiting text for the tenant. Returns how many. */
+  clear(tenantId: string): number {
+    const waiting = this.pending(tenantId);
+    for (const path of waiting) rmSync(path, { force: true });
+    return waiting.length;
+  }
+
   /** Saved texts, oldest first. */
   pending(tenantId: string): string[] {
     const folder = this.folder(tenantId);
@@ -140,7 +156,14 @@ export class TouringInbox {
  * Posts a text to the process's Twilio webhook, signed again with the shared token over the address
  * the process expects (its public base under /t/<id>), so its own signature check runs unchanged.
  */
-export function deliverText(target: WorkerTarget, origin: string, tenantId: string, raw: Buffer, authToken: string, options: { scratch?: boolean } = {}): Promise<boolean> {
+export async function deliverText(target: WorkerTarget, origin: string, tenantId: string, raw: Buffer, authToken: string, options: { scratch?: boolean } = {}): Promise<boolean> {
+  return (await handOver(target, origin, tenantId, raw, authToken, options)) === "taken";
+}
+
+/** Taken (2xx), refused by the process (4xx: it will never take it), or down (unreachable or 5xx: try again later). */
+type HandOver = "taken" | "refused" | "down";
+
+function handOver(target: WorkerTarget, origin: string, tenantId: string, raw: Buffer, authToken: string, options: { scratch?: boolean } = {}): Promise<HandOver> {
   const fields = formParams(raw);
   // A Scratch tenant's process texts through the local test outbox, so the text goes in that provider's shape.
   const local = options.scratch ? Buffer.from(JSON.stringify({ id: fields.MessageSid, from: fields.From, to: fields.To, text: fields.Body ?? "" })) : undefined;
@@ -154,17 +177,29 @@ export function deliverText(target: WorkerTarget, origin: string, tenantId: stri
       { host: "127.0.0.1", port: target.port, path: local ? LOCAL_WEBHOOK_PATH : TWILIO_WEBHOOK_PATH, method: "POST", headers },
       (res) => {
         res.resume();
-        res.on("end", () => resolve((res.statusCode ?? 500) >= 200 && (res.statusCode ?? 500) < 300));
+        const status = res.statusCode ?? 500;
+        res.on("end", () => resolve(status >= 200 && status < 300 ? "taken" : status >= 400 && status < 500 ? "refused" : "down"));
       },
     );
-    upstream.on("error", () => resolve(false));
+    upstream.on("error", () => resolve("down"));
     upstream.write(body);
     upstream.end();
   });
 }
 
-/** Hands saved texts to the process, oldest first, until one isn't taken. */
-export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, origin: string, tenantId: string, authToken: string, options: { scratch?: boolean } = {}): Promise<void> {
+/**
+ * Hands saved texts to the process, oldest first. A text `screen` turns away (an opt-out since it
+ * arrived) is dropped; one the process refuses is moved aside; it stops when the process is down.
+ * `taken` hears each text that went through.
+ */
+export async function replayInbox(
+  inbox: TouringInbox,
+  target: WorkerTarget,
+  origin: string,
+  tenantId: string,
+  authToken: string,
+  options: { scratch?: boolean; screen?: (raw: Buffer) => Promise<boolean>; taken?: (raw: Buffer) => void } = {},
+): Promise<void> {
   for (const path of inbox.pending(tenantId)) {
     let raw: Buffer;
     try {
@@ -172,8 +207,17 @@ export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, ori
     } catch {
       continue;
     }
-    if (!(await deliverText(target, origin, tenantId, raw, authToken, options))) return;
-    inbox.done(path);
+    if (options.screen && !(await options.screen(raw))) {
+      inbox.done(path);
+      continue;
+    }
+    const result = await handOver(target, origin, tenantId, raw, authToken, options);
+    if (result === "down") return;
+    if (result === "refused") inbox.refuse(path);
+    else {
+      inbox.done(path);
+      options.taken?.(raw);
+    }
   }
 }
 

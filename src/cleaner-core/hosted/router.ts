@@ -30,9 +30,7 @@ import { screenText } from "../../hosted/crossService";
 import { handleTenantMcp } from "../../hosted/frontMcp";
 import type { TouringFront } from "../../hosted/serviceTools";
 import { handleTouringAlertUpload, touringAlertsConnected, touringAlertUploadCode } from "../../hosted/touringAlerts";
-import { touringScratch } from "../../hosted/touringEnv";
-import { recordScratchText } from "../../hosted/touringScratch";
-import { deliverText, forwardTenantPath } from "../../hosted/touringForward";
+import { forwardTenantPath } from "../../hosted/touringForward";
 import { touringPublicRoute } from "../../hosted/workerRoutes";
 import { MCP_PATH } from "../../mcp/paths";
 import { TWILIO_WEBHOOK_PATH } from "../../messaging/twilio/provider";
@@ -254,15 +252,10 @@ async function touringText(h: HostedCleaner, r: HostedRequest, tenant: Tenant, r
     r.send(200, "text/xml", EMPTY_TWIML);
     return true;
   }
+  // Saved first, then handed over behind any text already waiting, so texts keep their order.
   const saved = touring.inbox.save(tenant.id, rawBody);
-  const target = touring.supervisor.target(tenant.id);
-  const scratch = touringScratch(tenant);
-  if (target && (await deliverText(target, h.origin() ?? "", tenant.id, rawBody, authToken!, { scratch }))) {
-    touring.inbox.done(saved);
-    const fields = formParams(rawBody);
-    if (scratch && fields.Body !== undefined && !fields.MessageStatus) recordScratchText(h, tenant.id, fields.From ?? "", fields.Body);
-  }
-  else h.log(`A text for ${tenant.id} is waiting for its touring process.`);
+  await touring.handOver(tenant);
+  if (touring.inbox.pending(tenant.id).includes(saved)) h.log(`A text for ${tenant.id} is waiting for its touring process.`);
   h.registry.touch(tenant.id);
   r.send(200, "text/xml", EMPTY_TWIML);
   return true;

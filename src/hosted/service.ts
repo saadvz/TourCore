@@ -95,7 +95,12 @@ export async function switchService(
     }
   }
   h.registry.setService(tenant.id, to);
-  if (from === "touring") h.touring?.supervisor.stop(tenant.id);
+  if (from === "touring") {
+    h.touring?.supervisor.stop(tenant.id);
+    // Texts that waited for touring are not replayed into a later touring setup.
+    const dropped = h.touring?.inbox.clear(tenant.id) ?? 0;
+    if (dropped) h.log(`${dropped} text${dropped === 1 ? "" : "s"} waiting for ${tenant.id}'s touring ${dropped === 1 ? "was" : "were"} dropped by the switch.`);
+  }
   if (to === "touring" && h.touring) {
     const current = h.registry.get(tenant.id)!;
     await Promise.race([h.touring.start(current), new Promise((resolve) => setTimeout(resolve, START_WAIT_MS).unref())]);

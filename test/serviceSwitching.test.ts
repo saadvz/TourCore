@@ -139,4 +139,15 @@ describe("switchService's live check", () => {
     expect(m.sms.sent).toEqual([]);
     expect(existsSync(join(tenantFolder(m.app.root, tenant.id), "service-audit.jsonl"))).toBe(true);
   });
+
+  it("drops texts still waiting for touring when the number switches away", SLOW, async () => {
+    const m = await start();
+    const { tenant } = m.registry.create({ label: "Lane", twilioNumber: LANE });
+    m.registry.setService(tenant.id, "touring");
+    m.touring()!.inbox.save(tenant.id, Buffer.from(new URLSearchParams({ MessageSid: "SMw1", From: "+15555550177", To: LANE, Body: "TOUR" }).toString()));
+    const reply = await switchService({ h: m.hosted(), tenant: m.registry.get(tenant.id)!, actor: "admin", noteToolsChanged: () => {} }, { to: "cleaning", force: true });
+    expect(reply.isError).toBe(false);
+    expect(m.touring()!.inbox.pending(tenant.id)).toEqual([]);
+    expect(m.app.logs.join("\n")).toContain(`1 text waiting for ${tenant.id}'s touring was dropped by the switch.`);
+  });
 });
