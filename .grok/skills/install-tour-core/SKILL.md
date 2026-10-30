@@ -165,7 +165,7 @@ For a fresh install there's no existing Tour Core connection. Add Tour Core
 yourself. On the hosted product, the operator approves in the browser Tour
 Core opens:
 
-> Tour Core is online. I need your approval to connect. Tour Core will show you a pairing code. Click Allow.
+> Tour Core is online. I need your approval to connect. Tour Core will show you a pairing code and a box for your invite code. Type the invite code you got, then click Allow.
 
 On the open-source path, open the approval screen in your cloud browser:
 
@@ -178,6 +178,11 @@ As soon as it's approved, without waiting to be asked:
 
 and call `get_state`. An old Tour Core connection left over from
 before is an exception: remove it and connect again the same way.
+
+On the hosted service, when `get_state` says this number isn't set up yet,
+the operator set up this bot for touring: call `choose_service` with
+`touring`, then call `get_state` again. If the touring tools don't appear,
+ask the operator to start a new chat.
 
 ### Phase 3: Infrastructure (follow Tour Core's order)
 
