@@ -104,4 +104,25 @@ describe("across a switch", () => {
     expect(forged.status).toBe(403);
     expect(new TenantOptOuts(m.app.root).stopped(tenant.id, VISITOR)).toBe(false);
   });
+
+  it("always gives HELP and an injury text to the service, even from a phone that texted STOP, with touring off", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: {} }));
+    const { tenant } = m.registry.create({ label: "Lane", twilioNumber: LANE });
+    const token = await m.joinAt(tenant.id, "grok", "/mcp");
+    await m.toolAt("/mcp", token, "choose_service", { service: "cleaning" });
+    await m.text(LANE, CLEANER, "STOP", "SMh0");
+    const before = m.app.logs.length;
+    await m.text(LANE, CLEANER, "HELP", "SMh1");
+    await m.text(LANE, CLEANER, "I fell and I'm bleeding, call 911", "SMh2");
+    expect(m.app.logs.slice(before).join("\n")).not.toContain("opted out");
+  });
+
+  it("routes an injury text from the inactive service's people too", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1" } }));
+    const { token } = await cleaningWithPeople(m);
+    await switchTo(m, token, "touring");
+    const before = m.app.logs.length;
+    await m.text(LANE, CLEANER, "I fell and I'm bleeding, call 911", "SMh3");
+    expect(m.app.logs.slice(before).join("\n")).not.toContain("Nothing was sent.");
+  });
 });

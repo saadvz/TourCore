@@ -6,7 +6,8 @@ import { parsePhone } from "../core/phone";
 import { tenantFolder, type Tenant, type TenantService } from "../cleaner-core/hosted/registry";
 import { tenantContext, type HostedCleaner } from "../cleaner-core/hosted/router";
 import { liveDeskFor } from "../cleaner-core/liveDesk";
-import { isPlainLanguageStop, keywordOf } from "../intent/ruleBased";
+import { isMedicalEmergency, isPlainLanguageStop, keywordOf } from "../intent/ruleBased";
+import { isInjuryReport } from "../cleaner-core/injury";
 import { normalize } from "../intent/normalize";
 import { PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
@@ -137,6 +138,9 @@ export async function screenText(h: HostedCleaner, tenant: Tenant, fields: Recor
   if (!active || !from || !isMessage) return "route";
   const optOuts = new TenantOptOuts(h.dataRoot);
   const body = fields.Body ?? "";
+  // HELP and anything that sounds like an injury always reach the service, whoever sends them:
+  // each service answers those itself, including the 911 path.
+  if (keywordOf(body) === "help" || isInjuryReport(body) || isMedicalEmergency(body)) return "route";
   if (isStopText(body)) {
     optOuts.stop(tenant.id, from);
     return "route";
