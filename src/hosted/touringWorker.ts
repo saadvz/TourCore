@@ -2,10 +2,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { RelaySink, testEvent } from "../alerts/operatorEvents";
 import { Installation } from "../install/installation";
+import { LocalSmsOutbox, resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PropertyWorkspace } from "../setup/workspace";
 import { FileRuntimeStore } from "../storage/runtimeStore";
 import { startSetupServer } from "../web/server";
 import type { ToParent, ToWorker } from "./ipc";
+import { SCRATCH_OUTBOX_FILE } from "./touringScratch";
 
 /**
  * One touring host's Tour Core, as the shared service runs it. The service forks this file with the
@@ -22,6 +24,8 @@ export async function startTouringWorker(): Promise<void> {
   let alertsConnected = false;
   const relay = new RelaySink(tell, () => alertsConnected);
   const workspace = new PropertyWorkspace(process.env.TOURCORE_HOME);
+  // A Scratch tenant's texts stay in a local outbox the shared service reads from this folder.
+  if (process.env.TOURCORE_TOURING_SCRATCH === "1") resetLocalSmsOutbox(new LocalSmsOutbox(join(workspace.root, SCRATCH_OUTBOX_FILE)));
   const installation = new Installation({ root: workspace.root, runtime: new FileRuntimeStore(join(workspace.root, "runtime")), notificationSink: () => relay, log });
   installation.files.ensure({ deploymentMode: "TENANT_WORKER" });
 

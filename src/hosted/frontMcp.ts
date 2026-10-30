@@ -6,7 +6,7 @@ import { promoteRoutineOwner, tenantContext, type HostedCleaner, type HostedRequ
 import { attachToolListStream, noteInitialized } from "../mcp/toolListChanged";
 import { OPERATOR_TOOL_NAMES } from "../operator/tools";
 import { ServiceNotices } from "./crossService";
-import { FRONT_TOOL_NAMES, handleFrontTool, listedFrontTools, toolsFor, UNSET_INSTRUCTIONS, wrongServiceLine, type FrontReply, type ToolState } from "./serviceTools";
+import { FRONT_TOOL_NAMES, handleFrontTool, listedFrontTools, scratchFor, toolsFor, UNSET_INSTRUCTIONS, wrongServiceLine, type FrontReply, type ToolState } from "./serviceTools";
 import { callWorkerMcp, forwardMcp, type WorkerTarget } from "./touringForward";
 
 /**
@@ -119,7 +119,7 @@ export async function handleTenantMcp(h: HostedCleaner, r: HostedRequest, path: 
       listed = undefined;
     }
     if (!listed?.result || !Array.isArray(listed.result.tools)) return r.send(answer.status, JSON_TYPE, answer.body);
-    listed.result.tools = [...listed.result.tools, ...listedFrontTools(state)];
+    listed.result.tools = [...listed.result.tools, ...listedFrontTools(state, scratchFor(h, tenant))];
     return r.send(200, JSON_TYPE, JSON.stringify(listed));
   }
 

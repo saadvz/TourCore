@@ -1,10 +1,13 @@
 import { z } from "zod";
 import type { CleanerAssistant } from "../cleaner-core/assistant";
 import { tourCoreTenants } from "../cleaner-core/flag";
+import { scratchToolsOn } from "../cleaner-core/scratchQa";
 import type { Tenant, TenantService } from "../cleaner-core/hosted/registry";
 import type { HostedCleaner } from "../cleaner-core/hosted/router";
 import { standDownService, switchService } from "./service";
 import { issueTouringAlertLink } from "./touringAlerts";
+import { touringScratch } from "./touringEnv";
+import { readScratchInbox, readScratchOutbox, sendScratchText } from "./touringScratch";
 import type { TouringInbox } from "./touringForward";
 import type { TouringSupervisor } from "./touringSupervisor";
 
@@ -62,6 +65,18 @@ const SAVE_ALERT_ROUTINE: FrontTool = {
   input: z.object({}),
 };
 
+/** Scratch QA on a touring tenant's 555 number, named and worded like Cleaner Core's. */
+const SCRATCH: FrontTool[] = [
+  { name: "read_inbox", title: "Read test texts in", description: "Lists test texts that came in to this Scratch number.", input: z.object({}) },
+  { name: "read_outbox", title: "Read test texts out", description: "Lists the texts touring sent back, each with who it went to.", input: z.object({}) },
+  {
+    name: "send_test_text",
+    title: "Send a test text",
+    description: "Sends a test text as a visitor. It follows the same path as a real text. It only works with 555 test numbers on a Scratch number.",
+    input: z.object({ from: z.string().max(40), text: z.string().max(1600) }),
+  },
+];
+
 const BY_STATE: Record<ToolState, FrontTool[]> = {
   unset: [GET_STATE, CHOOSE],
   cleaning: [SWITCH, STAND_DOWN],
@@ -69,15 +84,20 @@ const BY_STATE: Record<ToolState, FrontTool[]> = {
 };
 
 /** Every name the front answers in some state. A call to one of them in another state is refused, never forwarded. */
-export const FRONT_TOOL_NAMES = new Set([GET_STATE, CHOOSE, SWITCH, STAND_DOWN, SAVE_ALERT_ROUTINE].map((tool) => tool.name));
+export const FRONT_TOOL_NAMES = new Set([GET_STATE, CHOOSE, SWITCH, STAND_DOWN, SAVE_ALERT_ROUTINE, ...SCRATCH].map((tool) => tool.name));
 
-export function frontToolsFor(state: ToolState): FrontTool[] {
-  return BY_STATE[state];
+/** True when a touring tenant gets the Scratch tools: the flag is on and its number is a 555 number. */
+export function scratchFor(h: HostedCleaner, tenant: Tenant): boolean {
+  return tenant.service === "touring" && scratchToolsOn(h.baseEnv()) && touringScratch(tenant);
+}
+
+export function frontToolsFor(state: ToolState, scratch = false): FrontTool[] {
+  return state === "touring" && scratch ? [...BY_STATE.touring, ...SCRATCH] : BY_STATE[state];
 }
 
 /** The front tools as tools/list shows them. */
-export function listedFrontTools(state: ToolState): Record<string, unknown>[] {
-  return frontToolsFor(state).map((tool) => {
+export function listedFrontTools(state: ToolState, scratch = false): Record<string, unknown>[] {
+  return frontToolsFor(state, scratch).map((tool) => {
     const { $schema: _schema, ...inputSchema } = z.toJSONSchema(tool.input) as Record<string, unknown>;
     return { name: tool.name, title: tool.title, description: tool.description, inputSchema };
   });
@@ -129,7 +149,7 @@ const START_WAIT_MS = 30_000;
 /** Answers a front tool. Undefined when the name isn't one of this state's front tools. */
 export async function handleFrontTool(ctx: FrontContext, name: string, args: unknown): Promise<FrontReply | undefined> {
   const state = toolsFor(ctx.tenant);
-  const tool = frontToolsFor(state).find((item) => item.name === name);
+  const tool = frontToolsFor(state, scratchFor(ctx.h, ctx.tenant)).find((item) => item.name === name);
   if (!tool) return undefined;
   const parsed = tool.input.safeParse(args ?? {});
   if (!parsed.success) return fail("That was missing something I need.");
@@ -155,6 +175,12 @@ export async function handleFrontTool(ctx: FrontContext, name: string, args: unk
     const { confirmation } = parsed.data as { confirmation?: string };
     return standDownService({ h: ctx.h, tenant: ctx.tenant, actor: "host", noteToolsChanged: ctx.noteToolsChanged }, confirmation ? { confirmation } : {});
   }
+  if (name === "send_test_text") {
+    const sent = await sendScratchText(ctx.h, ctx.tenant, parsed.data as { from: string; text: string });
+    return { text: sent.text, isError: !sent.ok };
+  }
+  if (name === "read_inbox") return done({ texts: readScratchInbox(ctx.h, ctx.tenant.id) });
+  if (name === "read_outbox") return done({ texts: readScratchOutbox(ctx.h, ctx.tenant.id) });
   if (name === "save_alert_routine") {
     const link = issueTouringAlertLink(ctx.h, ctx.tenant, ctx.caller.grantId);
     return { text: `Send the host this private link to paste the routine's webhook address and key. Never in chat: ${link}`, isError: false };

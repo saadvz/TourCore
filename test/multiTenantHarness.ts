@@ -127,6 +127,8 @@ export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.P
     twilio("/webhooks/twilio/cleaner-core", { MessageSid: sid, From: from, To: to, Body: body, SmsStatus: "received" });
 
   const close = () => {
+    // Touring processes first: the test folder is removed next, and a running process may still write to it.
+    app.server.tourCore.touring?.supervisor.stopAll();
     setCleanerTwilioClient(undefined);
     setCleanerCalendarFetch(undefined);
     setCleanerAlertFetch(undefined);
