@@ -51,6 +51,7 @@ import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
 import { isHostedRailway, isTenantWorker, parseDeploymentMode, resolveDeploymentMode } from "../install/deployment";
+import { WORKER_KEY_HEADER } from "../hosted/ipc";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
@@ -152,8 +153,7 @@ const OAUTH_RESOURCE_PATHS = [MCP_PATH, CLEANER_MCP_PATH];
 
 export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.trim() || undefined;
 
-/** The header that carries a touring process's key. The shared service sets it on every request it forwards. */
-export const WORKER_KEY_HEADER = "x-tourcore-worker-key";
+export { WORKER_KEY_HEADER };
 
 function workerKeyMatches(given: string | string[] | undefined, key: string | undefined): boolean {
   const value = Array.isArray(given) ? given[0] : given;

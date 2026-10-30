@@ -6,6 +6,9 @@ import type { OperatorEvent } from "../alerts/operatorEvents";
  * routine gets, and the alerts flag only says whether the tenant's routine is connected.
  */
 
+/** The header that carries a touring process's key. The shared service sets it on every request it forwards. */
+export const WORKER_KEY_HEADER = "x-tourcore-worker-key";
+
 /** From the touring process to the shared service. */
 export type ToParent =
   | { type: "ready"; port: number }
