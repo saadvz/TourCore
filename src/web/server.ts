@@ -17,7 +17,11 @@ import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
-import { cleanerCoreEnabled, cleanerMultiTenant } from "../cleaner-core/flag";
+import { cleanerCoreEnabled, cleanerMultiTenant, tourCoreTenants } from "../cleaner-core/flag";
+import type { TouringFront } from "../hosted/serviceTools";
+import { buildTouringEnv, touringScratch } from "../hosted/touringEnv";
+import { replayInbox, TouringInbox } from "../hosted/touringForward";
+import { forkTouringWorker, TouringSupervisor } from "../hosted/touringSupervisor";
 import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cleaner-core/assistant";
 import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
 import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath } from "../cleaner-core/hosted/router";
@@ -144,6 +148,8 @@ export interface TourCoreServer extends Server {
     settled(): Promise<void>;
     storageReady: Promise<{ ok: boolean; summary: string }>;
     tickOverstay(): Promise<void>;
+    /** The multi-tenant service's touring processes and saved texts. */
+    touring?: TouringFront;
   };
 }
 
@@ -371,7 +377,39 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   // Hosted, Cleaner Core runs only as the multi-tenant service: a hosted desk with no tenants would be open to anyone.
   const cleanerOn = () => cleanerCoreEnabled(installation.env()) && (!hostedMode() || multiTenant());
   const tenants = new TenantRegistry(installation.root, () => options.now?.() ?? new Date());
+  const serviceOrigin = () => {
+    const base = installation.publicBaseUrl();
+    return base ? new URL(base).origin : undefined;
+  };
+  // Touring tenants on the multi-tenant service: one Tour Core process each, and the texts waiting for them.
+  const touringFront: TouringFront | undefined = cleanerMultiTenant(installation.env())
+    ? (() => {
+        const inbox = new TouringInbox(installation.root, () => options.now?.() ?? new Date());
+        const authToken = () => installation.env().CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim() || undefined;
+        const supervisor = new TouringSupervisor({
+          spawn: forkTouringWorker,
+          env: (tenant, key) => buildTouringEnv({ base: installation.env(), tenant, dataRoot: installation.root, origin: serviceOrigin() ?? "", key, scratch: touringScratch(tenant) }),
+          onEvent: async (_tenantId, id) => ({ type: "event-ack", id, ok: false, retryable: true, message: "Alerts aren't connected yet." }),
+          log,
+          now: () => installation.now(),
+        });
+        const front: TouringFront = {
+          supervisor,
+          inbox,
+          enabled: () => tourCoreTenants(installation.env()),
+          authToken,
+          start: async (tenant) => {
+            await supervisor.ensure(tenant);
+            const target = supervisor.target(tenant.id);
+            const token = authToken();
+            if (target && token) await replayInbox(inbox, target, serviceOrigin() ?? "", tenant.id, token, { scratch: touringScratch(tenant) });
+          },
+        };
+        return front;
+      })()
+    : undefined;
   const hostedCleanerService = hostedCleaner({
+    ...(touringFront ? { touring: touringFront } : {}),
     registry: tenants,
     secrets: new TenantSecrets(installation.root),
     dataRoot: installation.root,
@@ -393,7 +431,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       ? new McpOAuth({
           runtime,
           resources: [
-            { path: MCP_PATH, scope: OPERATOR_SCOPE, label: "Tour Core" },
+            // On the multi-tenant service /mcp is the one address for both services.
+            { path: MCP_PATH, scope: OPERATOR_SCOPE, label: cleanerMultiTenant(installation.env()) ? "Tour Core and Cleaner Core" : "Tour Core" },
             { path: CLEANER_MCP_PATH, scope: CLEANER_SCOPE, label: "Cleaner Core", enabled: cleanerOn },
           ],
           endpoints: (path) => {
@@ -407,9 +446,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
               : undefined,
           now: options.authNow,
           fetchClientMetadata: options.fetchClientMetadata,
-          // The multi-tenant service runs Cleaner Core only. The hosted Tour Core demo has one owner, and no Cleaner Core.
+          // The multi-tenant service's invite code picks the tenant at either address. The hosted Tour Core demo has one owner, and no Cleaner Core.
           tenantPolicy: (clientId, resourcePath) => {
-            if (multiTenant()) return resourcePath === CLEANER_MCP_PATH ? { allowed: true } : { allowed: false, message: "This service runs Cleaner Core only." };
+            if (multiTenant()) return { allowed: true };
             if (!hostedMode()) return { allowed: true };
             if (resourcePath === CLEANER_MCP_PATH) return { allowed: false, message: CLEANER_NEEDS_MULTI_TENANT };
             return hostedTenantDecision(installation.files.state(), clientId);
@@ -652,7 +691,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           send,
           readRaw: () => readRaw(req),
           readCapped: (max) => readCapped(req, max),
-          ...(oauth ? { authenticate: () => oauth.authenticate(req, res, CLEANER_MCP_PATH) } : {}),
+          ...(oauth ? { authenticate: (path: string) => oauth.authenticate(req, res, path) } : {}),
         });
         if (handled) return;
       } else if (hostedMode() && cleanerCoreEnabled(installation.env())) {
@@ -1017,7 +1056,14 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       .catch(() => undefined);
   }, options.alertRetryMs ?? 15_000);
   retry.unref();
+  // Touring processes for every enabled touring tenant, each handed the texts that waited while it was down.
+  if (touringFront && touringFront.enabled()) {
+    void Promise.all(tenants.list().filter((t) => t.service === "touring" && !t.disabled).map((t) => touringFront.start(t))).catch((err) =>
+      log(`Couldn't start every touring process: ${err instanceof Error ? err.message : "unknown error"}`),
+    );
+  }
   server.on("close", () => {
+    touringFront?.supervisor.stopAll();
     clearInterval(retry);
     restoreSettings();
     restoreMessaging();
@@ -1036,6 +1082,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       },
       storageReady,
       tickOverstay: () => conversations.tickOverstay(),
+      ...(touringFront ? { touring: touringFront } : {}),
     },
   });
 }

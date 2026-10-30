@@ -159,5 +159,5 @@ export async function hostedApp(extra: NodeJS.ProcessEnv = {}, existing?: { root
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: {} }),
     });
 
-  return { inst, root, env, logs, http, register, authorize, pageParts, approve, connect, refresh, rpc };
+  return { inst, root, env, logs, server, http, register, authorize, pageParts, approve, connect, refresh, rpc };
 }

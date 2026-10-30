@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tenantFolder } from "../cleaner-core/hosted/registry";
 import type { HostedRequest } from "../cleaner-core/hosted/router";
 import { formParams, twilioSignature } from "../messaging/twilio/signature";
+import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { WORKER_KEY_HEADER } from "./ipc";
 
@@ -33,8 +34,8 @@ function forwardedHeaders(headers: IncomingHttpHeaders, key: string): Record<str
 }
 
 /** Sends one request to the process and streams its answer back. 503 when the process can't be reached. */
-async function relay(target: WorkerTarget, r: HostedRequest, path: string, headers: Record<string, string | string[]>): Promise<void> {
-  const body = r.method === "GET" || r.method === "HEAD" ? undefined : await r.readRaw();
+async function relay(target: WorkerTarget, r: HostedRequest, path: string, headers: Record<string, string | string[]>, read?: Buffer): Promise<void> {
+  const body = r.method === "GET" || r.method === "HEAD" ? undefined : (read ?? (await r.readRaw()));
   await new Promise<void>((resolve) => {
     const upstream = request(
       { host: "127.0.0.1", port: target.port, path, method: r.method, headers: { ...headers, ...(body ? { "content-length": String(body.length) } : {}) } },
@@ -61,11 +62,34 @@ async function relay(target: WorkerTarget, r: HostedRequest, path: string, heade
   });
 }
 
-/** An MCP call for a touring tenant. The process's own key is the bearer; the caller's token never leaves the service. */
-export function forwardMcp(target: WorkerTarget, r: HostedRequest): Promise<void> {
+/**
+ * An MCP call for a touring tenant. The process's own key is the bearer; the caller's token never
+ * leaves the service. `body` is the request body when the service already read it.
+ */
+export function forwardMcp(target: WorkerTarget, r: HostedRequest, body?: Buffer): Promise<void> {
   const headers = forwardedHeaders(r.req.headers, target.key);
   headers.authorization = `Bearer ${target.key}`;
-  return relay(target, r, `/mcp${r.url.search}`, headers);
+  return relay(target, r, `/mcp${r.url.search}`, headers, body);
+}
+
+/** One MCP POST to the process, answered whole, so the service can add to it. Undefined when it can't be reached. */
+export function callWorkerMcp(target: WorkerTarget, body: Buffer, headers: IncomingHttpHeaders = {}): Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer } | undefined> {
+  const sent = forwardedHeaders(headers, target.key);
+  sent.authorization = `Bearer ${target.key}`;
+  sent["content-type"] = "application/json";
+  sent.accept = "application/json, text/event-stream";
+  sent["content-length"] = String(body.length);
+  return new Promise((resolve) => {
+    const upstream = request({ host: "127.0.0.1", port: target.port, path: "/mcp", method: "POST", headers: sent }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 502, headers: res.headers, body: Buffer.concat(chunks) }));
+      res.on("error", () => resolve(undefined));
+    });
+    upstream.on("error", () => resolve(undefined));
+    upstream.write(body);
+    upstream.end();
+  });
 }
 
 /** A link under /t/<id>/: `rest` is the path after the prefix, as the process knows it. */
@@ -116,31 +140,31 @@ export class TouringInbox {
  * Posts a text to the process's Twilio webhook, signed again with the shared token over the address
  * the process expects (its public base under /t/<id>), so its own signature check runs unchanged.
  */
-export function deliverText(target: WorkerTarget, origin: string, tenantId: string, raw: Buffer, authToken: string): Promise<boolean> {
+export function deliverText(target: WorkerTarget, origin: string, tenantId: string, raw: Buffer, authToken: string, options: { scratch?: boolean } = {}): Promise<boolean> {
+  const fields = formParams(raw);
+  // A Scratch tenant's process texts through the local test outbox, so the text goes in that provider's shape.
+  const local = options.scratch ? Buffer.from(JSON.stringify({ id: fields.MessageSid, from: fields.From, to: fields.To, text: fields.Body ?? "" })) : undefined;
   const signedUrl = `${origin.replace(/\/+$/, "")}/t/${tenantId}${TWILIO_WEBHOOK_PATH}`;
-  const signature = twilioSignature(authToken, signedUrl, formParams(raw));
+  const body = local ?? raw;
+  const headers = local
+    ? { "content-type": "application/json", "content-length": String(body.length), [WORKER_KEY_HEADER]: target.key }
+    : { "content-type": "application/x-www-form-urlencoded", "content-length": String(body.length), "x-twilio-signature": twilioSignature(authToken, signedUrl, fields), [WORKER_KEY_HEADER]: target.key };
   return new Promise((resolve) => {
     const upstream = request(
-      {
-        host: "127.0.0.1",
-        port: target.port,
-        path: TWILIO_WEBHOOK_PATH,
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", "content-length": String(raw.length), "x-twilio-signature": signature, [WORKER_KEY_HEADER]: target.key },
-      },
+      { host: "127.0.0.1", port: target.port, path: local ? LOCAL_WEBHOOK_PATH : TWILIO_WEBHOOK_PATH, method: "POST", headers },
       (res) => {
         res.resume();
         res.on("end", () => resolve((res.statusCode ?? 500) >= 200 && (res.statusCode ?? 500) < 300));
       },
     );
     upstream.on("error", () => resolve(false));
-    upstream.write(raw);
+    upstream.write(body);
     upstream.end();
   });
 }
 
 /** Hands saved texts to the process, oldest first, until one isn't taken. */
-export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, origin: string, tenantId: string, authToken: string): Promise<void> {
+export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, origin: string, tenantId: string, authToken: string, options: { scratch?: boolean } = {}): Promise<void> {
   for (const path of inbox.pending(tenantId)) {
     let raw: Buffer;
     try {
@@ -148,7 +172,7 @@ export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, ori
     } catch {
       continue;
     }
-    if (!(await deliverText(target, origin, tenantId, raw, authToken))) return;
+    if (!(await deliverText(target, origin, tenantId, raw, authToken, options))) return;
     inbox.done(path);
   }
 }

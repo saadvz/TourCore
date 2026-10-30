@@ -1,5 +1,6 @@
 import { tenantFolder, type Tenant } from "../cleaner-core/hosted/registry";
 import { PER_TENANT_NAMES } from "../cleaner-core/hosted/tenantEnv";
+import { isScratchTestNumber } from "../cleaner-core/scratch";
 
 /** Cleaner Core names a touring process still needs: the service-wide live switch, allowlist, and Scratch flag. */
 const SHARED_CLEANER_NAMES = new Set(["CLEANER_CORE_LIVE_SMS", "CLEANER_CORE_SMS_ALLOWLIST", "CLEANER_CORE_SCRATCH_TOOLS"]);
@@ -34,4 +35,9 @@ export function buildTouringEnv(input: { base: NodeJS.ProcessEnv; tenant: Tenant
   if (base.CLEANER_CORE_TWILIO_ACCOUNT_SID) env.TOURCORE_TWILIO_ACCOUNT_SID = base.CLEANER_CORE_TWILIO_ACCOUNT_SID;
   if (base.CLEANER_CORE_TWILIO_AUTH_TOKEN) env.TOURCORE_TWILIO_AUTH_TOKEN = base.CLEANER_CORE_TWILIO_AUTH_TOKEN;
   return env;
+}
+
+/** A tenant on a 555 number is Scratch: its touring texts stay in the local test outbox. */
+export function touringScratch(tenant: Tenant): boolean {
+  return isScratchTestNumber(tenant.twilioNumber);
 }

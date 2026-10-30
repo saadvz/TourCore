@@ -89,9 +89,12 @@ describe("routing on the multi-tenant service", () => {
     expect((await m.app.http("/cleaner-core/photos/abc")).status).toBe(404);
   });
 
-  it("is 404 for the Tour Core /mcp", async () => {
+  it("asks an unsigned call on the shared /mcp to sign in, and lists nothing", async () => {
     const { m } = await start();
-    expect((await m.app.rpc("/mcp", "tools/list")).status).toBe(404);
+    const res = await m.app.rpc("/mcp", "tools/list");
+    expect(res.status).toBe(401);
+    expect(String(res.headers["www-authenticate"])).toContain("Bearer");
+    expect(await res.text()).not.toContain("tools");
   });
 
   it("names the Grok primary in host texts while a Claude connection runs the setup", async () => {

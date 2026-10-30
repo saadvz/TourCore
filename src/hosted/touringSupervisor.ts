@@ -103,6 +103,11 @@ export class TouringSupervisor {
     entry.port = undefined;
   }
 
+  /** Stops every process. The service is shutting down. */
+  stopAll(): void {
+    for (const id of [...this.running.keys()]) this.stop(id);
+  }
+
   /** Where the tenant's process listens and its key. Undefined while starting, down, or stopped. */
   target(tenantId: string): { port: number; key: string } | undefined {
     const entry = this.running.get(tenantId);
