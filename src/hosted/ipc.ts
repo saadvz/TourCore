@@ -1,0 +1,19 @@
+import type { OperatorEvent } from "../alerts/operatorEvents";
+
+/**
+ * Messages between the shared service and a touring process it started, over the fork IPC channel.
+ * No secret, phone number, or door code ever travels here: an event is the same minimal JSON a
+ * routine gets, and the alerts flag only says whether the tenant's routine is connected.
+ */
+
+/** From the touring process to the shared service. */
+export type ToParent =
+  | { type: "ready"; port: number }
+  | { type: "event"; id: string; event: OperatorEvent }
+  | { type: "log"; line: string };
+
+/** From the shared service to the touring process. */
+export type ToWorker =
+  | { type: "event-ack"; id: string; ok: true }
+  | { type: "event-ack"; id: string; ok: false; retryable: boolean; message: string }
+  | { type: "alerts"; connected: boolean };

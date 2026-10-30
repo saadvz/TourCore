@@ -5,6 +5,8 @@ import { providerConsentRecommendation } from "../consentPolicy";
 import type { MessagingCapabilities, MessagingCheck, MessagingConfigField, MessagingProvider, ProviderConnectContext, ProviderConnectResult, WebhookHttpRequest } from "../provider";
 import { twilioHttpClient, type TwilioClient } from "./client";
 import { formParams, verifyTwilioSignature } from "./signature";
+import { isAllowlisted, liveSmsOn } from "../../cleaner-core/liveSms";
+import { isTenantWorker, parseDeploymentMode } from "../../install/deployment";
 
 export const TWILIO_WEBHOOK_PATH = "/webhooks/twilio";
 
@@ -15,6 +17,8 @@ export interface TwilioEnv {
   fromNumberRaw?: string;
   publicBaseUrl?: string;
   publicBaseUrlRaw?: string;
+  /** Set only in a touring process on the shared service: whether this number may be texted now. */
+  mayText?: (to: string) => boolean;
 }
 
 const CAPABILITIES: MessagingCapabilities = {
@@ -57,7 +61,10 @@ export function readTwilioEnv(env: NodeJS.ProcessEnv = process.env): TwilioEnv {
   const value = (k: string) => env[k]?.trim() || undefined;
   const fromRaw = value("TOURCORE_TWILIO_PHONE_NUMBER");
   const baseRaw = value("PUBLIC_BASE_URL");
+  // A touring process on the shared service texts only under that service's live switch and allowlist.
+  const worker = parseDeploymentMode(env.TOURCORE_DEPLOYMENT_MODE);
   return {
+    ...(worker && "mode" in worker && isTenantWorker(worker.mode) ? { mayText: (to: string) => liveSmsOn(env) && isAllowlisted(env, to) } : {}),
     accountSid: value("TOURCORE_TWILIO_ACCOUNT_SID"),
     authToken: value("TOURCORE_TWILIO_AUTH_TOKEN"),
     fromNumberRaw: fromRaw,
@@ -217,6 +224,9 @@ export class TwilioMessagingProvider implements MessagingProvider {
     const to = toE164(message.to);
     if (!to) throw new MessagingError("INVALID_NUMBER", "That phone number doesn't look right.");
     const env = this.env();
+    if (env.mayText && !env.mayText(to)) {
+      return { provider: this.provider, channel: "SMS", status: "SUPPRESSED", sentAt, error: { code: "LIVE_TEXTS_OFF", message: "Live texts are off on this service, or this number isn't on its allowlist." } };
+    }
     const from = env.fromNumber;
     if (!from) throw new MessagingError("TWILIO_FROM_NUMBER_INVALID", "The messaging number isn't set up correctly.");
     const client = this.client();

@@ -50,7 +50,7 @@ import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRou
 import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
-import { isHostedRailway, isTenantWorker, resolveDeploymentMode } from "../install/deployment";
+import { isHostedRailway, isTenantWorker, parseDeploymentMode, resolveDeploymentMode } from "../install/deployment";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
@@ -1135,7 +1135,12 @@ export async function startSetupServer(options: SetupServerOptions & { port?: nu
   throw new Error("No free port found for the setup app");
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Bundled into dist/touringWorker.js too, where import.meta.url is that file: a touring process never starts this.
+const touringProcess = (() => {
+  const mode = parseDeploymentMode(process.env.TOURCORE_DEPLOYMENT_MODE);
+  return !!mode && "mode" in mode && isTenantWorker(mode.mode);
+})();
+if (!touringProcess && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   loadLocalEnv();
   const args = process.argv.slice(2);
   if (args.includes("--check-storage")) {

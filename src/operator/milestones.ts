@@ -4,6 +4,7 @@ import { PROPERTY_TYPES } from "../config/tourCoreConfig";
 import { extractValues, parseBulkUnitDetails } from "../config/unitProfile";
 import { checkPublicEndpoint, testAccess, testOperatorAlerts, testVisitorMessaging } from "../install/checks";
 import { secureSetupLink } from "../install/tools";
+import { isTenantWorker } from "../install/deployment";
 import { getInstallationStatus, installedMessaging } from "../install/status";
 import { readState } from "../install/stateView";
 import { toE164 } from "../messaging/Messenger";
@@ -77,6 +78,9 @@ function propertyIdFrom(extra: Record<string, unknown>): string | undefined {
   }
   return undefined;
 }
+
+/** A touring host on the shared service publishes only once their alert routine is connected. */
+export const ALERTS_NEEDED = "Connect the touring alert routine first. Call save_alert_routine.";
 
 export function envelope(
   ctx: ToolContext,
@@ -610,6 +614,11 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       confirmationCode: z.string().max(20).optional().describe("Only after the operator explicitly said yes to the exact question this tool returned earlier."),
     }),
     run: async (ctx, i) => {
+      // On the shared service a touring host's alerts go through their own routine. Publishing waits for it.
+      const inst = ctx.installation;
+      if (inst && isTenantWorker(inst.deploymentMode()) && !inst.sink().configured()) {
+        return envelope(ctx, undefined, "blocked", ALERTS_NEEDED, { blockers: [ALERTS_NEEDED] }, "ALERTS_NEEDED");
+      }
       const ws = ctx.services.workspace;
       const services = servicesOf(ctx);
       const id = propertyIdOf(ctx, i.property);

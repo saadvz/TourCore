@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { RelaySink } from "../src/alerts/operatorEvents";
 import { Installation } from "../src/install/installation";
 import { TEXTING_WORKING } from "../src/install/stateView";
 import { SHARED_STEPS } from "../src/playbooks/shared";
@@ -23,7 +24,7 @@ afterEach(() => {
   for (const clean of cleanups.splice(0)) clean();
 });
 
-async function worker(extra: NodeJS.ProcessEnv = {}) {
+async function worker(extra: NodeJS.ProcessEnv = {}, alerts?: { connected: boolean }) {
   const root = mkdtempSync(join(tmpdir(), "tourcore-worker-"));
   const env: NodeJS.ProcessEnv = {
     TOURCORE_DEPLOYMENT_MODE: "TENANT_WORKER",
@@ -36,7 +37,14 @@ async function worker(extra: NodeJS.ProcessEnv = {}) {
     ...extra,
   };
   let inst!: Installation;
-  inst = new Installation({ root, runtime: new FileRuntimeStore(join(root, "runtime")), env: () => env, sendblueEnv: () => readSendblueEnv(inst.env()) });
+  const relay = alerts ? new RelaySink(() => undefined, () => alerts.connected) : undefined;
+  inst = new Installation({
+    root,
+    runtime: new FileRuntimeStore(join(root, "runtime")),
+    env: () => env,
+    sendblueEnv: () => readSendblueEnv(inst.env()),
+    ...(relay ? { notificationSink: () => relay } : {}),
+  });
   const server = createSetupServer({ workspace: new PropertyWorkspace(root), installation: inst, log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
@@ -127,5 +135,13 @@ describe("TENANT_WORKER mode", () => {
     expect(state.nextStep.component).toBe("VISITOR_MESSAGING");
     expect(state.nextStep.say).toBe(SHARED_STEPS.starting.ask);
     expect(JSON.stringify(state)).not.toMatch(/texting login|Sendblue|Photon/i);
+  });
+
+  it("refuses publish until the touring alert routine is connected", async () => {
+    const off = await worker({}, { connected: false });
+    const refused = JSON.stringify(await off.tool("publish", { property: "Hillside" }));
+    expect(refused).toContain("Connect the touring alert routine first.");
+    const on = await worker({}, { connected: true });
+    expect(JSON.stringify(await on.tool("publish", { property: "Hillside" }))).not.toContain("Connect the touring alert routine first.");
   });
 });
