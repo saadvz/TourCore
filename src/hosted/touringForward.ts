@@ -176,3 +176,34 @@ export async function replayInbox(inbox: TouringInbox, target: WorkerTarget, ori
     inbox.done(path);
   }
 }
+
+/** One internal JSON call to the process: what's live, or the stand-down. Undefined when it can't be reached. */
+export function workerJson<T>(target: WorkerTarget, method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; json: T } | undefined> {
+  const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+  return new Promise((resolve) => {
+    const upstream = request(
+      {
+        host: "127.0.0.1",
+        port: target.port,
+        path,
+        method,
+        headers: { [WORKER_KEY_HEADER]: target.key, ...(payload ? { "content-type": "application/json", "content-length": String(payload.length) } : {}) },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          try {
+            resolve({ status: res.statusCode ?? 502, json: JSON.parse(Buffer.concat(chunks).toString("utf8") || "null") as T });
+          } catch {
+            resolve(undefined);
+          }
+        });
+        res.on("error", () => resolve(undefined));
+      },
+    );
+    upstream.on("error", () => resolve(undefined));
+    if (payload) upstream.write(payload);
+    upstream.end();
+  });
+}

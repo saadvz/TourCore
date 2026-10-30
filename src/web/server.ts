@@ -19,14 +19,16 @@ import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled, cleanerMultiTenant, tourCoreTenants } from "../cleaner-core/flag";
 import type { TouringFront } from "../hosted/serviceTools";
+import type { OperatorServices } from "../operator/services";
 import { DeliveryError } from "../alerts/operatorEvents";
 import { touringAlertsConnected, touringSinkFor } from "../hosted/touringAlerts";
 import { buildTouringEnv, touringScratch } from "../hosted/touringEnv";
+import { standDownTouring, TOURING_LIVE_PATH, TOURING_STAND_DOWN_PATH, touringLiveWork } from "../hosted/touringLive";
 import { replayInbox, TouringInbox } from "../hosted/touringForward";
 import { forkTouringWorker, TouringSupervisor } from "../hosted/touringSupervisor";
 import { assistantProfile, cleanerAssistant, type CleanerAssistant } from "../cleaner-core/assistant";
 import { TenantRegistry, type InviteRefusal } from "../cleaner-core/hosted/registry";
-import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath } from "../cleaner-core/hosted/router";
+import { drainAllTenants, handleHostedCleaner, hostedCleaner, splitTenantPath, type HostedCleaner } from "../cleaner-core/hosted/router";
 import { TenantSecrets } from "../cleaner-core/hosted/tenantSecrets";
 import { handleAdmin } from "../cleaner-core/hosted/admin";
 import { INVITE_REFUSALS } from "../mcp/oauth/pages";
@@ -150,8 +152,12 @@ export interface TourCoreServer extends Server {
     settled(): Promise<void>;
     storageReady: Promise<{ ok: boolean; summary: string }>;
     tickOverstay(): Promise<void>;
+    /** The operator services the tools use: workspace, tours, and texting. */
+    services: OperatorServices;
     /** The multi-tenant service's touring processes and saved texts. */
     touring?: TouringFront;
+    /** The multi-tenant service's front: tenants, secrets, and their services. */
+    hosted?: HostedCleaner;
   };
 }
 
@@ -178,6 +184,7 @@ function workerKeyMatches(given: string | string[] | undefined, key: string | un
  */
 function workerRouteAllowed(method: string, path: string): boolean {
   if (path === MCP_PATH || path === HEALTH_PATH) return true;
+  if ((method === "GET" && path === TOURING_LIVE_PATH) || (method === "POST" && path === TOURING_STAND_DOWN_PATH)) return true;
   if (method === "POST" && (path === TWILIO_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
   if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
@@ -645,6 +652,17 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
 
     await restored;
     try {
+      // The shared service asks a touring process what's live, and stands it down, before a switch.
+      if (workerMode && (url.pathname === TOURING_LIVE_PATH || url.pathname === TOURING_STAND_DOWN_PATH)) {
+        const json = "application/json; charset=utf-8";
+        const now = options.now?.() ?? new Date();
+        const work = await touringLiveWork(api, now);
+        if (url.pathname === TOURING_LIVE_PATH) return send(200, json, JSON.stringify(work));
+        if (work.inProgress) return send(409, json, JSON.stringify({ error: "in-progress" }));
+        const result = await standDownTouring(api, now);
+        await alertWork;
+        return send(200, json, JSON.stringify(result));
+      }
       if (method === "GET" && url.pathname === "/google/oauth/callback") {
         const result = await installation.records.completeCallback(url.searchParams);
         const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
@@ -1096,7 +1114,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       },
       storageReady,
       tickOverstay: () => conversations.tickOverstay(),
-      ...(touringFront ? { touring: touringFront } : {}),
+      services: api,
+      ...(touringFront ? { touring: touringFront, hosted: hostedCleanerService } : {}),
     },
   });
 }

@@ -3,6 +3,7 @@ import type { CleanerAssistant } from "../cleaner-core/assistant";
 import { tourCoreTenants } from "../cleaner-core/flag";
 import type { Tenant, TenantService } from "../cleaner-core/hosted/registry";
 import type { HostedCleaner } from "../cleaner-core/hosted/router";
+import { standDownService, switchService } from "./service";
 import { issueTouringAlertLink } from "./touringAlerts";
 import type { TouringInbox } from "./touringForward";
 import type { TouringSupervisor } from "./touringSupervisor";
@@ -146,9 +147,17 @@ export async function handleFrontTool(ctx: FrontContext, name: string, args: unk
     ctx.noteToolsChanged();
     return { text: CHOSEN_LINE(service), structured: { service }, isError: false };
   }
+  if (name === "switch_service") {
+    const { to, confirmation } = parsed.data as { to: TenantService; confirmation?: string };
+    return switchService({ h: ctx.h, tenant: ctx.tenant, actor: "host", noteToolsChanged: ctx.noteToolsChanged }, { to, ...(confirmation ? { confirmation } : {}) });
+  }
+  if (name === "stand_down_service") {
+    const { confirmation } = parsed.data as { confirmation?: string };
+    return standDownService({ h: ctx.h, tenant: ctx.tenant, actor: "host", noteToolsChanged: ctx.noteToolsChanged }, confirmation ? { confirmation } : {});
+  }
   if (name === "save_alert_routine") {
     const link = issueTouringAlertLink(ctx.h, ctx.tenant, ctx.caller.grantId);
     return { text: `Send the host this private link to paste the routine's webhook address and key. Never in chat: ${link}`, isError: false };
   }
-  return fail("That isn't ready on this service yet.");
+  return undefined;
 }

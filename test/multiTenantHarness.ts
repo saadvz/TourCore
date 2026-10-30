@@ -135,8 +135,9 @@ export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.P
   };
 
   const touring = () => app.server.tourCore.touring;
+  const hosted = () => app.server.tourCore.hosted!;
 
-  return { app, registry, sms, wakes, setWakeStatus: (status: number) => void (wakeStatus = status), join, joinAt, tool, toolAt, rpcAt, toolNames, twilio, text, touring, close };
+  return { app, registry, sms, wakes, setWakeStatus: (status: number) => void (wakeStatus = status), join, joinAt, tool, toolAt, rpcAt, toolNames, twilio, text, touring, hosted, close };
 }
 
 export type MultiTenantApp = Awaited<ReturnType<typeof multiTenantApp>>;
