@@ -4,6 +4,7 @@ import { rmSync } from "node:fs";
 import { parsePhone } from "../../core/phone";
 import { forgetLiveDesk } from "../liveDesk";
 import { switchService } from "../../hosted/service";
+import { touringAlertsConnected } from "../../hosted/touringAlerts";
 import { ADMIN_HEADERS, invitePage, loginPage, messagePage, tenantPage, tenantsPage, type TenantHealth } from "./adminPages";
 import { RegistryError, tenantFolder, type Tenant, type TenantService } from "./registry";
 import type { HostedCleaner } from "./router";
@@ -168,12 +169,14 @@ export async function handleAdmin(req: IncomingMessage, res: ServerResponse, url
     case "primary":
       if (!tenant.connections.some((c) => c.grantId === grantId)) return html(400, tenantPage(tenant, live.csrf, "That connection isn't on this tenant.", healthOf(h, tenant)));
       h.registry.setPrimary(tenant.id, grantId);
+      refreshTouringAlerts(h, tenant.id);
       return redirect(back);
     case "disconnect":
       if (!tenant.connections.some((c) => c.grantId === grantId)) return html(400, tenantPage(tenant, live.csrf, "That connection isn't on this tenant.", healthOf(h, tenant)));
       deps.revokeGrant(grantId);
       h.secrets.deleteConnection(tenant.id, grantId);
       h.registry.disconnect(tenant.id, grantId);
+      refreshTouringAlerts(h, tenant.id);
       h.log(`Disconnected one connection from ${tenant.id}.`);
       return redirect(back);
     case "disable":
@@ -217,8 +220,15 @@ function prune(deps: AdminDeps): void {
       if (live.has(connection.grantId)) continue;
       deps.h.secrets.deleteConnection(tenant.id, connection.grantId);
       deps.h.registry.disconnect(tenant.id, connection.grantId);
+      refreshTouringAlerts(deps.h, tenant.id);
     }
   }
+}
+
+/** A touring process's publish waits on its alerts: tell it again after the chats that carry them change. */
+function refreshTouringAlerts(h: HostedCleaner, tenantId: string): void {
+  const tenant = h.registry.get(tenantId);
+  if (tenant?.service === "touring") h.touring?.supervisor.setAlerts(tenantId, touringAlertsConnected(h, tenant));
 }
 
 async function createTenant(deps: AdminDeps, form: URLSearchParams, csrf: string, html: (status: number, body: string) => boolean): Promise<boolean> {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { resetAdminSessions } from "../src/cleaner-core/hosted/admin";
 import { closeHostedApps } from "./cleanerOauthHarness";
 import { multiTenantApp, type MultiTenantApp } from "./multiTenantHarness";
 import { ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
@@ -15,6 +16,7 @@ const MILL_URL = "https://routines.example/hooks/mill-routine-SECRETPATH";
 
 let open: MultiTenantApp | undefined;
 afterEach(() => {
+  resetAdminSessions();
   open?.close();
   open = undefined;
   closeHostedApps();
@@ -109,5 +111,22 @@ describe("touring alerts", () => {
     m.setWakeStatus(200);
     await waitFor(() => m.wakes.length > 1, 90_000);
     expect(JSON.parse(m.wakes[1]!.body).eventId).toBe(JSON.parse(m.wakes[0]!.body).eventId);
+  });
+
+  it("stops publishing again once /admin disconnects the only chat with a routine", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1", CLEANER_CORE_ADMIN_PASSWORD: "admin-test-password-1" } }));
+    const { tenant, token: withRoutine } = await touringTenant(m, "Lane", LANE);
+    const other = await m.joinAt(tenant.id, "grok", "/mcp");
+    await connectRoutine(m, withRoutine);
+    await waitFor(() => m.wakes.length > 0);
+    expect((await m.toolAt("/mcp", other, "publish", { property: "Hillside" })).text).not.toContain("Connect the touring alert routine first.");
+    const form = "application/x-www-form-urlencoded";
+    const login = await m.app.http("/admin/login", { method: "POST", headers: { "content-type": form }, body: "password=admin-test-password-1" });
+    const cookie = String(login.headers["set-cookie"]).split(";")[0]!;
+    const page = await (await m.app.http(`/admin/tenants/${tenant.id}`, { headers: { cookie } })).text();
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page)![1]!;
+    const grantId = m.registry.get(tenant.id)!.connections[0]!.grantId;
+    await m.app.http(`/admin/tenants/${tenant.id}/disconnect`, { method: "POST", headers: { "content-type": form, cookie }, body: new URLSearchParams({ csrf, grantId }).toString() });
+    expect((await m.toolAt("/mcp", other, "publish", { property: "Hillside" })).text).toContain("Connect the touring alert routine first.");
   });
 });
