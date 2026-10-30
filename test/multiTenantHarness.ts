@@ -2,6 +2,7 @@ import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { resetLiveDesks, setCleanerAlertFetch, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import type { CleanerAssistant } from "../src/cleaner-core/assistant";
 import { TenantRegistry } from "../src/cleaner-core/hosted/registry";
+import { setTouringAlertFetch } from "../src/hosted/touringAlerts";
 import { CLEANER_SCOPE, OPERATOR_SCOPE } from "../src/mcp/oauth/provider";
 import { twilioSignature } from "../src/messaging/twilio/signature";
 import { BASE, CLEANER_RESOURCE, hostedApp } from "./cleanerOauthHarness";
@@ -38,6 +39,10 @@ export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.P
   const wakes: Wake[] = [];
   let wakeStatus = 200;
   setCleanerAlertFetch(async (url, init) => {
+    wakes.push({ url, body: init.body });
+    return { status: wakeStatus };
+  });
+  setTouringAlertFetch(async (url, init) => {
     wakes.push({ url, body: init.body });
     return { status: wakeStatus };
   });
@@ -125,6 +130,7 @@ export async function multiTenantApp(options: { now?: () => Date; env?: NodeJS.P
     setCleanerTwilioClient(undefined);
     setCleanerCalendarFetch(undefined);
     setCleanerAlertFetch(undefined);
+    setTouringAlertFetch(undefined);
     resetLiveDesks();
   };
 

@@ -3,6 +3,7 @@ import type { CleanerAssistant } from "../cleaner-core/assistant";
 import { tourCoreTenants } from "../cleaner-core/flag";
 import type { Tenant, TenantService } from "../cleaner-core/hosted/registry";
 import type { HostedCleaner } from "../cleaner-core/hosted/router";
+import { issueTouringAlertLink } from "./touringAlerts";
 import type { TouringInbox } from "./touringForward";
 import type { TouringSupervisor } from "./touringSupervisor";
 
@@ -144,6 +145,10 @@ export async function handleFrontTool(ctx: FrontContext, name: string, args: unk
     ctx.h.log(`${ctx.tenant.id} chose ${service}.`);
     ctx.noteToolsChanged();
     return { text: CHOSEN_LINE(service), structured: { service }, isError: false };
+  }
+  if (name === "save_alert_routine") {
+    const link = issueTouringAlertLink(ctx.h, ctx.tenant, ctx.caller.grantId);
+    return { text: `Send the host this private link to paste the routine's webhook address and key. Never in chat: ${link}`, isError: false };
   }
   return fail("That isn't ready on this service yet.");
 }

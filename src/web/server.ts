@@ -19,6 +19,8 @@ import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled, cleanerMultiTenant, tourCoreTenants } from "../cleaner-core/flag";
 import type { TouringFront } from "../hosted/serviceTools";
+import { DeliveryError } from "../alerts/operatorEvents";
+import { touringAlertsConnected, touringSinkFor } from "../hosted/touringAlerts";
 import { buildTouringEnv, touringScratch } from "../hosted/touringEnv";
 import { replayInbox, TouringInbox } from "../hosted/touringForward";
 import { forkTouringWorker, TouringSupervisor } from "../hosted/touringSupervisor";
@@ -389,7 +391,17 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const supervisor = new TouringSupervisor({
           spawn: forkTouringWorker,
           env: (tenant, key) => buildTouringEnv({ base: installation.env(), tenant, dataRoot: installation.root, origin: serviceOrigin() ?? "", key, scratch: touringScratch(tenant) }),
-          onEvent: async (_tenantId, id) => ({ type: "event-ack", id, ok: false, retryable: true, message: "Alerts aren't connected yet." }),
+          // A touring process's landlord alert goes out through its tenant's routine; the answer tells its outbox whether to retry.
+          onEvent: async (tenantId, id, event) => {
+            const tenant = tenants.get(tenantId);
+            if (!tenant) return { type: "event-ack", id, ok: false, retryable: false, message: "This host is gone." };
+            try {
+              await touringSinkFor(hostedCleanerService, tenant).deliver(event);
+              return { type: "event-ack", id, ok: true };
+            } catch (err) {
+              return { type: "event-ack", id, ok: false, retryable: err instanceof DeliveryError ? err.retryable : true, message: err instanceof DeliveryError ? err.message : "The alert couldn't be delivered." };
+            }
+          },
           log,
           now: () => installation.now(),
         });
@@ -399,7 +411,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           enabled: () => tourCoreTenants(installation.env()),
           authToken,
           start: async (tenant) => {
-            await supervisor.ensure(tenant);
+            const ready = supervisor.ensure(tenant);
+            supervisor.setAlerts(tenant.id, touringAlertsConnected(hostedCleanerService, tenant));
+            await ready;
             const target = supervisor.target(tenant.id);
             const token = authToken();
             if (target && token) await replayInbox(inbox, target, serviceOrigin() ?? "", tenant.id, token, { scratch: touringScratch(tenant) });

@@ -18,6 +18,7 @@ import {
   handleCleanerMcpHttp,
   handleCleanerTwilioStatus,
   handleCleanerTwilioWebhook,
+  uploadBody,
   uploadPageOf,
 } from "../http";
 import { drainCleanerAlerts, liveDeskFor } from "../liveDesk";
@@ -27,6 +28,7 @@ import { handleCleanerUploadPage, isFormPost } from "../uploadPage";
 import { isTenantId, tenantFolder, type Tenant, type TenantRegistry } from "./registry";
 import { handleTenantMcp } from "../../hosted/frontMcp";
 import type { TouringFront } from "../../hosted/serviceTools";
+import { handleTouringAlertUpload, touringAlertsConnected, touringAlertUploadCode } from "../../hosted/touringAlerts";
 import { touringScratch } from "../../hosted/touringEnv";
 import { deliverText, forwardTenantPath } from "../../hosted/touringForward";
 import { MCP_PATH } from "../../mcp/paths";
@@ -193,6 +195,14 @@ export async function handleHostedCleaner(h: HostedCleaner, r: HostedRequest): P
   if (!tenant || tenant.disabled) return notFound();
   if (tenant.service === "touring") {
     if (method === "POST" && scoped.rest === TWILIO_WEBHOOK_PATH) return touringText(h, r, tenant, await r.readRaw(), signed(path));
+    const routineCode = method === "POST" ? touringAlertUploadCode(scoped.rest) : undefined;
+    if (routineCode) {
+      const read = await uploadBody(String(r.req.headers["content-type"] ?? ""), () => r.readCapped(ALERT_UPLOAD_MAX_BYTES));
+      const result = "error" in read ? { status: read.status, body: { ok: false, error: read.error } } : handleTouringAlertUpload(h, tenant, routineCode, read.parsed);
+      if (result.status === 200) h.touring?.supervisor.setAlerts(tenant.id, touringAlertsConnected(h, tenant));
+      r.send(result.status, JSON_TYPE, JSON.stringify(result.body), result.status === 413 ? { Connection: "close" } : {});
+      return true;
+    }
     const target = h.touring?.supervisor.target(tenant.id);
     if (!target) return notFound();
     await forwardTenantPath(target, r, scoped.rest);
