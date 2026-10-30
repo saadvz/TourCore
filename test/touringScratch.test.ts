@@ -46,8 +46,9 @@ describe("Scratch tools for touring", () => {
     m.registry.setService(tenant.id, "touring");
     // The property is set up and published before the touring process starts, as a host's would be.
     const ws = new PropertyWorkspace(join(tenantFolder(m.app.root, tenant.id), "tour-core"));
-    const { config } = ws.save(hillsideConfig());
-    ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date() }));
+    // A Scratch host's property texts through the local test outbox, so its checks pass without Twilio.
+    const { config } = ws.save({ ...hillsideConfig(), messagingProvider: "local" });
+    ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(), installed: { provider: "local" } }));
     publishForVisitors(ws, config.property.id, new Date());
     await m.touring()!.start(m.registry.get(tenant.id)!);
     const token = await m.joinAt(tenant.id, "grok", "/mcp");
@@ -55,6 +56,7 @@ describe("Scratch tools for touring", () => {
     const outbox = lines(await m.toolAt("/mcp", token, "read_outbox"), "texts");
     expect(outbox.length).toBeGreaterThan(0);
     expect(outbox.every((line) => line.to === VISITOR)).toBe(true);
+    expect(outbox.map((line) => line.text).join("\n")).not.toContain("Tours by text aren't available right now");
   });
 
   it("refuses send_test_text from a number outside the 555 block", SLOW, async () => {

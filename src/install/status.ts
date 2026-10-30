@@ -557,6 +557,8 @@ export const HOST_NUMBER_MISSING = "This host's texting number isn't set up yet.
 
 /** The host's Twilio number, from the shared service. Nothing to choose and no keys to enter. */
 function hostNumberStatus(inst: Installation): ComponentStatus {
+  // A Scratch host on a 555 number texts through the local test outbox; that is its texting.
+  if (selectionFromInstallation(inst).provider === "local") return component("VISITOR_MESSAGING", "READY", "Texts stay in the Scratch test outbox.", { provider: "local" });
   const provider = createMessagingProvider("twilio", { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
   if (provider.validateConfiguration().ok) return component("VISITOR_MESSAGING", "READY", "Texting is on this host's number.", { provider: "twilio" });
   return component("VISITOR_MESSAGING", "ERROR", HOST_NUMBER_MISSING, {

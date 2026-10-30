@@ -616,7 +616,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     const railwayHealth = host === RAILWAY_HEALTHCHECK_HOST && method === "GET" && url.pathname === HEALTH_PATH;
     if (method === "GET" && url.pathname === HEALTH_PATH && (isLocal || railwayHealth || (publicHost && host === publicHost))) {
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
-      return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
+      // A touring process is reached through the shared service's public /t/<id>/ links, so it shows only public health.
+      return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal && !workerMode ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
     }
     if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages, multiTenant()))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");

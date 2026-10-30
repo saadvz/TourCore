@@ -95,9 +95,13 @@ describe("TENANT_WORKER mode", () => {
     expect((await w.http("/healthz", { key: "wrong-key" })).status).toBe(404);
   });
 
-  it("answers the health check to the key", async () => {
+  it("answers the health check to the key, with only what the public health check shows", async () => {
     const w = await worker();
-    expect((await w.http("/healthz")).status).toBe(200);
+    const health = await w.http("/healthz");
+    expect(health.status).toBe(200);
+    const body = JSON.parse(health.text) as Record<string, unknown>;
+    expect(body.service).toBe("tour-core");
+    for (const runtimeOnly of ["pid", "uptimeSeconds", "deploymentMode", "alertDelivery", "alertsWaiting"]) expect(body).not.toHaveProperty(runtimeOnly);
   });
 
   it("serves the landlord tools to the key, without the hosted-demo tools", async () => {
@@ -127,6 +131,12 @@ describe("TENANT_WORKER mode", () => {
     const state = await w.state();
     expect(state.nextStep.component).toBe("STORAGE");
     expect(state.summary).toBe("Backups is next.");
+  });
+
+  it("counts a Scratch tenant's local test texts as its texting", async () => {
+    const w = await worker({ TOURCORE_MESSAGING_PROVIDER: "local", TOURCORE_LOCAL_FROM_NUMBER: "+15555550150", TOURCORE_TWILIO_ACCOUNT_SID: "", TOURCORE_TWILIO_AUTH_TOKEN: "", TOURCORE_TWILIO_PHONE_NUMBER: "" });
+    const state = await w.state();
+    expect(["PUBLIC_ENDPOINT", "VISITOR_MESSAGING", "GROK_OPERATOR", "RUNTIME"]).not.toContain(state.nextStep.component);
   });
 
   it("says the host's number isn't ready when the service gave it none", async () => {
