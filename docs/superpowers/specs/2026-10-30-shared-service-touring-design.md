@@ -157,7 +157,7 @@ Both use the two-step confirmation code Cleaner Core uses for `hold_job`: call w
 - Cleaning: deactivates the property and withdraws each offered or confirmed job, with one text to that job's cleaner saying the cleaning is off. Refused while a cleaning is in progress. This is new to Cleaner Core. `reset_property` stays the full wipe.
 - Kept for both: property details, people and opt-ins, calendar links, the sealed door code, preferences, alert routine connections, and history.
 
-**Switching back.** The saved setup is still in the service's folder. `get_state` picks up from it: touring asks for `resume_tours`, cleaning asks for `activate`. No setup step is repeated unless something it depends on changed.
+**Switching back.** The saved setup is still in the service's folder. `get_state` picks up from it: touring asks to resume bookings (`pause_tours` with `paused: false`), cleaning asks for `activate`. No setup step is repeated unless something it depends on changed.
 
 ### On `/admin`
 

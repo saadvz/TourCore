@@ -110,8 +110,8 @@ git commit -m "Hosted: a service per tenant, existing tenants become cleaning"
   - `WORKER_KEY_HEADER = "x-tourcore-worker-key"`, exported from `src/web/server.ts`.
   - In this mode `createSetupServer` reads `TOURCORE_WORKER_KEY`. Every request without that header value (compared with `timingSafeEqual`) gets 404 "Not found". `/mcp` runs as static auth, with the same key as its bearer.
   - Answered 404 in this mode even with the key: `/`, `/grok`, `/install`, `/api/install/*`, `/connect`, `/api/connect*`, OAuth paths, `/mcp/ops`, `/mcp/qa`.
-  - Gone in this mode: the tools `reset_hosted_demo` and `publish_demo_property`, the hosted owner binding, and `TOURCORE_HOSTED_TENANT_RESET` / `TOURCORE_HOSTED_OWNER_RESET`.
-  - `get_installation_status` and `get_state` report the public address, messaging, and storage as provided by the host. They never ask for a messaging provider, Sendblue, or the Grok Routine.
+  - Gone in this mode: the tool `reset_hosted_demo`, the hosted owner binding, and `TOURCORE_HOSTED_TENANT_RESET` / `TOURCORE_HOSTED_OWNER_RESET`.
+  - `get_state` (and the QA status tool) report the public address, messaging, and storage as provided by the host. They never ask for a messaging provider, Sendblue, or the Grok Routine.
 
 - [ ] **Step 1: Write the failing tests.** Start `createSetupServer` with `TOURCORE_DEPLOYMENT_MODE=TENANT_WORKER`, `TOURCORE_WORKER_KEY=k-test-worker-key`, a temp `TOURCORE_HOME`, and `PUBLIC_BASE_URL=https://shared.up.railway.app/t/tnt_aaaaaaaaaa`.
 
@@ -129,7 +129,7 @@ it.each(["/", "/grok", "/install", "/connect", "/mcp/ops", "/mcp/qa", "/authoriz
   expect((await w.http(path)).status).toBe(404);
 });
 it("never asks for a texting provider or the Grok Routine", async () => {
-  const state = await w.tool("get_installation_status");
+  const state = await w.tool("get_state");
   expect(JSON.stringify(state)).not.toMatch(/Sendblue|Photon|Grok Routine|choose.*provider/i);
 });
 ```
@@ -522,7 +522,7 @@ it("switches with no texts, then switching back finds the saved setup", async ()
   await switchTo(m, lane, "cleaning");
   expect(m.sms.sent.length).toBe(before);
   await switchTo(m, lane, "touring");
-  expect((await m.toolAt("/mcp", token, "get_state")).text).toContain("resume_tours");
+  expect((await m.toolAt("/mcp", token, "get_state")).text).toContain("paused: false");
 });
 it("rejects a stale confirmation code after the live work changed", async () => {});
 ```
