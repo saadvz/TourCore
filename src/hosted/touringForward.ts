@@ -6,7 +6,7 @@ import type { HostedRequest } from "../cleaner-core/hosted/router";
 import { formParams, twilioSignature } from "../messaging/twilio/signature";
 import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
-import { WORKER_KEY_HEADER } from "./ipc";
+import { WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "./ipc";
 
 /**
  * How the shared service reaches one touring process on loopback: MCP calls after OAuth, the links
@@ -21,7 +21,7 @@ export interface WorkerTarget {
 }
 
 /** Never forwarded: hop-by-hop headers, the caller's own credentials, and any key a caller made up. */
-const DROPPED = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host", "authorization", "cookie", "content-length", WORKER_KEY_HEADER]);
+const DROPPED = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host", "authorization", "cookie", "content-length", WORKER_KEY_HEADER, WORKER_INTERNAL_HEADER]);
 
 function forwardedHeaders(headers: IncomingHttpHeaders, key: string): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
@@ -187,7 +187,7 @@ export function workerJson<T>(target: WorkerTarget, method: "GET" | "POST", path
         port: target.port,
         path,
         method,
-        headers: { [WORKER_KEY_HEADER]: target.key, ...(payload ? { "content-type": "application/json", "content-length": String(payload.length) } : {}) },
+        headers: { [WORKER_KEY_HEADER]: target.key, [WORKER_INTERNAL_HEADER]: target.key, ...(payload ? { "content-type": "application/json", "content-length": String(payload.length) } : {}) },
       },
       (res) => {
         const chunks: Buffer[] = [];

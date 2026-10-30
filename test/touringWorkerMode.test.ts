@@ -11,6 +11,7 @@ import { SHARED_STEPS } from "../src/playbooks/shared";
 import { readSendblueEnv } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace } from "../src/setup/workspace";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
+import { WORKER_INTERNAL_HEADER } from "../src/hosted/ipc";
 import { createSetupServer, WORKER_KEY_HEADER } from "../src/web/server";
 
 /**
@@ -93,6 +94,13 @@ describe("TENANT_WORKER mode", () => {
     expect((await w.http("/healthz", { key: null })).status).toBe(404);
     expect((await w.mcp("tools/list", {}, null)).status).toBe(404);
     expect((await w.http("/healthz", { key: "wrong-key" })).status).toBe(404);
+  });
+
+  it("keeps its internal routes from the key alone: they need the front's internal header too", async () => {
+    const w = await worker();
+    expect((await w.http("/internal/live")).status).toBe(404);
+    expect((await w.http("/internal/live", { headers: { [WORKER_INTERNAL_HEADER]: KEY } })).status).toBe(200);
+    expect((await w.http("/internal/stand-down", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
   });
 
   it("answers the health check to the key, with only what the public health check shows", async () => {

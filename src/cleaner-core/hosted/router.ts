@@ -33,6 +33,7 @@ import { handleTouringAlertUpload, touringAlertsConnected, touringAlertUploadCod
 import { touringScratch } from "../../hosted/touringEnv";
 import { recordScratchText } from "../../hosted/touringScratch";
 import { deliverText, forwardTenantPath } from "../../hosted/touringForward";
+import { touringPublicRoute } from "../../hosted/workerRoutes";
 import { MCP_PATH } from "../../mcp/paths";
 import { TWILIO_WEBHOOK_PATH } from "../../messaging/twilio/provider";
 import { formParams, verifyTwilioSignature } from "../../messaging/twilio/signature";
@@ -217,8 +218,9 @@ export async function handleHostedCleaner(h: HostedCleaner, r: HostedRequest): P
       r.send(result.status, JSON_TYPE, JSON.stringify(result.body), result.status === 413 ? { Connection: "close" } : {});
       return true;
     }
+    // Only the touring process's public routes. Never its connector, internal routes, or local webhook.
     const target = h.touring?.supervisor.target(tenant.id);
-    if (!target) return notFound();
+    if (!target || !touringPublicRoute(method, scoped.rest)) return notFound();
     await forwardTenantPath(target, r, scoped.rest);
     h.registry.touch(tenant.id);
     return true;

@@ -99,4 +99,19 @@ describe("hosted tenants gate", () => {
     expect(m.registry.get(court.tenant.id)?.service).toBe("cleaning");
     expect(m.touring()!.supervisor.target(mill.tenant.id)).toBeDefined();
   });
+
+  it("never lets a public /t/<id>/ link reach a touring process's internal routes or local webhook", SLOW, async () => {
+    const { m, lane } = await three();
+    expect((await m.app.http(`/t/${lane.tenant.id}/internal/live`)).status).toBe(404);
+    expect((await m.app.http(`/t/${lane.tenant.id}/internal/stand-down`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
+    expect((await m.app.http(`/t/${lane.tenant.id}/webhooks/local`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ from: VISITOR, text: "Tour" }) })).status).toBe(404);
+    expect((await m.app.http(`/t/${lane.tenant.id}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
+    expect(readScratchInbox(m.hosted(), lane.tenant.id)).toEqual([]);
+  });
+
+  it("checks an audit export link's token even through the shared service", SLOW, async () => {
+    const { m, lane } = await three();
+    const res = await m.app.http(`/t/${lane.tenant.id}/api/properties/prop_x/audit-exports/2026-10-30-1700000000000/audit-export.json`);
+    expect(res.status).toBe(401);
+  });
 });

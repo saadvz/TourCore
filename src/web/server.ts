@@ -59,7 +59,8 @@ import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
 import { isHostedRailway, isTenantWorker, parseDeploymentMode, resolveDeploymentMode } from "../install/deployment";
-import { WORKER_KEY_HEADER } from "../hosted/ipc";
+import { WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "../hosted/ipc";
+import { touringPublicRoute } from "../hosted/workerRoutes";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
@@ -178,19 +179,16 @@ function workerKeyMatches(given: string | string[] | undefined, key: string | un
 }
 
 /**
- * What a touring process answers, even with its key: the landlord connector, the texting webhooks,
- * the visitor identity form, compliance pages, portable backups, and audit export links. Never the
- * operator app, setup pages, OAuth, or the ops and QA connectors: the shared service owns those.
+ * What a touring process answers, even with its key: its landlord connector, the texting webhooks,
+ * the public routes the shared service forwards, and the internal routes only the front calls (those
+ * also need the internal header, which the front never forwards from a caller). Never the operator
+ * app, setup pages, OAuth, or the ops and QA connectors: the shared service owns those.
  */
-function workerRouteAllowed(method: string, path: string): boolean {
-  if (path === MCP_PATH || path === HEALTH_PATH) return true;
-  if ((method === "GET" && path === TOURING_LIVE_PATH) || (method === "POST" && path === TOURING_STAND_DOWN_PATH)) return true;
+function workerRouteAllowed(method: string, path: string, internal: boolean): boolean {
+  if (path === MCP_PATH) return true;
   if (method === "POST" && (path === TWILIO_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
-  if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) return true;
-  if (method === "GET" && isPublicCompliancePath(path)) return true;
-  if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
-  if (method === "GET" && AuditExportLinks.parsePath(path)) return true;
-  return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
+  if ((method === "GET" && path === TOURING_LIVE_PATH) || (method === "POST" && path === TOURING_STAND_DOWN_PATH)) return internal;
+  return touringPublicRoute(method, path);
 }
 
 /**
@@ -608,18 +606,19 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     const publicHost = publicBase ? new URL(publicBase).hostname.toLowerCase() : undefined;
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = req.method ?? "GET";
-    const isLocal = LOCAL_HOSTS.includes(host);
+    // A touring process is reached only through the shared service, so nothing it gets is local.
+    const isLocal = !workerMode && LOCAL_HOSTS.includes(host);
     const hosted = hostedMode();
-    if (workerMode && (!workerKeyMatches(req.headers[WORKER_KEY_HEADER], workerKey()) || !workerRouteAllowed(method, url.pathname))) {
+    if (workerMode && (!workerKeyMatches(req.headers[WORKER_KEY_HEADER], workerKey()) || !workerRouteAllowed(method, url.pathname, workerKeyMatches(req.headers[WORKER_INTERNAL_HEADER], workerKey())))) {
       return send(404, "text/plain", "Not found");
     }
     const railwayHealth = host === RAILWAY_HEALTHCHECK_HOST && method === "GET" && url.pathname === HEALTH_PATH;
-    if (method === "GET" && url.pathname === HEALTH_PATH && (isLocal || railwayHealth || (publicHost && host === publicHost))) {
+    if (method === "GET" && url.pathname === HEALTH_PATH && (isLocal || workerMode || railwayHealth || (publicHost && host === publicHost))) {
       if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
       // A touring process is reached through the shared service's public /t/<id>/ links, so it shows only public health.
-      return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal && !workerMode ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
+      return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
     }
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages, multiTenant()))) {
+    if (!workerMode && !isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted, assistantProfile(installation.env()).privatePages, multiTenant()))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
