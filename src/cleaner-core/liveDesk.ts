@@ -1797,6 +1797,27 @@ export class LiveDesk {
     return this.reply({ next: jobHoldLine(address), turns: this.turns() });
   }
 
+  /** Every phone this setup saved: host, cleaner, observer, and contacts. Sends nothing. */
+  knownPhones(): Promise<string[]> {
+    return this.serial(async () => {
+      const raw = [this.file.host, this.file.cleaner, this.file.observer, ...(this.file.contacts ?? []).map((contact) => contact.phone)];
+      return raw.map((phone) => (phone ? parsePhone(phone) : undefined)).filter((phone): phone is string => !!phone);
+    });
+  }
+
+  /** A note for the host from the shared service, shown by check_now, with one wake-up. Nothing is texted. */
+  noteForHost(id: string, body: string): Promise<boolean> {
+    return this.serial(async () => {
+      this.resume();
+      const engine = this.engine;
+      if (!engine) return false;
+      const before = new Set(this.visibleNotes(engine).map((note) => note.id));
+      engine.keepHostNote(id, body);
+      this.queueNewAlerts(before);
+      return true;
+    });
+  }
+
   /** What keeps this number on cleaning, for the shared service's switch. Sends nothing. */
   liveWork(): Promise<{ live: string[]; inProgress: boolean }> {
     return this.serial(async () => {

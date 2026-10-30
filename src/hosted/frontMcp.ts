@@ -5,6 +5,7 @@ import type { Tenant } from "../cleaner-core/hosted/registry";
 import { promoteRoutineOwner, tenantContext, type HostedCleaner, type HostedRequest } from "../cleaner-core/hosted/router";
 import { attachToolListStream, noteInitialized } from "../mcp/toolListChanged";
 import { OPERATOR_TOOL_NAMES } from "../operator/tools";
+import { ServiceNotices } from "./crossService";
 import { FRONT_TOOL_NAMES, handleFrontTool, listedFrontTools, toolsFor, UNSET_INSTRUCTIONS, wrongServiceLine, type FrontReply, type ToolState } from "./serviceTools";
 import { callWorkerMcp, forwardMcp, type WorkerTarget } from "./touringForward";
 
@@ -122,8 +123,30 @@ export async function handleTenantMcp(h: HostedCleaner, r: HostedRequest, path: 
     return r.send(200, JSON_TYPE, JSON.stringify(listed));
   }
 
+  // Touring's get_state also carries the shared service's notes for the host, once each.
+  if (state === "touring" && message?.method === "tools/call" && message.id !== undefined && message.params?.name === "get_state") {
+    const answer = await touringCall(h, tenant.id, caller.grantId, raw, r);
+    if (!answer) return r.send(503, JSON_TYPE, JSON.stringify({ error: { message: TOURING_DOWN } }));
+    return r.send(answer.status, JSON_TYPE, withNotices(answer.body, new ServiceNotices(h.dataRoot).take(tenant.id)));
+  }
   if (state === "touring") return touringPass(h, r, tenant, caller.grantId, raw, message?.method === "initialize");
   return cleaningPass(h, r, tenant, caller, raw);
+}
+
+/** Adds the notes to a tools/call reply's structured content and its JSON text. Unchanged when there are none. */
+function withNotices(body: string, notices: string[]): string {
+  if (notices.length === 0) return body;
+  try {
+    const reply = JSON.parse(body) as { result?: { structuredContent?: Record<string, unknown>; content?: { type: string; text?: string }[] } };
+    const result = reply.result;
+    if (!result?.structuredContent) return body;
+    result.structuredContent = { ...result.structuredContent, serviceNotices: notices };
+    const first = result.content?.[0];
+    if (first?.type === "text") first.text = JSON.stringify(result.structuredContent);
+    return JSON.stringify(reply);
+  } catch {
+    return body;
+  }
 }
 
 /** The touring process for this tenant, once it has seen this connection's initialize. */
