@@ -78,6 +78,20 @@ describe("hosted tenants gate", () => {
     expect(manifestId(m, lane.tenant)).not.toBe(manifestId(m, mill.tenant));
   });
 
+  it("serves a visitor's identity form through the prefix, with its script, styles, and form posts reaching the same process", SLOW, async () => {
+    const { m, lane } = await three();
+    const page = new URL(`https://shared.example/t/${lane.tenant.id}/verify/abcdefghijklmnopqrstuvwx`);
+    const html = await (await m.app.http(page.pathname)).text();
+    const assets = [...html.matchAll(/(?:href|src)="([^"]+)"/g)].map((match) => new URL(match[1]!, page).pathname);
+    expect(assets).toEqual([`/t/${lane.tenant.id}/styles.css`, `/t/${lane.tenant.id}/verify.js`]);
+    for (const asset of assets) expect((await m.app.http(asset)).status, asset).toBe(200);
+    const script = await (await m.app.http(`/t/${lane.tenant.id}/verify.js`)).text();
+    const api = /const api = `([^$`]+)\$/.exec(script)?.[1];
+    expect(api).toBe("../api/verify/");
+    // An unknown token is the touring process's own answer, not the shared service's not-found.
+    expect((await m.app.http(new URL(`${api}abcdefghijklmnopqrstuvwx`, page).pathname)).status).toBe(410);
+  });
+
   it("builds a touring process's settings from its own tenant only", () => {
     const base: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
     for (const name of PER_TENANT_NAMES) base[name] = `court-or-mill-${name}`;
