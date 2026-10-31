@@ -35,7 +35,7 @@ const Service = z.enum(["touring", "cleaning"]);
 const GET_STATE: FrontTool = {
   name: "get_state",
   title: "What's next",
-  description: "Call this first. Says this number has no service yet and what each service does. Then ask the host which one to set up and call choose_service.",
+  description: "Call this as soon as you're connected, before the host asks anything. Gives the one question to ask the host, with its choices: tours for a rental unit, or a cleaner for a property. Then call choose_service with their answer.",
   input: z.object({}),
 };
 const CHOOSE: FrontTool = {
@@ -110,7 +110,14 @@ export const wrongServiceLine = (service: TenantService) => `This number is set 
 export const CHOSEN_LINE = (service: TenantService) => `Set up for ${service}. Your tools have changed. If you don't see the new ones, start a new chat.`;
 
 const UNSET_BOTH =
-  "This number isn't set up yet. Ask the host which service to set up: touring (visitors text this number to book a self-guided tour) or cleaning (turnover cleanings from the host's booking calendar). Then call choose_service.";
+  "This number isn't set up yet. Ask the host the question in say right away, with the two choices as buttons. Touring: visitors text this number to book a self-guided tour of a rental unit. Cleaning: turnover cleanings from the host's booking calendar. Then call choose_service with the service they picked.";
+
+/** The one question a host gets on connecting, and its choices, so the chat can show them as buttons. */
+export const SERVICE_QUESTION = "What do you want to set up?";
+export const SERVICE_CHOICES = [
+  { label: "Tours for a rental unit", service: "touring" },
+  { label: "A cleaner for a property", service: "cleaning" },
+] as const;
 const UNSET_CLEANING_ONLY = "This number isn't set up yet. It can run cleaning: turnover cleanings from the host's booking calendar. Call choose_service with cleaning.";
 
 /** Like Cleaner Core's: Grok posts the routine it made from its own computer. The host never opens the link. */
@@ -118,7 +125,8 @@ const ALERT_UPLOAD_NEXT =
   'From your own cloud computer, POST JSON {"url": "<webhook address>", "key": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the address and key of the routine you made. If you don\'t hold them, ask the host for them with your secure secret input card first. Never send uploadUrl to the host, and never put the address or key in chat or in a tool argument. Then call get_state.';
 
 /** The initialize instructions for a tenant that hasn't chosen yet. */
-export const UNSET_INSTRUCTIONS = "Call get_state first and follow its next step. Ask the host which service to set up before anything else.";
+export const UNSET_INSTRUCTIONS =
+  "As soon as you're connected, without waiting for the host to ask, call get_state and ask its question with its choices as buttons. Do nothing else first.";
 
 /** What the shared service holds for touring tenants. Absent until the service runs touring at all. */
 export interface TouringFront {
@@ -161,7 +169,10 @@ export async function handleFrontTool(ctx: FrontContext, name: string, args: unk
   const parsed = tool.input.safeParse(args ?? {});
   if (!parsed.success) return fail("That was missing something I need.");
   const touringOn = tourCoreTenants(ctx.h.baseEnv()) && !!ctx.h.touring;
-  if (name === "get_state") return done({ next: touringOn ? UNSET_BOTH : UNSET_CLEANING_ONLY, services: touringOn ? ["touring", "cleaning"] : ["cleaning"] });
+  if (name === "get_state") {
+    if (!touringOn) return done({ next: UNSET_CLEANING_ONLY, services: ["cleaning"] });
+    return done({ next: UNSET_BOTH, say: SERVICE_QUESTION, choices: SERVICE_CHOICES, services: ["touring", "cleaning"] });
+  }
   if (name === "choose_service") {
     const service = (parsed.data as { service: TenantService }).service;
     if (service === "touring" && !touringOn) return fail("Touring isn't available on this service yet. Choose cleaning.");

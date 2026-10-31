@@ -9,7 +9,7 @@ import { installationAlertHealth } from "../alerts/alertHealth";
 import { describeUpdates, enabledUpdates } from "../alerts/preferences";
 import type { InstalledMessaging, OperatorServices } from "../operator/services";
 import { publishGuards, visitorTexting } from "../operator/setupFlow";
-import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence } from "../setup/setupActions";
+import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence, visitorsTextLine } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, isTenantWorker, type DeploymentMode } from "./deployment";
@@ -856,7 +856,7 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   const blocking = components.find((c) => c.state !== "READY" && c.next)?.next;
   const nextStep =
     blocking ??
-    anotherPropertyStep(operateMessage(textingState === "connected" ? "connected" : textingState === "test-mode" ? "test-mode" : "practice", alertsOn));
+    anotherPropertyStep(operateMessage(textingState === "connected" ? "connected" : textingState === "test-mode" ? "test-mode" : "practice", alertsOn, activeFromNumber(inst)));
   if (!blocking) {
     const property = components.find((c) => c.component === "PROPERTY");
     if (property) property.optionalActions = [...property.optionalActions, nextStep];
@@ -881,8 +881,11 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
 }
 
 /** What operating means today, per subsystem: texting can be live or test-mode while door access is still demo. */
-export function operateMessage(texting: "connected" | "test-mode" | "practice", alertsOn: boolean): string {
-  if (texting === "connected") return alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts;
+export function operateMessage(texting: "connected" | "test-mode" | "practice", alertsOn: boolean, number?: string): string {
+  if (texting === "connected") {
+    const message = alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts;
+    return number ? message.replace("Visitor texting is live.", `Visitor texting is live. ${visitorsTextLine(number)}`) : message;
+  }
   const modes = texting === "test-mode" ? localTestModeSentence(true) : modeSentence(false, true);
   return `Your property is published. ${modes} ${alertsOn ? "I'll keep you updated on your tours and let you know when something needs your attention." : "Ask me any time to show active tours or what needs your attention."}`;
 }

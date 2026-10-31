@@ -32,15 +32,20 @@ describe("one address, tools by service", () => {
     const token = await m.joinAt(tenant.id, "grok", "/mcp");
     expect(await m.toolNames("/mcp", token)).toEqual(["choose_service", "get_state"]);
     const state = await m.toolAt("/mcp", token, "get_state");
-    expect(state.text).toContain("touring (visitors text this number to book a self-guided tour) or cleaning");
+    // One question with two choices, so the chat can offer them as buttons the moment it connects.
+    expect(state.structured?.say).toBe("What do you want to set up?");
+    expect(state.structured?.choices).toEqual([
+      { label: "Tours for a rental unit", service: "touring" },
+      { label: "A cleaner for a property", service: "cleaning" },
+    ]);
   });
 
-  it("answers initialize for a tenant with no service, asking for get_state first", async () => {
+  it("answers initialize for a tenant with no service, asking the question as soon as it connects", async () => {
     const m = await start();
     const { tenant } = m.registry.create({ label: "Lane", twilioNumber: LANE });
     const token = await m.joinAt(tenant.id, "grok", "/mcp");
     const init = await m.rpcAt("/mcp", token, "initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "Grok", version: "1" } });
-    expect(JSON.stringify(init.json.result)).toContain("Call get_state first");
+    expect(JSON.stringify(init.json.result)).toContain("As soon as you're connected, without waiting for the host to ask, call get_state");
   });
 
   it("turns a tenant into a touring tenant and lists Tour Core's tools", SLOW, async () => {

@@ -105,6 +105,11 @@ export function localTestModeSentence(accessDemo: boolean): string {
   return `${LOCAL_TEST_TEXTING} ${doorAccessSentence(accessDemo)}`;
 }
 
+/** The number visitors text, said once a property takes real texts. */
+export function visitorsTextLine(number: string): string {
+  return `Visitors text ${number} to book a tour.`;
+}
+
 export function modeSentence(textingLive: boolean, accessDemo: boolean): string {
   const texting = textingLive ? "Visitor texting is live." : "Visitor texts are practice only, so nobody is texted.";
   return `${texting} ${doorAccessSentence(accessDemo)}`;

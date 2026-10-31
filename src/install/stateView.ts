@@ -28,6 +28,7 @@ import { operatorUnitName } from "../visitor/identity";
 import { googleClientConfig } from "../storage/googleOAuth";
 import type { SettingName } from "./secretStore";
 import { isHostedRailway, isTenantWorker } from "./deployment";
+import { activeFromNumber } from "../messaging/registry";
 import type { Installation } from "./installation";
 import { storageVolumeHealth } from "./persistentVolume";
 import { getInstallationStatus, installedMessaging, primaryProperty, type InstallationStatus, type InstallationStep } from "./status";
@@ -296,6 +297,12 @@ function textingLine(status: InstallationStatus): string {
   return textingSummary(component(status, "VISITOR_MESSAGING"));
 }
 
+/** The texting line, plus the number visitors text once texting works, so the host can always ask for it. */
+function textingOf(inst: Installation, status: InstallationStatus): { summary: string; number?: string } {
+  const number = component(status, "VISITOR_MESSAGING")?.state === "READY" ? activeFromNumber(inst) : undefined;
+  return { summary: textingLine(status), ...(number ? { number } : {}) };
+}
+
 function setupOf(services: OperatorServices, inst: Installation, picture: Picture, status: InstallationStatus) {
   if (!picture.id || !picture.draft) return undefined;
   const draft = picture.draft;
@@ -440,7 +447,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     routes: setup?.routes ?? [],
     hours: setup?.hours ?? null,
     verification: setup?.verification ?? [],
-    texting: { summary: textingLine(status) },
+    texting: textingOf(inst, status),
     alerts: { summary: alertsLine(status) },
     health: { summary: healthLine(inst, status) },
     storage: { summary: storageLine(inst) },

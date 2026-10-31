@@ -10,7 +10,7 @@ import { readState } from "../install/stateView";
 import { toE164 } from "../messaging/Messenger";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { chooseMessagingProvider } from "../messaging/switchProvider";
-import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestModeSentence, modeSentence } from "../setup/setupActions";
+import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestModeSentence, modeSentence, visitorsTextLine } from "../setup/setupActions";
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { describeTourDays } from "./tourDayWords";
@@ -640,7 +640,10 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       if (!result.published) {
         return envelope(ctx, id, "blocked", result.blockers[0]?.message ?? "It can't be published yet.", { propertyId: id, blockers: result.blockers.map((item) => item.message) }, result.blockers[0]?.code);
       }
-      return envelope(ctx, id, "done", `${config.property.name} is published for demo. ${sentence}`, { propertyId: id, published: true });
+      // The host needs the number to hand out; it is the one thing they can't look up anywhere else.
+      const line = texting.state === "connected" ? services.messagingLine?.() : undefined;
+      const number = line ? ` ${visitorsTextLine(line)}` : "";
+      return envelope(ctx, id, "done", `${config.property.name} is published for demo. ${sentence}${number}`, { propertyId: id, published: true, ...(line ? { textingNumber: line } : {}) });
     },
   }),
 ];

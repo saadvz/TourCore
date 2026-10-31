@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { RelaySink } from "../src/alerts/operatorEvents";
 import { Installation } from "../src/install/installation";
 import { TEXTING_WORKING } from "../src/install/stateView";
+import { OPERATOR_MESSAGES, operateMessage } from "../src/install/status";
 import { SHARED_STEPS } from "../src/playbooks/shared";
 import { readSendblueEnv } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace } from "../src/setup/workspace";
@@ -154,6 +155,8 @@ describe("TENANT_WORKER mode", () => {
     expect(saved).not.toMatch(/practice only/i);
     const state = (await w.state()) as unknown as { setup?: { texting?: string } };
     expect(state.setup?.texting).toBe("Connected");
+    // The host can always ask for the number visitors text.
+    expect((state as unknown as { texting: { number?: string } }).texting.number).toBe("+15555550150");
   });
 
   it("says the host's number isn't ready when the service gave it none", async () => {
@@ -170,5 +173,13 @@ describe("TENANT_WORKER mode", () => {
     expect(refused).toContain("Connect the touring alert routine first.");
     const on = await worker({}, { connected: true });
     expect(JSON.stringify(await on.tool("publish", { property: "Hillside" }))).not.toContain("Connect the touring alert routine first.");
+  });
+});
+
+describe("the number visitors text", () => {
+  it("is said once a published property takes real texts, and only then", () => {
+    expect(operateMessage("connected", true, "+15555550150")).toBe(OPERATOR_MESSAGES.operate.replace("Visitor texting is live.", "Visitor texting is live. Visitors text +15555550150 to book a tour."));
+    expect(operateMessage("connected", true)).toBe(OPERATOR_MESSAGES.operate);
+    expect(operateMessage("practice", true, "+15555550150")).not.toContain("+15555550150");
   });
 });
