@@ -62,11 +62,22 @@ export function messagePage(title: string, message: string): string {
   return shell(title, `      <h1>${escape(title)}</h1>\n      <p>${escape(message)}</p>\n      <p><a href="/admin">Back to tenants</a></p>`);
 }
 
-export function tenantsPage(tenants: Tenant[], csrf: string, error?: string): string {
+/** What the admin page shows about a tenant's service. Nothing secret. */
+export interface TenantHealth {
+  service: string;
+  process: "up" | "down" | "—";
+  restartsLastDay: number;
+  queuedTexts: number;
+}
+
+const NO_HEALTH: TenantHealth = { service: "not chosen", process: "—", restartsLastDay: 0, queuedTexts: 0 };
+
+export function tenantsPage(tenants: Tenant[], csrf: string, error?: string, healthOf: (t: Tenant) => TenantHealth = () => NO_HEALTH): string {
   const rows = tenants
     .map((t) => {
       const primary = t.connections.find((c) => c.grantId === t.primaryGrantId);
-      return `<tr><td><a href="/admin/tenants/${escape(t.id)}">${escape(t.label)}</a></td><td>${escape(t.twilioNumber)}</td><td>${escape(primary?.assistant ?? "none")}</td><td>${t.connections.length}</td><td>${escape(t.lastActivityAt ?? "never")}</td><td>${t.disabled ? "off" : "on"}</td></tr>`;
+      const health = healthOf(t);
+      return `<tr><td><a href="/admin/tenants/${escape(t.id)}">${escape(t.label)}</a></td><td>${escape(t.twilioNumber)}</td><td>${escape(health.service)}</td><td>${escape(health.process)}</td><td>${escape(primary?.assistant ?? "none")}</td><td>${t.connections.length}</td><td>${escape(t.lastActivityAt ?? "never")}</td><td>${t.disabled ? "off" : "on"}</td></tr>`;
     })
     .join("\n");
   return shell(
@@ -74,8 +85,8 @@ export function tenantsPage(tenants: Tenant[], csrf: string, error?: string): st
     `      <h1>Cleaner Core tenants</h1>
       ${errorLine(error)}
       <table>
-        <tr><th>Host</th><th>Number</th><th>Primary</th><th>Connections</th><th>Last activity</th><th>Status</th></tr>
-        ${rows || '<tr><td colspan="6">No tenants yet.</td></tr>'}
+        <tr><th>Host</th><th>Number</th><th>Service</th><th>Touring process</th><th>Primary</th><th>Connections</th><th>Last activity</th><th>Status</th></tr>
+        ${rows || '<tr><td colspan="8">No tenants yet.</td></tr>'}
       </table>
       <h2>Add a host</h2>
       <form method="post" action="/admin/tenants">
@@ -88,7 +99,7 @@ export function tenantsPage(tenants: Tenant[], csrf: string, error?: string): st
   );
 }
 
-export function tenantPage(t: Tenant, csrf: string, error?: string): string {
+export function tenantPage(t: Tenant, csrf: string, error?: string, health: TenantHealth = NO_HEALTH): string {
   const base = `/admin/tenants/${t.id}`;
   const connections = t.connections
     .map((c) => {
@@ -102,6 +113,14 @@ export function tenantPage(t: Tenant, csrf: string, error?: string): string {
     `      <h1>${escape(t.label)}</h1>
       ${errorLine(error)}
       <p>Number: ${escape(t.twilioNumber)}. Status: ${t.disabled ? "off" : "on"}. Last activity: ${escape(t.lastActivityAt ?? "never")}.</p>
+      <p>Service: ${escape(health.service)}. Touring process: ${escape(health.process)}. Restarts in the last day: ${health.restartsLastDay}. Texts waiting: ${health.queuedTexts}.</p>
+      <h2>Service</h2>
+      <form method="post" action="${escape(`${base}/service`)}">
+        ${csrfField(csrf)}
+        <p><label for="to">Answer texts for</label><br /><select id="to" name="to"><option value="touring">touring</option><option value="cleaning">cleaning</option></select></p>
+        <p><label><input type="checkbox" name="force" value="1" /> Force: switch even if something is live. Nothing is sent, and what was live stays frozen in the old service's setup.</label></p>
+        <p><button type="submit">Set service</button></p>
+      </form>
       <h2>Connections</h2>
       <table>
         <tr><th>Chat</th><th>Connected</th><th></th><th></th></tr>
