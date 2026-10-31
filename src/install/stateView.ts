@@ -316,7 +316,7 @@ function setupOf(services: OperatorServices, inst: Installation, picture: Pictur
     })),
     doors: view.doors.map((door) => ({ name: door.name, kind: door.kindLabel })),
     routes: view.units.filter((unit) => unit.route).map((unit) => ({ unit: operatorUnitName(draft.property, unit.name), doors: unit.route!.doorNames })),
-    hours: view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`,
+    hours: view.tourHours.summary ?? view.tourHours.label,
     verification: view.reviewCards.find((card) => card.step === "verification")?.rows ?? [],
     texting: texting.label,
     alerts: alertsLine(status),
