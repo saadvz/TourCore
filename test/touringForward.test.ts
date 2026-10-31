@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HostedRequest } from "../src/cleaner-core/hosted/router";
+import { WORKER_CLIENT_HEADER } from "../src/hosted/ipc";
 import { deliverText, forwardMcp, forwardTenantPath, replayInbox, TouringInbox } from "../src/hosted/touringForward";
 import { Installation } from "../src/install/installation";
 import { readSendblueEnv } from "../src/messaging/sendblue/runtime";
@@ -255,6 +256,18 @@ describe("links and calls to a touring process", () => {
     expect(got.headers[WORKER_KEY_HEADER]).toBe(KEY);
     expect(got.headers["mcp-session-id"]).toBe("sess-0");
     expect(got.body).toBe('{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+  });
+
+  it("names the chat its sign-in recorded, and never one a caller made up", async () => {
+    const stub = await stubWorker();
+    const call = await front((r) => forwardMcp(stub.target, r, undefined, "grok"));
+    const forged = await front((r) => forwardMcp(stub.target, r));
+    const body = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
+    const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", [WORKER_CLIENT_HEADER]: "Claude" };
+    await call("/mcp", { method: "POST", headers, body });
+    await forged("/mcp", { method: "POST", headers, body });
+    expect(stub.received[0]!.headers[WORKER_CLIENT_HEADER]).toBe("Grok");
+    expect(stub.received[1]!.headers[WORKER_CLIENT_HEADER]).toBeUndefined();
   });
 
   it("answers 503 when the worker can't be reached", async () => {

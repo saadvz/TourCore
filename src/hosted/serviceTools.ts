@@ -5,7 +5,7 @@ import { scratchToolsOn } from "../cleaner-core/scratchQa";
 import type { Tenant, TenantService } from "../cleaner-core/hosted/registry";
 import type { HostedCleaner } from "../cleaner-core/hosted/router";
 import { standDownService, switchService } from "./service";
-import { issueTouringAlertLink } from "./touringAlerts";
+import { issueTouringAlertLink, TOURING_ALERT_LINK_MINUTES } from "./touringAlerts";
 import { touringScratch } from "./touringEnv";
 import { readScratchInbox, readScratchOutbox, sendScratchText } from "./touringScratch";
 import type { TouringInbox } from "./touringForward";
@@ -61,7 +61,8 @@ const STAND_DOWN: FrontTool = {
 const SAVE_ALERT_ROUTINE: FrontTool = {
   name: "save_alert_routine",
   title: "Connect touring alerts",
-  description: "Gives a private link where the host pastes the touring alert routine's webhook address and key. Send the host the link. Never put the address or key in chat.",
+  description:
+    "Connects the touring alert routine. Gives a one-time link; from your own cloud computer, post the routine's webhook address and key to it. Never send the link to the host, and never put the address or key in chat or in a tool argument.",
   input: z.object({}),
 };
 
@@ -111,6 +112,10 @@ export const CHOSEN_LINE = (service: TenantService) => `Set up for ${service}. Y
 const UNSET_BOTH =
   "This number isn't set up yet. Ask the host which service to set up: touring (visitors text this number to book a self-guided tour) or cleaning (turnover cleanings from the host's booking calendar). Then call choose_service.";
 const UNSET_CLEANING_ONLY = "This number isn't set up yet. It can run cleaning: turnover cleanings from the host's booking calendar. Call choose_service with cleaning.";
+
+/** Like Cleaner Core's: Grok posts the routine it made from its own computer. The host never opens the link. */
+const ALERT_UPLOAD_NEXT =
+  'From your own cloud computer, POST JSON {"url": "<webhook address>", "key": "<webhook key>"} to uploadUrl with Content-Type: application/json, using the address and key of the routine you made. If you don\'t hold them, ask the host for them with your secure secret input card first. Never send uploadUrl to the host, and never put the address or key in chat or in a tool argument. Then call get_state.';
 
 /** The initialize instructions for a tenant that hasn't chosen yet. */
 export const UNSET_INSTRUCTIONS = "Call get_state first and follow its next step. Ask the host which service to set up before anything else.";
@@ -183,9 +188,6 @@ export async function handleFrontTool(ctx: FrontContext, name: string, args: unk
   }
   if (name === "read_inbox") return done({ texts: readScratchInbox(ctx.h, ctx.tenant.id) });
   if (name === "read_outbox") return done({ texts: readScratchOutbox(ctx.h, ctx.tenant.id) });
-  if (name === "save_alert_routine") {
-    const link = issueTouringAlertLink(ctx.h, ctx.tenant, ctx.caller.grantId);
-    return { text: `Send the host this private link to paste the routine's webhook address and key. Never in chat: ${link}`, isError: false };
-  }
+  if (name === "save_alert_routine") return done({ uploadUrl: issueTouringAlertLink(ctx.h, ctx.tenant, ctx.caller.grantId), expiresInMinutes: TOURING_ALERT_LINK_MINUTES, next: ALERT_UPLOAD_NEXT });
   return undefined;
 }

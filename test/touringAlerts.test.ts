@@ -1,8 +1,13 @@
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { tenantFolder } from "../src/cleaner-core/hosted/registry";
+import { renderPlaybook } from "../src/playbooks/compose";
+import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { resetAdminSessions } from "../src/cleaner-core/hosted/admin";
 import { closeHostedApps } from "./cleanerOauthHarness";
 import { multiTenantApp, type MultiTenantApp } from "./multiTenantHarness";
 import { ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
+import { hillsideConfig, publishForVisitors } from "./liveApp";
 
 /**
  * A touring tenant's landlord alerts: the host connects a routine through a one-time link, and the
@@ -32,7 +37,7 @@ async function touringTenant(m: MultiTenantApp, label: string, number: string) {
 /** Asks for the link and posts the routine to it, as Grok's computer does. */
 async function connectRoutine(m: MultiTenantApp, token: string, url = ROUTINE_URL, key = ROUTINE_KEY) {
   const reply = await m.toolAt("/mcp", token, "save_alert_routine");
-  const link = /(https:\/\/\S+)$/.exec(reply.text)?.[1];
+  const link = reply.structured?.uploadUrl as string | undefined;
   expect(link).toBeDefined();
   const path = new URL(link!).pathname;
   return { reply, path, res: await m.app.http(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, key }) }) };
@@ -51,11 +56,56 @@ describe("touring alerts", () => {
     const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1" } }));
     const { tenant, token } = await touringTenant(m, "Lane", LANE);
     const { reply, path, res } = await connectRoutine(m, token);
-    expect(reply.text).toMatch(/^Send the host this private link to paste the routine's webhook address and key\. Never in chat: https:\/\//);
+    // Grok posts the routine it made from its own computer; the host never opens the link.
+    expect(reply.structured?.next).toContain("From your own cloud computer, POST JSON");
+    expect(reply.structured?.next).toContain("Never send uploadUrl to the host");
     expect(path).toMatch(new RegExp(`^/t/${tenant.id}/touring/alert-routine/[A-Za-z0-9_-]{43}$`));
     expect(res.status).toBe(200);
     expect(await res.text()).not.toContain(ROUTINE_KEY);
     expect(m.app.logs.join("\n")).not.toContain(ROUTINE_KEY);
+  });
+
+  it("tells a host who opens the link to go back to the chat, and keeps the link usable", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1" } }));
+    const { token } = await touringTenant(m, "Lane", LANE);
+    const reply = await m.toolAt("/mcp", token, "save_alert_routine");
+    const path = new URL(reply.structured!.uploadUrl as string).pathname;
+    const page = await m.app.http(path);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Go back to your chat");
+    const saved = await m.app.http(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: ROUTINE_URL, key: ROUTINE_KEY }) });
+    expect(saved.status).toBe(200);
+  });
+
+  it("answers get_state with Grok's playbook, and counts the routine as connected once it's saved", SLOW, async () => {
+    const m = (open = await multiTenantApp({ env: { TOUR_CORE_TENANTS: "1" } }));
+    const { tenant } = m.registry.create({ label: "Lane", twilioNumber: LANE });
+    m.registry.setService(tenant.id, "touring");
+    // A finished property, so the alerts step is what get_state offers next.
+    const ws = new PropertyWorkspace(join(tenantFolder(m.app.root, tenant.id), "tour-core"));
+    const { config } = ws.save({ ...hillsideConfig(), messagingProvider: "local" });
+    ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(), installed: { provider: "local" } }));
+    publishForVisitors(ws, config.property.id, new Date());
+    await m.touring()!.start(m.registry.get(tenant.id)!);
+    const token = await m.joinAt(tenant.id, "grok", "/mcp");
+    await m.toolAt("/mcp", token, "backup_records", { action: "decline" });
+    const state = async () => (await m.toolAt("/mcp", token, "get_state")).structured as { playbook: { id: string }; alerts: { summary: string } };
+    const before = await state();
+    // The front says which chat this is, so touring answers with Grok's playbook, secure card and all.
+    expect(before.playbook.id).toBe("grok");
+    expect(before.alerts.summary).toBe("Tour updates aren't turned on yet.");
+    await connectRoutine(m, token);
+    await waitFor(() => m.wakes.length > 0);
+    // The shared service holds the routine, so touring counts it as connected.
+    expect((await state()).alerts.summary).not.toBe("Tour updates aren't turned on yet.");
+  });
+
+  it("tells Grok on touring's alerts step to post the routine itself, never to send the host a link", () => {
+    const shared = renderPlaybook({ name: "Grok" }, "alerts", undefined, { sharedService: true }).text;
+    expect(shared).toContain("Call save_alert_routine");
+    expect(shared).toContain("Never send that link to the landlord");
+    expect(shared).not.toContain("operator-alerts secure input");
+    expect(renderPlaybook({ name: "Grok" }, "alerts").text).toContain("operator-alerts secure input");
   });
 
   it("wakes the Grok routine with a test event, carrying no phone numbers", SLOW, async () => {

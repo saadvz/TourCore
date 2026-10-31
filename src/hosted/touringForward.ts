@@ -6,7 +6,7 @@ import type { HostedRequest } from "../cleaner-core/hosted/router";
 import { formParams, twilioSignature } from "../messaging/twilio/signature";
 import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
-import { WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "./ipc";
+import { WORKER_CLIENT_HEADER, WORKER_CLIENT_NAMES, WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "./ipc";
 
 /**
  * How the shared service reaches one touring process on loopback: MCP calls after OAuth, the links
@@ -21,15 +21,17 @@ export interface WorkerTarget {
 }
 
 /** Never forwarded: hop-by-hop headers, the caller's own credentials, and any key a caller made up. */
-const DROPPED = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host", "authorization", "cookie", "content-length", WORKER_KEY_HEADER, WORKER_INTERNAL_HEADER]);
+const DROPPED = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host", "authorization", "cookie", "content-length", WORKER_KEY_HEADER, WORKER_INTERNAL_HEADER, WORKER_CLIENT_HEADER]);
 
-function forwardedHeaders(headers: IncomingHttpHeaders, key: string): Record<string, string | string[]> {
+function forwardedHeaders(headers: IncomingHttpHeaders, key: string, assistant?: string): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const [name, value] of Object.entries(headers)) {
     if (value === undefined || DROPPED.has(name.toLowerCase())) continue;
     out[name] = value;
   }
   out[WORKER_KEY_HEADER] = key;
+  const client = assistant ? WORKER_CLIENT_NAMES[assistant] : undefined;
+  if (client) out[WORKER_CLIENT_HEADER] = client;
   return out;
 }
 
@@ -64,17 +66,18 @@ async function relay(target: WorkerTarget, r: HostedRequest, path: string, heade
 
 /**
  * An MCP call for a touring tenant. The process's own key is the bearer; the caller's token never
- * leaves the service. `body` is the request body when the service already read it.
+ * leaves the service. `body` is the request body when the service already read it. `assistant` is
+ * the chat its sign-in recorded.
  */
-export function forwardMcp(target: WorkerTarget, r: HostedRequest, body?: Buffer): Promise<void> {
-  const headers = forwardedHeaders(r.req.headers, target.key);
+export function forwardMcp(target: WorkerTarget, r: HostedRequest, body?: Buffer, assistant?: string): Promise<void> {
+  const headers = forwardedHeaders(r.req.headers, target.key, assistant);
   headers.authorization = `Bearer ${target.key}`;
   return relay(target, r, `/mcp${r.url.search}`, headers, body);
 }
 
 /** One MCP POST to the process, answered whole, so the service can add to it. Undefined when it can't be reached. */
-export function callWorkerMcp(target: WorkerTarget, body: Buffer, headers: IncomingHttpHeaders = {}): Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer } | undefined> {
-  const sent = forwardedHeaders(headers, target.key);
+export function callWorkerMcp(target: WorkerTarget, body: Buffer, headers: IncomingHttpHeaders = {}, assistant?: string): Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer } | undefined> {
+  const sent = forwardedHeaders(headers, target.key, assistant);
   sent.authorization = `Bearer ${target.key}`;
   sent["content-type"] = "application/json";
   sent.accept = "application/json, text/event-stream";

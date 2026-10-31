@@ -249,6 +249,16 @@ const ROUTINE_SETUP =
   "If the routine panel lets you copy both values with copy buttons while they stay hidden on screen, you may paste those hidden values into the matching masked fields yourself, without reading or repeating them. " +
   "Hand the browser to the operator only when secure fill isn't available or a value is shown on screen. Never put the address or key in chat, tool arguments, files or commands.";
 
+/**
+ * The same routine on the shared service. The address and key go to the shared service, which keeps
+ * them per chat, through the one-time link save_alert_routine gives. Grok posts them itself.
+ */
+const TOURING_ROUTINE_SETUP =
+  `Create the Tour Core Operator Updates routine yourself (authenticated webhook trigger; instructions in ${ROUTINE_DOC}). ` +
+  "Then call save_alert_routine and do its next step: from your own cloud computer, post the routine's webhook address and key to the one-time link it gives. " +
+  "You made the routine, so you already hold both. Only if you don't, ask the host for them with Grok's secure secret input card. " +
+  "Never send the link to the host or ask them to open a page. Never put the address or key in chat or in a tool argument.";
+
 function component(c: InstallationComponent, state: ComponentState, summary: string, extra: Partial<ComponentStatus> = {}): ComponentStatus {
   return { component: c, label: COMPONENT_LABELS[c], state, requirement: REQUIREMENTS[c], summary, optionalActions: [], ...extra };
 }
@@ -680,18 +690,23 @@ function propertyStatus(services: OperatorServices, installed: InstalledMessagin
 
 function alertsStatus(inst: Installation, propertyReady: boolean, client?: ReportedClient): ComponentStatus {
   const env = inst.env();
-  const configured = !!env.TOURCORE_GROK_ROUTINE_URL?.trim() && !!env.TOURCORE_GROK_ROUTINE_KEY?.trim();
+  // A touring process on the shared service never holds the routine; the shared service says whether it's connected.
+  const worker = isTenantWorker(inst.deploymentMode());
+  const routineSetup = worker ? TOURING_ROUTINE_SETUP : ROUTINE_SETUP;
+  const configured = worker ? inst.sink().configured() : !!env.TOURCORE_GROK_ROUTINE_URL?.trim() && !!env.TOURCORE_GROK_ROUTINE_KEY?.trim();
   const state = inst.files.state();
   const skipped = state.skipped?.OPERATOR_ALERTS;
   const connect = (operatorMessage: string, action: InstallationAction = "CONNECT_OPERATOR_ALERTS", performedBy: PerformedBy = "OPERATOR_IN_SECURE_SETUP") =>
-    step("OPERATOR_ALERTS", action, performedBy, operatorMessage, { tool: "get_secure_setup_url", secureSetupStep: "operator-alerts", grokInstructions: ROUTINE_SETUP });
+    worker
+      ? step("OPERATOR_ALERTS", action, "GROK", operatorMessage, { tool: "save_alert_routine", grokInstructions: routineSetup })
+      : step("OPERATOR_ALERTS", action, performedBy, operatorMessage, { tool: "get_secure_setup_url", secureSetupStep: "operator-alerts", grokInstructions: routineSetup });
   const offerMessage = client ? spokenAsk(client, "alerts") : OPERATOR_MESSAGES.offerAlerts;
   const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", offerMessage, {
     tool: "set_notification_preferences",
     secureSetupStep: "operator-alerts",
     grokInstructions:
       `If they say yes: only if it helps, confirm the defaults ("${OPERATOR_MESSAGES.recommendUpdates}"), then call set_notification_preferences (preset recommended unless they chose otherwise). ` +
-      `Say "I'm setting up your tour updates." ${ROUTINE_SETUP} ` +
+      `Say "I'm setting up your tour updates." ${routineSetup} ` +
       "If they say no: call skip_optional_setup with component OPERATOR_ALERTS. Never say \"webhook\" or \"routine\" to the operator.",
   });
   const chosen = describeUpdates(enabledUpdates(state.operatorUpdates));

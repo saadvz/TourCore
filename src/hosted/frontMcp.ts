@@ -74,7 +74,7 @@ export async function handleTenantMcp(h: HostedCleaner, r: HostedRequest, path: 
     return;
   }
   if (r.method !== "POST") {
-    if (state === "touring") return touringPass(h, r, tenant, caller.grantId);
+    if (state === "touring") return touringPass(h, r, tenant, caller);
     return cleaningPass(h, r, tenant, caller, Buffer.alloc(0));
   }
 
@@ -110,7 +110,7 @@ export async function handleTenantMcp(h: HostedCleaner, r: HostedRequest, path: 
   if (state === "unset") return;
 
   if (message?.method === "tools/list" && message.id !== undefined) {
-    const answer = state === "touring" ? await touringCall(h, tenant.id, caller.grantId, raw, r) : await cleaningCall(h, tenant, caller, raw, r);
+    const answer = state === "touring" ? await touringCall(h, tenant.id, caller, raw, r) : await cleaningCall(h, tenant, caller, raw, r);
     if (!answer) return r.send(503, JSON_TYPE, JSON.stringify({ error: { message: TOURING_DOWN } }));
     let listed: { result?: { tools?: unknown[] } } | undefined;
     try {
@@ -125,11 +125,11 @@ export async function handleTenantMcp(h: HostedCleaner, r: HostedRequest, path: 
 
   // Touring's get_state also carries the shared service's notes for the host, once each.
   if (state === "touring" && message?.method === "tools/call" && message.id !== undefined && message.params?.name === "get_state") {
-    const answer = await touringCall(h, tenant.id, caller.grantId, raw, r);
+    const answer = await touringCall(h, tenant.id, caller, raw, r);
     if (!answer) return r.send(503, JSON_TYPE, JSON.stringify({ error: { message: TOURING_DOWN } }));
     return r.send(answer.status, JSON_TYPE, withNotices(answer.body, new ServiceNotices(h.dataRoot).take(tenant.id)));
   }
-  if (state === "touring") return touringPass(h, r, tenant, caller.grantId, raw, message?.method === "initialize");
+  if (state === "touring") return touringPass(h, r, tenant, caller, raw, message?.method === "initialize");
   return cleaningPass(h, r, tenant, caller, raw);
 }
 
@@ -150,33 +150,36 @@ function withNotices(body: string, notices: string[]): string {
 }
 
 /** The touring process for this tenant, once it has seen this connection's initialize. */
-async function touringTarget(h: HostedCleaner, tenantId: string, grantId: string, isInitialize = false): Promise<WorkerTarget | undefined> {
+async function touringTarget(h: HostedCleaner, tenantId: string, caller: TouringCaller, isInitialize = false): Promise<WorkerTarget | undefined> {
   const target = h.touring?.supervisor.target(tenantId);
   if (!target) return undefined;
-  const seen = `${target.key}|${grantId}`;
+  const seen = `${target.key}|${caller.grantId}`;
   if (isInitialize) {
     introduced.add(seen);
     return target;
   }
-  const init = initializes.get(grantId);
+  const init = initializes.get(caller.grantId);
   if (init && !introduced.has(seen)) {
-    await callWorkerMcp(target, init);
-    await callWorkerMcp(target, Buffer.from(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })));
+    await callWorkerMcp(target, init, {}, caller.assistant);
+    await callWorkerMcp(target, Buffer.from(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })), {}, caller.assistant);
     introduced.add(seen);
   }
   return target;
 }
 
-async function touringPass(h: HostedCleaner, r: HostedRequest, tenant: Tenant, grantId: string, raw?: Buffer, isInitialize = false): Promise<void> {
-  const target = await touringTarget(h, tenant.id, grantId, isInitialize);
+/** The connection a touring call is for, and the chat its sign-in recorded, which picks touring's playbook. */
+type TouringCaller = { grantId: string; assistant: CleanerAssistant };
+
+async function touringPass(h: HostedCleaner, r: HostedRequest, tenant: Tenant, caller: TouringCaller, raw?: Buffer, isInitialize = false): Promise<void> {
+  const target = await touringTarget(h, tenant.id, caller, isInitialize);
   if (!target) return r.send(503, JSON_TYPE, JSON.stringify({ error: { message: TOURING_DOWN } }));
-  return forwardMcp(target, r, raw);
+  return forwardMcp(target, r, raw, caller.assistant);
 }
 
-async function touringCall(h: HostedCleaner, tenantId: string, grantId: string, raw: Buffer, r: HostedRequest): Promise<{ status: number; body: string } | undefined> {
-  const target = await touringTarget(h, tenantId, grantId);
+async function touringCall(h: HostedCleaner, tenantId: string, caller: TouringCaller, raw: Buffer, r: HostedRequest): Promise<{ status: number; body: string } | undefined> {
+  const target = await touringTarget(h, tenantId, caller);
   if (!target) return undefined;
-  const answer = await callWorkerMcp(target, raw, r.req.headers);
+  const answer = await callWorkerMcp(target, raw, r.req.headers, caller.assistant);
   return answer ? { status: answer.status, body: answer.body.toString("utf8") } : undefined;
 }
 

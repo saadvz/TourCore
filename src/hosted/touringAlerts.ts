@@ -16,7 +16,8 @@ export const TOURING_ROUTINE_NAMES = ["TOURING_ROUTINE_URL", "TOURING_ROUTINE_KE
 export const TOURING_ALERT_UPLOAD_PREFIX = "/touring/alert-routine/";
 
 const UPLOAD_CODE = /^[A-Za-z0-9_-]{43}$/;
-const LINK_MS = 30 * 60_000;
+export const TOURING_ALERT_LINK_MINUTES = 30;
+const LINK_MS = TOURING_ALERT_LINK_MINUTES * 60_000;
 const MAX_KEY = 512;
 
 type AlertFetch = NonNullable<ConstructorParameters<typeof GrokRoutineWebhookSink>[1]>["fetch"];
@@ -69,7 +70,33 @@ export function touringAlertUploadCode(rest: string): string | undefined {
   return UPLOAD_CODE.test(code) ? code : undefined;
 }
 
-type UploadReply = { status: 200 | 400 | 404; body: { ok: boolean; message?: string; error?: string } };
+/**
+ * What a browser sees on the link. The chat posts to it from its own computer, so a host who opens it
+ * is told to go back instead of seeing "Not found". It never uses the link up.
+ */
+export const TOURING_ALERT_LINK_PAGE = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>Tour updates</title>
+    <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;line-height:1.5}</style>
+  </head>
+  <body>
+    <h1>Nothing to do here</h1>
+    <p>This link is for your assistant, which connects tour updates for you. Go back to your chat and say "connect my tour updates".</p>
+  </body>
+</html>
+`;
+
+export const TOURING_ALERT_LINK_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+};
+
+type UploadReply ={ status: 200 | 400 | 404; body: { ok: boolean; message?: string; error?: string } };
 
 /** Saves the routine from the one-time link. The address and key are never repeated or logged. */
 export function handleTouringAlertUpload(h: HostedCleaner, tenant: Tenant, code: string, body: Record<string, unknown>): UploadReply {

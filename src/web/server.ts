@@ -63,7 +63,7 @@ import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
 import { isHostedRailway, isTenantWorker, parseDeploymentMode, resolveDeploymentMode } from "../install/deployment";
-import { WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "../hosted/ipc";
+import { WORKER_CLIENT_HEADER, WORKER_CLIENT_NAMES, WORKER_INTERNAL_HEADER, WORKER_KEY_HEADER } from "../hosted/ipc";
 import { touringPublicRoute } from "../hosted/workerRoutes";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
@@ -585,6 +585,12 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     playbookClients.set(key, client);
     return client;
   };
+  // A touring process never sees the sign-in. The shared service, which checked the key, says which chat it is.
+  const clientFromWorker = (req: IncomingMessage): ReportedClient | undefined => {
+    const raw = req.headers[WORKER_CLIENT_HEADER];
+    const name = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+    return name && Object.values(WORKER_CLIENT_NAMES).includes(name) ? { name } : undefined;
+  };
   const clientFromStoredOAuth = (clientId: string | undefined): ReportedClient | undefined => {
     if (!clientId || !oauth) return undefined;
     const name = oauth.store.clientName(clientId);
@@ -840,7 +846,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           if (incomingSession) responseSession = incomingSession;
         }
         const cached = playbookClients.get(key);
-        const storedClient = clientFromStoredOAuth(caller?.clientId);
+        const storedClient = workerMode ? clientFromWorker(req) : clientFromStoredOAuth(caller?.clientId);
         const knownPlaybook = (client?: ReportedClient) => !!client?.name?.trim() && selectPlaybook(client).id !== "baseline";
         // This initialize is the client in front of us. A stored OAuth name that
         // selects a playbook still wins over a baseline or nameless initialize.

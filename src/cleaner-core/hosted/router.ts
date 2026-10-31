@@ -29,7 +29,7 @@ import { isTenantId, tenantFolder, type Tenant, type TenantRegistry } from "./re
 import { screenText } from "../../hosted/crossService";
 import { handleTenantMcp } from "../../hosted/frontMcp";
 import type { TouringFront } from "../../hosted/serviceTools";
-import { handleTouringAlertUpload, touringAlertsConnected, touringAlertUploadCode } from "../../hosted/touringAlerts";
+import { handleTouringAlertUpload, TOURING_ALERT_LINK_HEADERS, TOURING_ALERT_LINK_PAGE, touringAlertsConnected, touringAlertUploadCode } from "../../hosted/touringAlerts";
 import { forwardTenantPath } from "../../hosted/touringForward";
 import { touringPublicRoute } from "../../hosted/workerRoutes";
 import { MCP_PATH } from "../../mcp/paths";
@@ -208,6 +208,10 @@ export async function handleHostedCleaner(h: HostedCleaner, r: HostedRequest): P
   if (!tenant || tenant.disabled) return notFound();
   if (tenant.service === "touring") {
     if (method === "POST" && scoped.rest === TWILIO_WEBHOOK_PATH) return touringText(h, r, tenant, await r.readRaw(), signed(path));
+    if (method === "GET" && touringAlertUploadCode(scoped.rest)) {
+      r.send(200, "text/html; charset=utf-8", TOURING_ALERT_LINK_PAGE, TOURING_ALERT_LINK_HEADERS);
+      return true;
+    }
     const routineCode = method === "POST" ? touringAlertUploadCode(scoped.rest) : undefined;
     if (routineCode) {
       const read = await uploadBody(String(r.req.headers["content-type"] ?? ""), () => r.readCapped(ALERT_UPLOAD_MAX_BYTES));
