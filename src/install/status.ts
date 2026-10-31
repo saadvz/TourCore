@@ -481,7 +481,9 @@ export function installedMessaging(inst: Installation, options?: { readOnly?: bo
   if (!selection.provider) return undefined;
   const provider = createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
   if (!provider.validateConfiguration().ok) return undefined;
-  return { mode: "live", provider: selection.provider, ready: messagingStatus(inst, readOnly).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
+  // A touring process texts on the host's number the shared service gave it; that number is its texting.
+  const status = isTenantWorker(inst.deploymentMode()) ? hostNumberStatus(inst) : messagingStatus(inst, readOnly);
+  return { mode: "live", provider: selection.provider, ready: status.state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
 }
 
 const DRIVE_INSTRUCTIONS =

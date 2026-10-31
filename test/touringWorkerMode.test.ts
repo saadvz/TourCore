@@ -147,6 +147,15 @@ describe("TENANT_WORKER mode", () => {
     expect(["PUBLIC_ENDPOINT", "VISITOR_MESSAGING", "GROK_OPERATOR", "RUNTIME"]).not.toContain(state.nextStep.component);
   });
 
+  it("starts a new property on live texting through the host's number, not practice only", async () => {
+    const w = await worker({ TOURCORE_MESSAGING_PROVIDER: "twilio" });
+    await w.tool("backup_records", { action: "decline" });
+    const saved = JSON.stringify(await w.tool("save_property", { address: "1 Scratch Lane, Springfield, IL 62701" }));
+    expect(saved).not.toMatch(/practice only/i);
+    const state = (await w.state()) as unknown as { setup?: { texting?: string } };
+    expect(state.setup?.texting).toBe("Connected");
+  });
+
   it("says the host's number isn't ready when the service gave it none", async () => {
     const w = await worker({ TOURCORE_TWILIO_PHONE_NUMBER: "" });
     const state = await w.state();
