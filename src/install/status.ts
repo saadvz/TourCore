@@ -722,8 +722,23 @@ function alertsStatus(inst: Installation, propertyReady: boolean, client?: Repor
     return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates aren't turned on yet.", { provider: "GROK_ROUTINE", next: offer });
   }
   const changedAt = latest(inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_URL"), inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_KEY"));
-  const check = inst.files.state().operatorAlerts;
   const test = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", "I'm sending a test update.", { tool: "test_operator_alerts" });
+  if (worker) {
+    // The shared service sends the test update when the routine connects, from this outbox, and retries
+    // it. Its delivery is the passed test: there is no test tool or setup page on the shared service.
+    const tests = inst.outbox.records().filter((r) => r.event.eventType === "installation.test");
+    if (!tests.some((r) => r.status === "delivered")) {
+      return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are connected. The test update is on its way.", {
+        provider: "GROK_ROUTINE",
+        next: step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", "I'm checking that the test update reached you.", {
+          tool: "get_state",
+          grokInstructions:
+            "The test update goes out on its own and is retried until it gets through. Wait for its note, then call get_state again. Do not set up tour updates again, open a setup page, or ask for an address or a key.",
+        }),
+      });
+    }
+  }
+  const check = worker ? { ok: true, message: "", credentialsChangedAt: changedAt } : inst.files.state().operatorAlerts;
   const degradedNext = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", SHARED_STEPS["alerts-degraded"].ask, {
     tool: "test_operator_alerts",
     grokInstructions:

@@ -96,8 +96,14 @@ describe("touring alerts", () => {
     expect(before.alerts.summary).toBe("Tour updates aren't turned on yet.");
     await connectRoutine(m, token);
     await waitFor(() => m.wakes.length > 0);
-    // The shared service holds the routine, so touring counts it as connected.
-    expect((await state()).alerts.summary).not.toBe("Tour updates aren't turned on yet.");
+    // The test update that went out on connecting is the passed test. No test tool, no setup page.
+    let after = await state();
+    for (let i = 0; i < 50 && !after.alerts.summary.startsWith("I'll keep you posted"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      after = await state();
+    }
+    expect(after.alerts.summary).toMatch(/^I'll keep you posted on /);
+    expect(JSON.stringify(after)).not.toMatch(/localhost|get_secure_setup_url/);
   });
 
   it("tells Grok on touring's alerts step to post the routine itself, never to send the host a link", () => {
@@ -158,6 +164,8 @@ describe("touring alerts", () => {
     m.setWakeStatus(500);
     await connectRoutine(m, token);
     await waitFor(() => m.wakes.length > 0);
+    const summary = async () => ((await m.toolAt("/mcp", token, "get_state")).structured as { alerts: { summary: string } }).alerts.summary;
+    expect(await summary()).toBe("Tour updates are connected. The test update is on its way.");
     m.setWakeStatus(200);
     await waitFor(() => m.wakes.length > 1, 90_000);
     expect(JSON.parse(m.wakes[1]!.body).eventId).toBe(JSON.parse(m.wakes[0]!.body).eventId);
