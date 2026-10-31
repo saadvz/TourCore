@@ -1,6 +1,7 @@
 import { tenantFolder, type Tenant } from "../cleaner-core/hosted/registry";
 import { PER_TENANT_NAMES } from "../cleaner-core/hosted/tenantEnv";
 import { isScratchTestNumber } from "../cleaner-core/scratch";
+import { CLEANER_TWILIO_PATH } from "../cleaner-core/twilioHook";
 
 /** Cleaner Core names a touring process still needs: the service-wide live switch, allowlist, and Scratch flag. */
 const SHARED_CLEANER_NAMES = new Set(["CLEANER_CORE_LIVE_SMS", "CLEANER_CORE_SMS_ALLOWLIST", "CLEANER_CORE_SCRATCH_TOOLS"]);
@@ -32,6 +33,8 @@ export function buildTouringEnv(input: { base: NodeJS.ProcessEnv; tenant: Tenant
   }
   env.TOURCORE_MESSAGING_PROVIDER = "twilio";
   env.TOURCORE_TWILIO_PHONE_NUMBER = tenant.twilioNumber;
+  // The number's texts come to the shared service, which hands them on. Setup checks that address, never its own.
+  env.TOURCORE_TWILIO_INCOMING_URL = `${input.origin.replace(/\/+$/, "")}${CLEANER_TWILIO_PATH}`;
   if (base.CLEANER_CORE_TWILIO_ACCOUNT_SID) env.TOURCORE_TWILIO_ACCOUNT_SID = base.CLEANER_CORE_TWILIO_ACCOUNT_SID;
   if (base.CLEANER_CORE_TWILIO_AUTH_TOKEN) env.TOURCORE_TWILIO_AUTH_TOKEN = base.CLEANER_CORE_TWILIO_AUTH_TOKEN;
   return env;

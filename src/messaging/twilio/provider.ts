@@ -19,6 +19,8 @@ export interface TwilioEnv {
   publicBaseUrlRaw?: string;
   /** Set only in a touring process on the shared service: whether this number may be texted now. */
   mayText?: (to: string) => boolean;
+  /** Set only in a touring process on the shared service: the shared address its number's texts go to. */
+  incomingUrl?: string;
 }
 
 const CAPABILITIES: MessagingCapabilities = {
@@ -63,8 +65,11 @@ export function readTwilioEnv(env: NodeJS.ProcessEnv = process.env): TwilioEnv {
   const baseRaw = value("PUBLIC_BASE_URL");
   // A touring process on the shared service texts only under that service's live switch and allowlist.
   const worker = parseDeploymentMode(env.TOURCORE_DEPLOYMENT_MODE);
+  const inWorker = !!worker && "mode" in worker && isTenantWorker(worker.mode);
+  const incoming = inWorker ? publicBase(value("TOURCORE_TWILIO_INCOMING_URL")) : undefined;
   return {
-    ...(worker && "mode" in worker && isTenantWorker(worker.mode) ? { mayText: (to: string) => liveSmsOn(env) && isAllowlisted(env, to) } : {}),
+    ...(inWorker ? { mayText: (to: string) => liveSmsOn(env) && isAllowlisted(env, to) } : {}),
+    ...(incoming ? { incomingUrl: incoming } : {}),
     accountSid: value("TOURCORE_TWILIO_ACCOUNT_SID"),
     authToken: value("TOURCORE_TWILIO_AUTH_TOKEN"),
     fromNumberRaw: fromRaw,
@@ -75,6 +80,9 @@ export function readTwilioEnv(env: NodeJS.ProcessEnv = process.env): TwilioEnv {
 }
 
 export const twilioWebhookUrl = (env: TwilioEnv) => (env.publicBaseUrl ? `${env.publicBaseUrl}${TWILIO_WEBHOOK_PATH}` : undefined);
+
+/** Where the number's incoming texts should go: the shared service's address for a touring process, else this Tour Core's own. */
+const twilioIncomingUrl = (env: TwilioEnv) => env.incomingUrl ?? twilioWebhookUrl(env);
 
 function scrub(err: unknown, secrets: Array<string | undefined>, code: string, message: string): MessagingError {
   if (err instanceof MessagingError) {
@@ -300,7 +308,7 @@ export class TwilioMessagingProvider implements MessagingProvider {
       checks.push({ id: "line", label: "Messaging number", ok: false, code: "TWILIO_LINE_UNCHECKED", message: `The messaging number (${env.fromNumber}) can be checked once the Twilio account is connected.` });
     }
 
-    const url = twilioWebhookUrl(env);
+    const url = twilioIncomingUrl(env);
     let webhook: ProviderConnectResult["webhook"] = "not-attempted";
     if (!url) {
       checks.push({

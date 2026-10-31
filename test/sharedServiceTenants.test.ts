@@ -83,6 +83,7 @@ describe("hosted tenants gate", () => {
     for (const name of PER_TENANT_NAMES) base[name] = `court-or-mill-${name}`;
     const lane: Tenant = { id: "tnt_lane000001", label: "Lane", twilioNumber: LANE, connections: [], invites: [], service: "touring", createdAt: "2026-10-30T00:00:00.000Z" };
     const env = buildTouringEnv({ base, tenant: lane, dataRoot: "/data", origin: "https://s.up.railway.app", key: "k", scratch: false });
+    expect(env.TOURCORE_TWILIO_INCOMING_URL).toBe("https://s.up.railway.app/webhooks/twilio/cleaner-core");
     for (const value of Object.values(env)) expect(String(value)).not.toContain("court-or-mill");
     expect(env.TOURCORE_TWILIO_PHONE_NUMBER).toBe(LANE);
   });
